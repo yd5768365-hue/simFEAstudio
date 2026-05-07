@@ -1,0 +1,62 @@
+{
+  "$schema": "gen/schemas/desktop-schema.json",
+  "build": {
+    "beforeBuildCommand": "npm run build",
+    "beforeDevCommand": "npm run dev:frontend",
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:3000"
+  },
+  "bundle": {
+    "active": true,
+    "category": "DeveloperTool",
+    "copyright": "Copyright 2026 yd5768365-hue",
+    "targets": "all",
+    "externalBin": ["bin/api/main"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "shortDescription": "仿真学习桌面外壳",
+    "longDescription": "SimFEA Studio 是一个面向机械仿真的个人工作台——不造求解器，只管理求解器、算力、运行环境和学习记录。",
+    "resources": [],
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": ""
+    },
+    "macOS": {
+      "entitlements": null,
+      "exceptionDomain": "",
+      "frameworks": [],
+      "providerShortName": null,
+      "signingIdentity": "-"
+    },
+    "linux": {
+      "deb": {
+        "depends": []
+      }
+    }
+  },
+  "productName": "SimFEA Studio",
+  "mainBinaryName": "simfea-studio",
+  "identifier": "studio.simfea",
+  "plugins": {},
+  "app": {
+    "windows": [
+      {
+        "fullscreen": false,
+        "height": 950,
+        "resizable": true,
+        "title": "SimFEA Studio",
+        "width": 1200,
+        "useHttpsScheme": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  }
+}
