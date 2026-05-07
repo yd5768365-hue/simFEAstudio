@@ -10,9 +10,6 @@
   ![Python](https://img.shields.io/badge/Language-Python_3.11-3776AB?logo=python)
   ![License](https://img.shields.io/badge/License-Apache_2.0-8162C3)
   <br/>
-  ![Windows](https://img.shields.io/badge/Windows-00A4EF?logo=windows)
-  ![Linux](https://img.shields.io/badge/Linux-FCC624?logo=linux)
-  ![macOS](https://img.shields.io/badge/macOS-000000?logo=apple)
 </div>
 
 ---
