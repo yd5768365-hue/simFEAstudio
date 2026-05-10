@@ -2,9 +2,11 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
+import ResultEvidenceView from './components/ResultEvidenceView.vue';
+import type { RunArchive, ToolchainItem } from './types';
 
-const DOMAIN = 'localhost';
-const PORT = '8008';
+const configuredApiBaseUrl = import.meta.env.VITE_SIMFEA_API_BASE_URL as string | undefined;
+const apiBaseUrl = (configuredApiBaseUrl?.replace(/\/$/, '') || `http://${window.location.hostname || 'localhost'}:8008`);
 
 type CleanupFunction = () => void;
 
@@ -12,7 +14,19 @@ interface ConnectionStatus {
   connected: boolean;
   host: string;
   pid: string;
+  runsRoot: string;
+  configPath: string;
   message: string;
+}
+
+interface ComputeNodeConfig {
+  alias: string;
+  label: string;
+  host: string;
+  user: string;
+  port?: number;
+  remote_runs_root: string;
+  configured: boolean;
 }
 
 interface RemoteStatus {
@@ -22,26 +36,16 @@ interface RemoteStatus {
   runId: string;
   message: string;
   output: string;
-}
-
-interface SolverTile {
-  name: string;
-  domain: string;
-  status: 'planned' | 'waiting';
-  note: string;
-}
-
-interface RunRecord {
-  caseName: string;
-  solver: string;
-  status: string;
-  detail: string;
+  archivePath: string;
+  remoteWorkdir: string;
 }
 
 const status = ref<ConnectionStatus>({
   connected: false,
   host: '',
   pid: '',
+  runsRoot: '',
+  configPath: '',
   message: '尚未验证侧车服务连接。',
 });
 
@@ -52,68 +56,74 @@ const remoteStatus = ref<RemoteStatus>({
   runId: '',
   message: '尚未测试远程计算节点。',
   output: '',
+  archivePath: '',
+  remoteWorkdir: '',
 });
 
+const computeNodes = ref<ComputeNodeConfig[]>([]);
+const selectedComputeNode = ref('');
+const archivedRuns = ref<RunArchive[]>([]);
+const selectedRun = ref<RunArchive | null>(null);
+const toolchainItems = ref<ToolchainItem[]>([]);
+const learningNote = ref('');
+const reportPreview = ref('');
+const noteMessage = ref('选择一次运行后，可以写下这次计算的判断、错误和下一步。');
+const reportMessage = ref('运行完成后，这里会显示自动生成的学习沉淀报告。');
 const logs = ref('[界面] 正在监听侧车服务和网络日志...');
+
 let cleanupListeners: CleanupFunction | null = null;
 let remoteEventSource: EventSource | null = null;
 
-const solvers: SolverTile[] = [
-  {
-    name: 'CalculiX',
-    domain: '结构有限元',
-    status: 'waiting',
-    note: '优先用于小型、可检查、适合学习拆解的有限元案例。',
-  },
-  {
-    name: 'OpenFOAM',
-    domain: '流体动力学',
-    status: 'planned',
-    note: '预留给后续命令行镜像接入和运行日志采集。',
-  },
-  {
-    name: 'Elmer',
-    domain: '多物理场',
-    status: 'planned',
-    note: '基础外壳稳定后，用于耦合物理实验的入口。',
-  },
-];
-
-const runRecords = computed<RunRecord[]>(() => [
-  {
-    caseName: '概念验证链路',
-    solver: 'FastAPI 侧车服务',
-    status: status.value.connected ? '已验证' : '待验证',
-    detail: status.value.connected
-      ? `已连接到 ${status.value.host}，进程号 ${status.value.pid}。`
-      : '点击连接验证，确认 Vue 可以调用 Python 侧车服务。',
-  },
-  {
-    caseName: '远程计算节点',
-    solver: 'SSH 通道 shh1',
-    status: remoteStatus.value.connected ? '已连通' : '待测试',
-    detail: remoteStatus.value.connected
-      ? '侧车服务已经能通过 SSH 调用远程节点并取回输出。'
-      : '先测试 SSH 通道，后续再接求解器和实时日志流。',
-  },
-  {
-    caseName: '求解器镜像桥接',
-    solver: 'CalculiX / OpenFOAM / Elmer',
-    status: '下一阶段',
-    detail: '镜像和求解器执行暂不接入，留给下一阶段实现。',
-  },
-]);
-
 const connectionLabel = computed(() =>
-  status.value.connected ? '侧车服务在线' : '侧车服务待验证',
+  status.value.connected ? '侧车服务在线' : '侧车服务待连接',
 );
 
 const remoteLabel = computed(() =>
   remoteStatus.value.connected ? '远程节点在线' : '远程节点待测试',
 );
 
+const evidenceArtifacts = computed(() =>
+  selectedRun.value?.artifacts?.filter((artifact) => artifact !== 'artifacts/result_summary.json') ?? [],
+);
+
+const selectedArtifacts = computed(() =>
+  evidenceArtifacts.value.length ? evidenceArtifacts.value.join('、') : '暂无结果文件',
+);
+
+const selectedToolchain = computed<ToolchainItem[]>(() => selectedRun.value?.toolchain ?? toolchainItems.value);
+
+const activeComputeNode = computed(() =>
+  computeNodes.value.find((node) => node.alias === selectedComputeNode.value) ?? null,
+);
+
+const activeComputeNodeLabel = computed(() => activeComputeNode.value?.label || selectedComputeNode.value || '未配置计算节点');
+
 const appendLog = (line: string) => {
   logs.value += `\n${line}`;
+};
+
+const apiAction = async (endpoint: string, method = 'GET', body?: unknown): Promise<any> => {
+  const url = `${apiBaseUrl}/${endpoint}`;
+  try {
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      throw new Error(`请求失败：${res.status} ${await res.text()}`);
+    }
+
+    const json = await res.json();
+    if (json?.message) {
+      appendLog(`[服务响应] ${json.message}`);
+    }
+    return json;
+  } catch (err: any) {
+    appendLog(`[服务响应] ${err}`);
+    throw err;
+  }
 };
 
 const initSidecarListeners = async () => {
@@ -135,27 +145,69 @@ const initSidecarListeners = async () => {
   };
 };
 
-const apiAction = async (endpoint: string, method: string = 'GET'): Promise<any> => {
-  const url = `http://${DOMAIN}:${PORT}/${endpoint}`;
-  try {
-    const res = await fetch(url, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-    });
-
-    if (!res.ok) {
-      throw new Error(`响应状态：${res.status} ${await res.text()}`);
-    }
-
-    const json = await res.json();
-    if (json?.message) {
-      appendLog(`[服务响应] ${json.message}`);
-    }
-    return json;
-  } catch (err: any) {
-    appendLog(`[服务响应] ${err}`);
-    throw err;
+const loadRunsAction = async () => {
+  const result = await apiAction('v1/runs');
+  archivedRuns.value = result.data.runs ?? [];
+  if (!selectedRun.value && archivedRuns.value.length > 0) {
+    await selectRunAction(archivedRuns.value[0].run_id);
   }
+};
+
+const selectRunAction = async (runId: string) => {
+  const result = await apiAction(`v1/runs/${runId}`);
+  if (!result.data) {
+    noteMessage.value = '没有找到这次运行的归档。';
+    return;
+  }
+
+  selectedRun.value = result.data;
+  learningNote.value = result.data.note ?? '';
+  reportPreview.value = result.data.report ?? '';
+  noteMessage.value = `当前笔记：${result.data.local_archive}\\note.md`;
+  reportMessage.value = result.data.learning_report
+    ? `学习报告：${result.data.local_archive}\\${result.data.learning_report}`
+    : '这次运行还没有生成学习报告。';
+};
+
+const saveNoteAction = async () => {
+  if (!selectedRun.value) {
+    noteMessage.value = '请先选择一次运行记录。';
+    return;
+  }
+
+  const result = await apiAction(`v1/runs/${selectedRun.value.run_id}/note`, 'POST', {
+    note: learningNote.value,
+  });
+  noteMessage.value = result.data.saved
+    ? `学习笔记已保存：${result.data.note_path}`
+    : '学习笔记保存失败。';
+  if (result.data.report_path) {
+    reportMessage.value = `学习报告已刷新：${result.data.report_path}`;
+  }
+  await selectRunAction(selectedRun.value.run_id);
+};
+
+const refreshReportAction = async () => {
+  if (!selectedRun.value) {
+    reportMessage.value = '请先选择一次运行记录。';
+    return;
+  }
+
+  const result = await apiAction(`v1/runs/${selectedRun.value.run_id}/report`);
+  if (!result.data) {
+    reportMessage.value = '学习报告生成失败。';
+    return;
+  }
+
+  reportPreview.value = result.data.report;
+  if (selectedRun.value && result.data.summary) {
+    selectedRun.value = {
+      ...selectedRun.value,
+      summary: result.data.summary,
+    };
+  }
+  reportMessage.value = `学习报告已生成：${result.data.report_path}`;
+  await loadRunsAction();
 };
 
 const connectServerAction = async () => {
@@ -165,93 +217,196 @@ const connectServerAction = async () => {
       connected: true,
       host: result.data.host,
       pid: String(result.data.pid),
+      runsRoot: result.data.runs_root,
+      configPath: result.data.config_path,
       message: '侧车服务连接成功。',
     };
+    computeNodes.value = result.data.compute_nodes ?? [];
+    selectedComputeNode.value = result.data.default_compute_node || computeNodes.value[0]?.alias || '';
+    toolchainItems.value = result.data.toolchain ?? [];
+    await loadRunsAction();
   } catch (err) {
     status.value = {
       connected: false,
       host: '',
       pid: '',
-      message: '连接失败，请确认侧车服务已启动。',
+      runsRoot: '',
+      configPath: '',
+      message: '连接失败，请确认 FastAPI sidecar 已启动。',
     };
     appendLog(`[界面] 连接 API 服务失败：${err}`);
   }
 };
 
 const probeRemoteNodeAction = async () => {
-  try {
+  if (!selectedComputeNode.value) {
     remoteStatus.value = {
+      ...remoteStatus.value,
       checked: true,
       connected: false,
       running: false,
-      runId: '',
-      message: '正在测试 shh1 远程节点...',
+      message: '请先在配置文件中添加计算节点。',
       output: '',
     };
-    const result = await apiAction('v1/compute-nodes/shh1/probe');
+    return;
+  }
+
+  try {
+    remoteStatus.value = {
+      ...remoteStatus.value,
+      checked: true,
+      connected: false,
+      running: false,
+      message: `正在测试 ${activeComputeNodeLabel.value}...`,
+      output: '',
+    };
+    const result = await apiAction(`v1/compute-nodes/${selectedComputeNode.value}/probe`);
     const details = result.data.details ?? {};
     const output = [
       `主机：${details.hostname ?? '未知'}`,
       `用户：${details.user ?? '未知'}`,
       `CPU 核心：${details.cpu_cores ?? '未知'}`,
-      `当前目录：${details.workdir ?? '未知'}`,
-      `耗时：${result.data.duration_seconds} 秒`,
+      `远程目录：${details.workdir ?? '未知'}`,
+      `探测耗时：${result.data.duration_seconds} 秒`,
     ].join('\n');
+
     remoteStatus.value = {
+      ...remoteStatus.value,
       checked: true,
       connected: result.data.connected,
       running: false,
-      runId: '',
-      message: result.data.connected ? 'shh1 远程节点连接成功。' : 'shh1 远程节点连接失败。',
+      message: result.data.connected ? `${activeComputeNodeLabel.value} 连接成功。` : `${activeComputeNodeLabel.value} 连接失败。`,
       output: `${output}${result.data.stderr ? `\n错误输出：\n${result.data.stderr}` : ''}`.trim(),
     };
   } catch (err) {
     remoteStatus.value = {
+      ...remoteStatus.value,
       checked: true,
       connected: false,
       running: false,
-      runId: '',
-      message: 'shh1 远程节点测试失败。',
+      message: `${activeComputeNodeLabel.value} 测试失败。`,
+      output: String(err),
+    };
+  }
+};
+
+const probeSchedulerAction = async () => {
+  if (!selectedComputeNode.value) {
+    remoteStatus.value = {
+      ...remoteStatus.value,
+      checked: true,
+      connected: false,
+      running: false,
+      message: '请先在配置文件中添加计算节点。',
+      output: '',
+    };
+    return;
+  }
+
+  try {
+    remoteStatus.value = {
+      ...remoteStatus.value,
+      checked: true,
+      message: `正在探测 ${activeComputeNodeLabel.value} 的作业调度器...`,
+      output: '',
+    };
+    const result = await apiAction(`v1/compute-nodes/${selectedComputeNode.value}/scheduler-probe`);
+    const details = result.data.details ?? {};
+    const output = [
+      `主机：${details.hostname ?? '未知'}`,
+      `用户：${details.user ?? '未知'}`,
+      `调度器：${details.scheduler ?? '未知'}`,
+      `sbatch：${details.sbatch || '未发现'}`,
+      `srun：${details.srun || '未发现'}`,
+      `squeue：${details.squeue || '未发现'}`,
+      `qsub：${details.qsub || '未发现'}`,
+      `bsub：${details.bsub || '未发现'}`,
+      `CPU 核心：${details.cpu_cores ?? '未知'}`,
+      `内存：${details.memory ?? '未知'}`,
+      `远程目录：${details.workdir ?? '未知'}`,
+      `探测耗时：${result.data.duration_seconds} 秒`,
+    ].join('\n');
+
+    remoteStatus.value = {
+      ...remoteStatus.value,
+      checked: true,
+      connected: result.data.connected,
+      message: result.data.connected ? `${activeComputeNodeLabel.value} 调度器探测完成。` : `${activeComputeNodeLabel.value} 调度器探测失败。`,
+      output: `${output}${result.data.stderr ? `\n错误输出：\n${result.data.stderr}` : ''}`.trim(),
+    };
+  } catch (err) {
+    remoteStatus.value = {
+      ...remoteStatus.value,
+      checked: true,
+      message: `${activeComputeNodeLabel.value} 调度器探测失败。`,
       output: String(err),
     };
   }
 };
 
 const startRemoteDemoRunAction = async () => {
+  if (!selectedComputeNode.value) {
+    remoteStatus.value = {
+      ...remoteStatus.value,
+      running: false,
+      message: '请先在配置文件中添加计算节点。',
+      output: '',
+    };
+    return;
+  }
+
   try {
     remoteEventSource?.close();
     remoteStatus.value = {
       ...remoteStatus.value,
       checked: true,
       running: true,
-      message: '正在启动远程终端测试任务...',
+      message: '正在启动远程闭环样例...',
       output: '',
+      archivePath: '',
+      remoteWorkdir: '',
     };
 
-    const result = await apiAction('v1/runs/shh1/demo', 'POST');
+    const result = await apiAction(`v1/runs/${selectedComputeNode.value}/demo`, 'POST');
     const runId = result.data.run_id;
     remoteStatus.value = {
       ...remoteStatus.value,
       runId,
-      message: `远程任务 ${runId} 已启动，正在接收实时输出。`,
+      archivePath: result.data.archive_path,
+      remoteWorkdir: result.data.remote_workdir,
+      message: `${activeComputeNodeLabel.value} 上的任务 ${runId} 已创建，正在接收实时日志。`,
     };
 
-    remoteEventSource = new EventSource(`http://${DOMAIN}:${PORT}/v1/runs/${runId}/events`);
-    remoteEventSource.onmessage = (event) => {
+    remoteEventSource = new EventSource(`${apiBaseUrl}/v1/runs/${runId}/events`);
+    remoteEventSource.onmessage = async (event) => {
       const payload = JSON.parse(event.data);
       if (payload.line) {
         remoteStatus.value.output += `${payload.line}\n`;
         appendLog(`[远程任务] ${payload.line}`);
       }
+      if (payload.archive_path) {
+        remoteStatus.value.archivePath = payload.archive_path;
+      }
+      if (payload.remote_workdir) {
+        remoteStatus.value.remoteWorkdir = payload.remote_workdir;
+      }
       if (payload.type === 'finished') {
+        const finishedNormally = payload.status === 'finished' && payload.exit_code === 0;
+        const canceled = payload.status === 'canceled';
         remoteStatus.value = {
           ...remoteStatus.value,
-          connected: payload.exit_code === 0,
+          connected: canceled ? remoteStatus.value.connected : finishedNormally,
           running: false,
-          message: payload.exit_code === 0 ? '远程测试任务已完成。' : '远程测试任务失败。',
+          message: canceled
+            ? '远程任务已取消，取消记录已进入物证仓库。'
+            : finishedNormally
+              ? '远程闭环样例完成，日志和结果已进入物证仓库。'
+              : '远程闭环样例失败，请查看日志。',
         };
         remoteEventSource?.close();
         remoteEventSource = null;
+        await loadRunsAction();
+        await selectRunAction(runId);
       }
     };
     remoteEventSource.onerror = () => {
@@ -267,8 +422,130 @@ const startRemoteDemoRunAction = async () => {
     remoteStatus.value = {
       ...remoteStatus.value,
       running: false,
-      message: '远程测试任务启动失败。',
+      message: '远程闭环样例启动失败。',
       output: String(err),
+    };
+  }
+};
+
+const startSlurmDemoRunAction = async () => {
+  if (!selectedComputeNode.value) {
+    remoteStatus.value = {
+      ...remoteStatus.value,
+      running: false,
+      message: '请先在配置文件中添加计算节点。',
+      output: '',
+    };
+    return;
+  }
+
+  try {
+    remoteEventSource?.close();
+    remoteStatus.value = {
+      ...remoteStatus.value,
+      checked: true,
+      running: true,
+      message: '正在提交 Slurm 远程闭环样例...',
+      output: '',
+      archivePath: '',
+      remoteWorkdir: '',
+    };
+
+    const result = await apiAction(`v1/runs/${selectedComputeNode.value}/slurm-demo`, 'POST');
+    const runId = result.data.run_id;
+    const resourceLines = [
+      `调度器：${result.data.scheduler ?? 'slurm'}`,
+      `分区：${result.data.partition ?? '未知'}`,
+      `申请 CPU：${result.data.requested_cpus ?? '未知'}`,
+      `申请内存：${result.data.requested_memory ?? '未知'}`,
+    ].join('\n');
+
+    remoteStatus.value = {
+      ...remoteStatus.value,
+      runId,
+      archivePath: result.data.archive_path,
+      remoteWorkdir: result.data.remote_workdir,
+      message: `${activeComputeNodeLabel.value} 已创建 Slurm 运行 ${runId}，正在等待 JobID 和实时日志。`,
+      output: `${resourceLines}\n`,
+    };
+
+    remoteEventSource = new EventSource(`${apiBaseUrl}/v1/runs/${runId}/events`);
+    remoteEventSource.onmessage = async (event) => {
+      const payload = JSON.parse(event.data);
+      if (payload.line) {
+        remoteStatus.value.output += `${payload.line}\n`;
+        appendLog(`[SlurmRunner] ${payload.line}`);
+      }
+      if (payload.archive_path) {
+        remoteStatus.value.archivePath = payload.archive_path;
+      }
+      if (payload.remote_workdir) {
+        remoteStatus.value.remoteWorkdir = payload.remote_workdir;
+      }
+      if (payload.job_id) {
+        remoteStatus.value.output += `JobID：${payload.job_id}\n`;
+      }
+      if (payload.allocated_node) {
+        remoteStatus.value.output += `运行节点：${payload.allocated_node}\n`;
+      }
+      if (payload.type === 'finished') {
+        const finishedNormally = payload.status === 'finished' && payload.exit_code === 0;
+        const canceled = payload.status === 'canceled';
+        remoteStatus.value = {
+          ...remoteStatus.value,
+          connected: canceled ? remoteStatus.value.connected : finishedNormally,
+          running: false,
+          message: canceled
+            ? 'Slurm 任务已取消，取消记录已进入物证仓库。'
+            : finishedNormally
+              ? 'Slurm 闭环样例完成，真实计算节点日志和结果已归档。'
+              : 'Slurm 闭环样例失败，请查看 stderr 和学习报告。',
+        };
+        remoteEventSource?.close();
+        remoteEventSource = null;
+        await loadRunsAction();
+        await selectRunAction(runId);
+      }
+    };
+    remoteEventSource.onerror = () => {
+      remoteStatus.value = {
+        ...remoteStatus.value,
+        running: false,
+        message: 'Slurm 实时事件流中断。',
+      };
+      remoteEventSource?.close();
+      remoteEventSource = null;
+    };
+  } catch (err) {
+    remoteStatus.value = {
+      ...remoteStatus.value,
+      running: false,
+      message: 'Slurm 闭环样例提交失败。',
+      output: String(err),
+    };
+  }
+};
+
+const cancelRemoteRunAction = async () => {
+  if (!remoteStatus.value.runId) {
+    remoteStatus.value = {
+      ...remoteStatus.value,
+      message: '当前没有可取消的运行任务。',
+    };
+    return;
+  }
+
+  try {
+    await apiAction(`v1/runs/${remoteStatus.value.runId}/cancel`, 'POST');
+    remoteStatus.value = {
+      ...remoteStatus.value,
+      running: true,
+      message: `已请求取消任务 ${remoteStatus.value.runId}，等待远程通道结束。`,
+    };
+  } catch (err) {
+    remoteStatus.value = {
+      ...remoteStatus.value,
+      message: `取消任务失败：${err}`,
     };
   }
 };
@@ -280,18 +557,20 @@ const shutdownSidecarAction = async () => {
       connected: false,
       host: '',
       pid: '',
-      message: '已请求停止侧车服务。',
+      runsRoot: '',
+      configPath: '',
+      message: '已请求关闭侧车服务。',
     };
-    appendLog('[界面] 已请求停止侧车服务。');
+    appendLog('[界面] 已请求关闭侧车服务。');
   } catch (err) {
-    appendLog(`[界面] 停止侧车服务失败：${err}`);
+    appendLog(`[界面] 关闭侧车服务失败：${err}`);
   }
 };
 
 const startSidecarAction = async () => {
   try {
     await invoke('start_sidecar');
-    appendLog('[界面] 已请求启动侧车服务，正在尝试连接...');
+    appendLog('[界面] 已请求启动侧车服务，稍后自动验证连接。');
     window.setTimeout(connectServerAction, 1000);
   } catch (err) {
     appendLog(`[界面] 启动侧车服务失败：${err}`);
@@ -321,10 +600,11 @@ onUnmounted(() => {
   <main class="studio-shell">
     <header class="topbar">
       <div>
-        <p class="eyebrow">SimFEA Studio 概念验证</p>
-        <h1>仿真学习的桌面外壳</h1>
+        <p class="eyebrow">SimFEA Studio 物证工作台</p>
+        <h1>远程运行、实时日志、结果归档、学习笔记</h1>
         <p class="mission">
-          包装开源命令行求解器，记录每一次亲手拆解过的物理概念。
+          这个闭环先不追求完整求解器，而是把一次远程计算变成可回放的学习证据：
+          命令、日志、结果文件、远程目录和个人复盘会被收进同一个运行档案。
         </p>
       </div>
       <div class="connection-stack">
@@ -339,91 +619,114 @@ onUnmounted(() => {
       </div>
     </header>
 
-    <section class="workspace-grid" aria-label="项目仪表盘">
+    <section class="workspace-grid" aria-label="SimFEA Studio 工作区">
       <section class="panel project-panel" aria-labelledby="project-title">
         <div class="section-heading">
-          <p class="eyebrow">当前项目</p>
-          <h2 id="project-title">概念验证链路</h2>
+          <p class="eyebrow">当前闭环</p>
+          <h2 id="project-title">远程闭环样例</h2>
         </div>
         <p class="body-copy">
-          当前阶段验证 Tauri、Vue、FastAPI 侧车服务、SSH 远程计算节点的通信链路。镜像、求解器执行、VTK
-          结果视图都留到下一阶段接入。
+          任务会通过配置文件中的计算节点执行，在远程目录创建输入文件和结果文件，同时把 stdout/stderr 实时传回前端。
+          结束后，侧车服务会把 result.txt 拉回本地 `.simfea/runs/` 归档目录。
         </p>
         <dl class="facts">
           <div>
             <dt>前端</dt>
-            <dd>Vue / Vite，地址 localhost:3000</dd>
+            <dd>Vue / Vite</dd>
           </div>
           <div>
-            <dt>后端</dt>
-            <dd>FastAPI 侧车服务，地址 localhost:8008</dd>
+            <dt>侧车</dt>
+            <dd>FastAPI / Python</dd>
           </div>
           <div>
-            <dt>远程节点</dt>
-            <dd>SSH 通道 shh1</dd>
+            <dt>执行器</dt>
+            <dd>SSHRunner / 配置节点</dd>
           </div>
         </dl>
       </section>
 
       <section class="panel control-panel" aria-labelledby="control-title">
         <div class="section-heading">
-          <p class="eyebrow">概念验证控制台</p>
-          <h2 id="control-title">侧车服务验证</h2>
+          <p class="eyebrow">侧车服务</p>
+          <h2 id="control-title">本地控制面板</h2>
         </div>
         <div class="button-row">
           <button class="primary-action" type="button" @click="connectServerAction">
             验证连接
           </button>
           <button type="button" @click="startSidecarAction" :disabled="status.connected">
-            启动侧车服务
+            启动侧车
           </button>
           <button type="button" @click="shutdownSidecarAction" :disabled="!status.connected">
-            停止侧车服务
+            关闭侧车
           </button>
         </div>
         <div class="connection-detail">
           <span>{{ status.message }}</span>
-          <span v-if="status.connected">服务地址：{{ status.host }}</span>
-          <span v-if="status.connected">进程号：{{ status.pid }}</span>
+          <span v-if="status.connected">API：{{ status.host }}</span>
+          <span v-if="status.connected">进程：{{ status.pid }}</span>
+          <span v-if="status.runsRoot">物证仓库：{{ status.runsRoot }}</span>
+          <span v-if="status.configPath">配置文件：{{ status.configPath }}</span>
         </div>
       </section>
 
       <section class="panel remote-panel" aria-labelledby="remote-title">
         <div class="section-heading">
-          <p class="eyebrow">远程算力</p>
-          <h2 id="remote-title">SSH 通道 shh1</h2>
+          <p class="eyebrow">远程计算</p>
+          <h2 id="remote-title">计算节点：{{ activeComputeNodeLabel }}</h2>
         </div>
-        <p class="body-copy">
-          这是第一个远程计算节点入口。当前只执行探测命令，证明侧车服务能通过 SSH 获取远程输出。
+        <label class="node-selector">
+          <span>当前节点</span>
+          <select v-model="selectedComputeNode" :disabled="computeNodes.length === 0 || remoteStatus.running">
+            <option v-for="node in computeNodes" :key="node.alias" :value="node.alias">
+              {{ node.label }} / {{ node.alias }}
+            </option>
+          </select>
+        </label>
+        <p v-if="computeNodes.length === 0" class="empty-state">
+          尚未配置计算节点。请根据 simfea.config.example.json 创建 .simfea/config.json。
         </p>
         <div class="button-row">
-          <button type="button" class="primary-action" @click="probeRemoteNodeAction" :disabled="!status.connected">
+          <button type="button" class="primary-action" @click="probeRemoteNodeAction" :disabled="!status.connected || !selectedComputeNode">
             测试远程节点
           </button>
-          <button type="button" @click="startRemoteDemoRunAction" :disabled="!status.connected || remoteStatus.running">
-            运行远程测试任务
+          <button type="button" @click="probeSchedulerAction" :disabled="!status.connected || !selectedComputeNode || remoteStatus.running">
+            探测调度器
+          </button>
+          <button type="button" @click="startRemoteDemoRunAction" :disabled="!status.connected || !selectedComputeNode || remoteStatus.running">
+            运行闭环样例
+          </button>
+          <button type="button" @click="startSlurmDemoRunAction" :disabled="!status.connected || !selectedComputeNode || remoteStatus.running">
+            运行 Slurm 样例
+          </button>
+          <button type="button" class="danger-action" @click="cancelRemoteRunAction" :disabled="!remoteStatus.running || !remoteStatus.runId">
+            取消当前任务
           </button>
         </div>
         <div class="connection-detail">
           <span>{{ remoteStatus.message }}</span>
+          <span v-if="remoteStatus.remoteWorkdir">远程目录：{{ remoteStatus.remoteWorkdir }}</span>
+          <span v-if="remoteStatus.archivePath">本地归档：{{ remoteStatus.archivePath }}</span>
         </div>
         <pre v-if="remoteStatus.output" class="remote-output"><code>{{ remoteStatus.output }}</code></pre>
       </section>
 
-      <section class="panel solver-panel" aria-labelledby="solver-title">
+      <section class="panel toolchain-panel" aria-labelledby="toolchain-title">
         <div class="section-heading">
-          <p class="eyebrow">求解器桥接</p>
-          <h2 id="solver-title">求解器入口占位</h2>
+          <p class="eyebrow">工具链地图</p>
+          <h2 id="toolchain-title">把竞品变成证据来源</h2>
         </div>
-        <div class="solver-list">
-          <article v-for="solver in solvers" :key="solver.name" class="solver-tile">
+        <div class="toolchain-list">
+          <article v-for="item in selectedToolchain" :key="item.name" class="toolchain-item">
             <div>
-              <h3>{{ solver.name }}</h3>
-              <p>{{ solver.domain }}</p>
+              <h3>{{ item.name }}</h3>
+              <p>{{ item.role }}</p>
             </div>
-            <span class="tile-status">{{ solver.status === 'waiting' ? '下一步' : '已规划' }}</span>
-            <p class="tile-note">{{ solver.note }}</p>
+            <span>{{ item.status }}</span>
           </article>
+          <p v-if="selectedToolchain.length === 0" class="empty-state">
+            工具链地图会从后端配置加载。
+          </p>
         </div>
       </section>
 
@@ -434,23 +737,80 @@ onUnmounted(() => {
         </div>
         <div class="run-table" role="table" aria-label="运行记录">
           <div class="run-row run-head" role="row">
-            <span role="columnheader">案例</span>
-            <span role="columnheader">求解器</span>
+            <span role="columnheader">算例</span>
+            <span role="columnheader">节点</span>
             <span role="columnheader">状态</span>
           </div>
-          <div v-for="run in runRecords" :key="run.caseName" class="run-row" role="row">
-            <span role="cell">{{ run.caseName }}</span>
-            <span role="cell">{{ run.solver }}</span>
-            <span role="cell">{{ run.status }}</span>
-            <p>{{ run.detail }}</p>
-          </div>
+          <button
+            v-for="run in archivedRuns"
+            :key="run.run_id"
+            type="button"
+            class="run-row run-button"
+            :class="{ selected: selectedRun?.run_id === run.run_id }"
+            @click="selectRunAction(run.run_id)"
+          >
+            <span>{{ run.case_name }}</span>
+            <span>{{ run.compute_node }}</span>
+            <span>{{ run.status }}</span>
+            <p>{{ run.run_id }} / {{ run.local_archive }}</p>
+          </button>
+          <p v-if="archivedRuns.length === 0" class="empty-state">
+            暂无运行记录。先点击“运行闭环样例”，生成第一份物证。
+          </p>
         </div>
+      </section>
+
+      <ResultEvidenceView
+        :run="selectedRun"
+        :api-base-url="apiBaseUrl"
+        :report-preview="reportPreview"
+        :remote-output="remoteStatus.output"
+      />
+
+      <section class="panel note-panel" aria-labelledby="note-title">
+        <div class="section-heading">
+          <p class="eyebrow">学习笔记</p>
+          <h2 id="note-title">本次复盘</h2>
+        </div>
+        <div v-if="selectedRun" class="run-summary">
+          <span>运行：{{ selectedRun.run_id }}</span>
+          <span>退出码：{{ selectedRun.exit_code ?? '未结束' }}</span>
+          <span>结果：{{ selectedArtifacts }}</span>
+        </div>
+        <textarea
+          v-model="learningNote"
+          :disabled="!selectedRun"
+          placeholder="例如：这次远程运行验证了什么？日志里有没有异常？结果文件说明了什么？下一步准备接哪个求解器？"
+        />
+        <div class="button-row">
+          <button type="button" class="primary-action" @click="saveNoteAction" :disabled="!selectedRun">
+            保存学习笔记
+          </button>
+        </div>
+        <p class="note-message">{{ noteMessage }}</p>
+      </section>
+
+      <section class="panel report-panel" aria-labelledby="report-title">
+        <div class="section-heading">
+          <p class="eyebrow">沉淀报告</p>
+          <h2 id="report-title">learning_report.md</h2>
+        </div>
+        <div class="button-row">
+          <button type="button" class="primary-action" @click="refreshReportAction" :disabled="!selectedRun">
+            刷新学习报告
+          </button>
+        </div>
+        <p class="note-message">{{ reportMessage }}</p>
+        <pre v-if="reportPreview" class="report-preview"><code>{{ reportPreview }}</code></pre>
+        <p v-else class="empty-state">
+          选择一次运行记录后，这里会显示自动生成的学习沉淀报告。
+        </p>
       </section>
 
       <section class="panel log-panel" aria-labelledby="log-title">
         <div class="section-heading compact-heading">
-          <p class="eyebrow">运行日志</p>
-          <h2 id="log-title">侧车服务日志</h2>
+          <p class="eyebrow">实时日志</p>
+          <h2 id="log-title">侧车与远程输出</h2>
         </div>
         <pre class="logs-display"><code>{{ logs }}</code></pre>
       </section>

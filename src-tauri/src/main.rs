@@ -87,6 +87,8 @@ fn shutdown_sidecar(app_handle: tauri::AppHandle) -> Result<String, String> {
             }
 
             println!("[tauri] Sent 'sidecar shutdown' command to sidecar.");
+            let _ = process.kill();
+            println!("[tauri] Sidecar process killed.");
             Ok("'sidecar shutdown' command sent.".to_string())
         } else {
             println!("[tauri] No active sidecar process to shutdown.");
@@ -135,15 +137,13 @@ fn main() {
                     app_handle.try_state::<Arc<Mutex<Option<CommandChild>>>>()
                 {
                     if let Ok(mut child) = child_process.lock() {
-                        if let Some(process) = child.as_mut() {
+                        if let Some(mut process) = child.take() {
                             // Send msg via stdin to sidecar where it self terminates
                             let command = "sidecar shutdown\n";
                             let buf: &[u8] = command.as_bytes();
                             let _ = process.write(buf);
 
-                            // *Important* `process.kill()` will only shutdown the parent sidecar (python process). Tauri doesnt know about the second process spawned by the "bootloader" script.
-                            // This only applies if you compile a "one-file" exe using PyInstaller. Otherwise, just use the line below to kill the process normally.
-                            // let _ = process.kill();
+                            let _ = process.kill();
 
                             println!("[tauri] Sidecar closed.");
                         }

@@ -397,5 +397,8 @@ Cargo.lock
 **/__pycache__
 **/.venv
 
+# SimFEA Studio local evidence archive
+.simfea/
+
 uv.lock
 

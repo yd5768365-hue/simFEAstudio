@@ -1,0 +1,57 @@
+{
+  "api": {
+    "port": 8008,
+    "public_host": "localhost"
+  },
+  "paths": {
+    "runs_root": ".simfea/runs"
+  },
+  "ssh": {
+    "ssh_exe": "",
+    "scp_exe": ""
+  },
+  "compute": {
+    "default_node": "remote-main",
+    "nodes": [
+      {
+        "alias": "remote-main",
+        "label": "Remote SSH compute node",
+        "host": "example.hpc.edu",
+        "user": "your_username",
+        "port": 22,
+        "identity_file": "~/.ssh/id_ed25519",
+        "remote_runs_root": "$HOME/simfea-runs",
+        "connect_timeout_seconds": 8,
+        "batch_mode": true,
+        "strict_host_key_checking": "accept-new"
+      }
+    ]
+  },
+  "toolchain": [
+    {
+      "name": "FreeCAD",
+      "role": "几何建模与 STEP/BREP 来源",
+      "status": "后期接入"
+    },
+    {
+      "name": "Salome",
+      "role": "复杂网格、网格脚本与前处理来源",
+      "status": "后期接入"
+    },
+    {
+      "name": "PrePoMax / CalculiX",
+      "role": "结构有限元求解与结果文件来源",
+      "status": "后期接入"
+    },
+    {
+      "name": "OpenFOAM / Elmer",
+      "role": "流体与多物理场求解入口",
+      "status": "后期接入"
+    },
+    {
+      "name": "SSH / WSL / Docker",
+      "role": "统一运行器，把本地和远程命令归档为同一种证据",
+      "status": "当前验证"
+    }
+  ]
+}

@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "simfea-studio"
 version = "0.1.0"
-description = "SimFEA Studio 后端侧车服务 — FastAPI 驱动，管理远程命令执行与实时事件流"
+description = "SimFEA Studio FastAPI sidecar for remote simulation evidence workflows."
 requires-python = ">=3.9"
 classifiers = [
     "Programming Language :: Python :: 3",
