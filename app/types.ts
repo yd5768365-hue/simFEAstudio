@@ -33,6 +33,12 @@ export interface ResultSummary {
   };
 }
 
+export interface LearningExportRecord {
+  path: string;
+  format: string;
+  exported_at: string;
+}
+
 export interface RunArchive {
   run_id: string;
   case_name: string;
@@ -51,6 +57,8 @@ export interface RunArchive {
   result_summary?: string;
   note?: string;
   report?: string;
+  learning_export?: LearningExportRecord;
+  learning_exports?: LearningExportRecord[];
   summary?: ResultSummary | null;
   toolchain?: ToolchainItem[];
   scheduler?: string;

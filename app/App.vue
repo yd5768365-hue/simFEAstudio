@@ -16,6 +16,9 @@ interface ConnectionStatus {
   pid: string;
   runsRoot: string;
   configPath: string;
+  learningExportRoot: string;
+  learningFormats: string[];
+  learningDefaultFormat: string;
   message: string;
 }
 
@@ -46,6 +49,9 @@ const status = ref<ConnectionStatus>({
   pid: '',
   runsRoot: '',
   configPath: '',
+  learningExportRoot: '',
+  learningFormats: ['md', 'json', 'txt'],
+  learningDefaultFormat: 'md',
   message: '尚未验证侧车服务连接。',
 });
 
@@ -67,8 +73,11 @@ const selectedRun = ref<RunArchive | null>(null);
 const toolchainItems = ref<ToolchainItem[]>([]);
 const learningNote = ref('');
 const reportPreview = ref('');
+const learningExportTarget = ref('');
+const selectedLearningFormat = ref('md');
 const noteMessage = ref('选择一次运行后，可以写下这次计算的判断、错误和下一步。');
 const reportMessage = ref('运行完成后，这里会显示自动生成的学习沉淀报告。');
+const exportMessage = ref('学习记录可以导出到配置目录，也可以临时指定一个目录。');
 const logs = ref('[界面] 正在监听侧车服务和网络日志...');
 
 let cleanupListeners: CleanupFunction | null = null;
@@ -91,6 +100,10 @@ const selectedArtifacts = computed(() =>
 );
 
 const selectedToolchain = computed<ToolchainItem[]>(() => selectedRun.value?.toolchain ?? toolchainItems.value);
+
+const availableLearningFormats = computed(() =>
+  status.value.learningFormats.length > 0 ? status.value.learningFormats : ['md', 'json', 'txt'],
+);
 
 const activeComputeNode = computed(() =>
   computeNodes.value.find((node) => node.alias === selectedComputeNode.value) ?? null,
@@ -167,6 +180,9 @@ const selectRunAction = async (runId: string) => {
   reportMessage.value = result.data.learning_report
     ? `学习报告：${result.data.local_archive}\\${result.data.learning_report}`
     : '这次运行还没有生成学习报告。';
+  exportMessage.value = result.data.learning_export
+    ? `最近导出：${result.data.learning_export.path}`
+    : '这次运行还没有导出到学习库。';
 };
 
 const saveNoteAction = async () => {
@@ -210,6 +226,32 @@ const refreshReportAction = async () => {
   await loadRunsAction();
 };
 
+const exportLearningRecordAction = async () => {
+  if (!selectedRun.value) {
+    exportMessage.value = '请先选择一次运行记录。';
+    return;
+  }
+
+  const result = await apiAction(`v1/runs/${selectedRun.value.run_id}/learning-export`, 'POST', {
+    format: selectedLearningFormat.value,
+    target_dir: learningExportTarget.value.trim() || undefined,
+  });
+  if (!result.data?.exported) {
+    exportMessage.value = '学习记录导出失败。';
+    return;
+  }
+
+  exportMessage.value = `学习记录已导出：${result.data.export_path}`;
+  if (result.data.summary) {
+    selectedRun.value = {
+      ...selectedRun.value,
+      summary: result.data.summary,
+      learning_export: result.data.record,
+    };
+  }
+  await loadRunsAction();
+};
+
 const connectServerAction = async () => {
   try {
     const result = await apiAction('v1/connect');
@@ -219,8 +261,13 @@ const connectServerAction = async () => {
       pid: String(result.data.pid),
       runsRoot: result.data.runs_root,
       configPath: result.data.config_path,
+      learningExportRoot: result.data.learning_export_root,
+      learningFormats: result.data.learning_formats ?? ['md', 'json', 'txt'],
+      learningDefaultFormat: result.data.learning_default_format ?? 'md',
       message: '侧车服务连接成功。',
     };
+    learningExportTarget.value = result.data.learning_export_root ?? '';
+    selectedLearningFormat.value = result.data.learning_default_format ?? 'md';
     computeNodes.value = result.data.compute_nodes ?? [];
     selectedComputeNode.value = result.data.default_compute_node || computeNodes.value[0]?.alias || '';
     toolchainItems.value = result.data.toolchain ?? [];
@@ -232,6 +279,9 @@ const connectServerAction = async () => {
       pid: '',
       runsRoot: '',
       configPath: '',
+      learningExportRoot: '',
+      learningFormats: ['md', 'json', 'txt'],
+      learningDefaultFormat: 'md',
       message: '连接失败，请确认 FastAPI sidecar 已启动。',
     };
     appendLog(`[界面] 连接 API 服务失败：${err}`);
@@ -559,6 +609,9 @@ const shutdownSidecarAction = async () => {
       pid: '',
       runsRoot: '',
       configPath: '',
+      learningExportRoot: '',
+      learningFormats: ['md', 'json', 'txt'],
+      learningDefaultFormat: 'md',
       message: '已请求关闭侧车服务。',
     };
     appendLog('[界面] 已请求关闭侧车服务。');
@@ -666,6 +719,7 @@ onUnmounted(() => {
           <span v-if="status.connected">API：{{ status.host }}</span>
           <span v-if="status.connected">进程：{{ status.pid }}</span>
           <span v-if="status.runsRoot">物证仓库：{{ status.runsRoot }}</span>
+          <span v-if="status.learningExportRoot">学习库：{{ status.learningExportRoot }}</span>
           <span v-if="status.configPath">配置文件：{{ status.configPath }}</span>
         </div>
       </section>
@@ -788,6 +842,38 @@ onUnmounted(() => {
           </button>
         </div>
         <p class="note-message">{{ noteMessage }}</p>
+      </section>
+
+      <section class="panel export-panel" aria-labelledby="export-title">
+        <div class="section-heading">
+          <p class="eyebrow">长期沉淀</p>
+          <h2 id="export-title">学习记录导出</h2>
+        </div>
+        <label class="field-label">
+          <span>导出目录</span>
+          <input
+            v-model="learningExportTarget"
+            :placeholder="status.learningExportRoot || '.simfea/learning'"
+            :disabled="!selectedRun"
+          />
+        </label>
+        <label class="field-label">
+          <span>记录格式</span>
+          <select v-model="selectedLearningFormat" :disabled="!selectedRun">
+            <option v-for="format in availableLearningFormats" :key="format" :value="format">
+              {{ format }}
+            </option>
+          </select>
+        </label>
+        <div class="button-row">
+          <button type="button" class="primary-action" @click="exportLearningRecordAction" :disabled="!selectedRun">
+            导出学习记录
+          </button>
+        </div>
+        <p class="note-message">
+          默认目录来自 .simfea/config.json；md 适合阅读，json 适合后续 AI agent 读取，txt 适合快速检索。
+        </p>
+        <p class="note-message">{{ exportMessage }}</p>
       </section>
 
       <section class="panel report-panel" aria-labelledby="report-title">

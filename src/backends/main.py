@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import re
 import signal
 import shutil
 import sys
@@ -97,6 +98,14 @@ class T_Query(TypedDict):
 
 class T_Note(TypedDict, total=False):
     note: str
+    export: bool
+    format: str
+    target_dir: str
+
+
+class T_LearningExport(TypedDict, total=False):
+    format: str
+    target_dir: str
 
 
 @dataclass
@@ -118,6 +127,9 @@ class AppSettings:
     api_port: int
     api_public_host: str
     runs_root: Path
+    learning_export_root: Path
+    learning_formats: list[str]
+    learning_default_format: str
     config_path: Path
     ssh_exe: str
     scp_exe: str
@@ -201,6 +213,11 @@ def default_config() -> dict:
         "paths": {
             "runs_root": os.getenv("SIMFEA_RUNS_ROOT", str(DEFAULT_RUNS_ROOT)),
         },
+        "learning": {
+            "export_root": os.getenv("SIMFEA_LEARNING_EXPORT_ROOT", str(PROJECT_ROOT / ".simfea" / "learning")),
+            "default_format": os.getenv("SIMFEA_LEARNING_DEFAULT_FORMAT", "md"),
+            "formats": ["md", "json", "txt"],
+        },
         "ssh": {
             "ssh_exe": os.getenv("SIMFEA_SSH_EXE", ""),
             "scp_exe": os.getenv("SIMFEA_SCP_EXE", ""),
@@ -243,11 +260,28 @@ def load_settings() -> AppSettings:
         nodes[node.alias] = node
 
     default_node = raw_config.get("compute", {}).get("default_node") or next(iter(nodes), "")
+    learning_config = raw_config.get("learning", {})
+    learning_formats = [
+        normalize_learning_format(item)
+        for item in learning_config.get("formats", ["md", "json", "txt"])
+    ]
+    learning_formats = [item for item in dict.fromkeys(learning_formats) if item in {"md", "json", "txt"}]
+    if not learning_formats:
+        learning_formats = ["md"]
+    learning_default_format = normalize_learning_format(learning_config.get("default_format", learning_formats[0]))
+    if learning_default_format not in learning_formats:
+        learning_default_format = learning_formats[0]
 
     return AppSettings(
         api_port=int(raw_config["api"]["port"]),
         api_public_host=raw_config["api"].get("public_host", "localhost"),
         runs_root=expand_path(raw_config["paths"]["runs_root"], relative_to_project=True),
+        learning_export_root=expand_path(
+            learning_config.get("export_root", str(PROJECT_ROOT / ".simfea" / "learning")),
+            relative_to_project=True,
+        ),
+        learning_formats=learning_formats,
+        learning_default_format=learning_default_format,
         config_path=config_path,
         ssh_exe=find_executable(raw_config["ssh"].get("ssh_exe", ""), "ssh", DEFAULT_WINDOWS_SSH),
         scp_exe=find_executable(raw_config["ssh"].get("scp_exe", ""), "scp", DEFAULT_WINDOWS_SCP),
@@ -449,6 +483,24 @@ def parse_optional_float(value: str | int | float | None) -> Optional[float]:
 def parse_optional_int(value: str | int | float | None) -> Optional[int]:
     number = parse_optional_float(value)
     return int(number) if number is not None else None
+
+
+def normalize_learning_format(value: str | None) -> str:
+    normalized = (value or "md").strip().lower().lstrip(".")
+    aliases = {
+        "markdown": "md",
+        "md": "md",
+        "json": "json",
+        "txt": "txt",
+        "text": "txt",
+    }
+    return aliases.get(normalized, normalized)
+
+
+def sanitize_filename_part(value: str | None, fallback: str = "untitled") -> str:
+    cleaned = re.sub(r'[<>:"/\\|?*\x00-\x1f]+', "_", value or "").strip(" ._")
+    cleaned = re.sub(r"\s+", "_", cleaned)
+    return cleaned[:80] or fallback
 
 
 def run_artifacts(run_dir: Path, *, include_summary: bool = True) -> list[str]:
@@ -718,6 +770,127 @@ def generate_learning_report(run_dir: Path) -> Path:
     report_path = run_dir / "learning_report.md"
     report_path.write_text(report, encoding="utf-8")
     return report_path
+
+
+def learning_export_root(target_dir: str | None = None) -> Path:
+    current = settings()
+    if target_dir and target_dir.strip():
+        return expand_path(target_dir.strip(), relative_to_project=True)
+    return current.learning_export_root
+
+
+def build_plain_learning_record(meta: dict, report: str, note: str, summary: dict | None) -> str:
+    metrics = (summary or {}).get("metrics", {})
+    lines = [
+        "SimFEA Studio 学习记录",
+        "",
+        f"运行 ID：{meta.get('run_id', '')}",
+        f"算例：{meta.get('case_name', '')}",
+        f"求解器/执行器：{meta.get('solver', '')} / {meta.get('runner', '')}",
+        f"计算节点：{meta.get('compute_node_label', meta.get('compute_node', ''))}",
+        f"状态：{meta.get('status', '')}",
+        f"退出码：{meta.get('exit_code', '')}",
+        f"本地归档：{meta.get('local_archive', '')}",
+        f"远程目录：{meta.get('remote_workdir', '')}",
+        "",
+        "关键结果",
+        f"最大位移 mm：{metrics.get('max_displacement_mm', '无')}",
+        f"最大 Von Mises MPa：{metrics.get('max_von_mises_mpa', '无')}",
+        "",
+        "学习笔记",
+        note or "尚未填写。",
+        "",
+        "完整报告",
+        report,
+    ]
+    return "\n".join(str(line) for line in lines)
+
+
+def export_learning_record(run_dir: Path, export_format: str | None, target_dir: str | None = None) -> dict:
+    if not run_dir.exists():
+        raise FileNotFoundError(f"Run not found: {run_dir}")
+
+    current = settings()
+    normalized_format = normalize_learning_format(export_format or current.learning_default_format)
+    if normalized_format not in current.learning_formats:
+        raise ValueError(
+            f"Unsupported learning export format: {export_format}. "
+            f"Allowed formats: {', '.join(current.learning_formats)}"
+        )
+
+    summary = generate_result_summary(run_dir)
+    report_path = generate_learning_report(run_dir)
+    meta_path = run_dir / "meta.json"
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    report = report_path.read_text(encoding="utf-8")
+    note = read_optional_text(run_dir / "note.md").strip()
+
+    target_root = learning_export_root(target_dir)
+    target_root.mkdir(parents=True, exist_ok=True)
+    date_part = (meta.get("created_at") or utc_now()).split("T", 1)[0]
+    filename = "_".join(
+        [
+            sanitize_filename_part(date_part, "date"),
+            sanitize_filename_part(meta.get("run_id"), run_dir.name),
+            sanitize_filename_part(meta.get("case_name"), "case"),
+        ]
+    )
+    export_path = target_root / f"{filename}.{normalized_format}"
+    record = {
+        "schema_version": "simfea.learning-record.v1",
+        "exported_at": utc_now(),
+        "format": normalized_format,
+        "source": {
+            "run_archive": str(run_dir),
+            "learning_report": str(report_path),
+            "note": str(run_dir / "note.md"),
+        },
+        "run": meta,
+        "summary": summary,
+        "note": note,
+        "report": report,
+        "artifacts": run_artifacts(run_dir),
+    }
+
+    if normalized_format == "json":
+        export_path.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
+    elif normalized_format == "txt":
+        export_path.write_text(build_plain_learning_record(meta, report, note, summary), encoding="utf-8")
+    else:
+        export_path.write_text(report, encoding="utf-8")
+
+    export_record = {
+        "path": str(export_path),
+        "format": normalized_format,
+        "exported_at": record["exported_at"],
+    }
+    exports = meta.get("learning_exports")
+    if not isinstance(exports, list):
+        exports = []
+    exports = [
+        item
+        for item in exports
+        if isinstance(item, dict)
+        and not (item.get("path") == export_record["path"] and item.get("format") == export_record["format"])
+    ]
+    exports.append(export_record)
+    meta["learning_export"] = export_record
+    meta["learning_exports"] = exports[-20:]
+    meta["learning_report"] = "learning_report.md"
+    meta["result_summary"] = "artifacts/result_summary.json" if summary else None
+    meta["artifacts"] = run_artifacts(run_dir)
+    meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    return {
+        "run_id": meta.get("run_id", run_dir.name),
+        "export_path": str(export_path),
+        "export_root": str(target_root),
+        "format": normalized_format,
+        "allowed_formats": current.learning_formats,
+        "default_format": current.learning_default_format,
+        "summary": summary,
+        "record": export_record,
+    }
 
 
 def sh_quote(value: str) -> str:
@@ -1307,6 +1480,11 @@ def get_app_config():
                 "runs_root": str(current.runs_root),
                 "config_path": str(current.config_path),
             },
+            "learning": {
+                "export_root": str(current.learning_export_root),
+                "formats": current.learning_formats,
+                "default_format": current.learning_default_format,
+            },
             "compute": {
                 "default_node": current.default_compute_node,
                 "nodes": [public_compute_node(node) for node in current.compute_nodes.values()],
@@ -1329,6 +1507,9 @@ def connect_to_api_server():
             "host": host,
             "runs_root": str(current.runs_root),
             "config_path": str(current.config_path),
+            "learning_export_root": str(current.learning_export_root),
+            "learning_formats": current.learning_formats,
+            "learning_default_format": current.learning_default_format,
             "default_compute_node": current.default_compute_node,
             "compute_nodes": [public_compute_node(node) for node in current.compute_nodes.values()],
             "toolchain": current.toolchain,
@@ -1419,6 +1600,9 @@ def list_runs():
         "message": "SimFEA Studio archived runs loaded.",
         "data": {
             "runs_root": str(current.runs_root),
+            "learning_export_root": str(current.learning_export_root),
+            "learning_formats": current.learning_formats,
+            "learning_default_format": current.learning_default_format,
             "runs": load_archived_runs(),
         },
     }
@@ -1431,10 +1615,17 @@ def get_run(run_id: str):
         summary = generate_result_summary(run.local_dir)
         note = (run.local_dir / "note.md").read_text(encoding="utf-8")
         report = read_optional_text(run.local_dir / "learning_report.md")
+        data = run_metadata(run)
+        meta_path = run.local_dir / "meta.json"
+        if meta_path.exists():
+            archived_meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            for key in ("learning_export", "learning_exports"):
+                if key in archived_meta:
+                    data[key] = archived_meta[key]
         return {
             "message": "SimFEA Studio run loaded.",
             "data": {
-                **run_metadata(run),
+                **data,
                 "note": note,
                 "report": report,
                 "summary": summary,
@@ -1539,6 +1730,36 @@ def get_run_report(run_id: str):
     }
 
 
+@app.post("/v1/runs/{run_id}/learning-export")
+def export_run_learning_record(run_id: str, payload: T_LearningExport = Body(default={})):
+    run_dir = settings().runs_root / run_id
+    if not run_dir.exists():
+        return {
+            "message": "SimFEA Studio run not found.",
+            "data": {
+                "exported": False,
+                "run_id": run_id,
+            },
+        }
+
+    try:
+        export_result = export_learning_record(
+            run_dir,
+            payload.get("format"),
+            payload.get("target_dir"),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    return {
+        "message": "SimFEA Studio learning record exported.",
+        "data": {
+            "exported": True,
+            **export_result,
+        },
+    }
+
+
 @app.post("/v1/runs/{alias}/demo")
 async def start_demo_run(alias: str):
     node = get_compute_node(alias)
@@ -1638,6 +1859,13 @@ def save_run_note(run_id: str, payload: T_Note = Body(...)):
     note_path.write_text(note, encoding="utf-8")
     summary = generate_result_summary(run_dir)
     report_path = generate_learning_report(run_dir)
+    export_result = None
+    if payload.get("export"):
+        export_result = export_learning_record(
+            run_dir,
+            payload.get("format"),
+            payload.get("target_dir"),
+        )
     return {
         "message": "SimFEA Studio learning note saved.",
         "data": {
@@ -1646,6 +1874,7 @@ def save_run_note(run_id: str, payload: T_Note = Body(...)):
             "note_path": str(note_path),
             "report_path": str(report_path),
             "summary_path": str(run_dir / "artifacts" / "result_summary.json") if summary else "",
+            "learning_export": export_result,
         },
     }
 

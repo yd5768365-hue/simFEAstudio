@@ -6,6 +6,11 @@
   "paths": {
     "runs_root": ".simfea/runs"
   },
+  "learning": {
+    "export_root": ".simfea/learning",
+    "default_format": "md",
+    "formats": ["md", "json", "txt"]
+  },
   "ssh": {
     "ssh_exe": "",
     "scp_exe": ""

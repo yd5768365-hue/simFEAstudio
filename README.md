@@ -21,6 +21,12 @@ SimFEA Studio 不是新的仿真引擎，不是商业 CAE 的竞品，也不是 
 
 > 不造求解器，只管理求解器、算力、运行环境和学习记录。
 
+## 模板来源
+
+本项目最初基于 [AlanSynn/vue-tauri-fastapi-sidecar-template](https://github.com/AlanSynn/vue-tauri-fastapi-sidecar-template) 搭建 `Tauri + Vue + FastAPI sidecar` 技术骨架。
+
+当前仓库已经改造为 SimFEA Studio 的独立项目：原模板主要提供桌面壳、前端和 Python sidecar 的启动链路；远程计算、Slurm 闭环、物证归档、VTK 可视化和学习记录沉淀是本项目后续围绕机械仿真学习目标扩展出来的功能。
+
 ## 当前架构
 
 ```text
@@ -172,6 +178,18 @@ Copy-Item simfea.config.example.json .simfea\config.json
 }
 ```
 
+学习记录可以额外导出到长期笔记库，目录和默认格式也放在同一个配置文件里：
+
+```json
+{
+  "learning": {
+    "export_root": ".simfea/learning",
+    "default_format": "md",
+    "formats": ["md", "json", "txt"]
+  }
+}
+```
+
 ### 4. 打包 sidecar
 
 Tauri dev 使用 PyInstaller 打包后的 sidecar：
@@ -206,6 +224,7 @@ API 默认地址：`http://localhost:8008`
 7. 在物证仓库选择运行记录。
 8. 查看证据图或 VTK 视图。
 9. 写入学习笔记并刷新 `learning_report.md`。
+10. 在“学习记录导出”里选择 `md/json/txt`，把本次记录同步到指定学习库目录。
 
 ## API 端点
 
@@ -224,6 +243,7 @@ API 默认地址：`http://localhost:8008`
 | `GET /v1/runs/{run_id}/artifacts/{path}` | 读取归档文件 |
 | `POST /v1/runs/{run_id}/note` | 保存学习笔记 |
 | `GET /v1/runs/{run_id}/report` | 刷新学习报告 |
+| `POST /v1/runs/{run_id}/learning-export` | 导出学习记录到指定目录 |
 
 ## 项目结构
 

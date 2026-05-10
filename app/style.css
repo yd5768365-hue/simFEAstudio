@@ -24,7 +24,8 @@ body {
 
 button,
 select,
-textarea {
+textarea,
+input {
   font: inherit;
 }
 
@@ -47,14 +48,16 @@ button:hover {
 
 button:focus-visible,
 select:focus-visible,
-textarea:focus-visible {
+textarea:focus-visible,
+input:focus-visible {
   outline: 3px solid rgba(35, 111, 181, 0.28);
   outline-offset: 2px;
 }
 
 button:disabled,
 select:disabled,
-textarea:disabled {
+textarea:disabled,
+input:disabled {
   cursor: not-allowed;
   opacity: 0.52;
 }
@@ -252,13 +255,24 @@ h3 {
   font-weight: 700;
 }
 
-.node-selector select {
+.node-selector select,
+.field-label select,
+.field-label input {
   min-height: 38px;
   border: 1px solid #c6ced8;
   border-radius: 6px;
   padding: 0 10px;
   background: #ffffff;
   color: #243241;
+}
+
+.field-label {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 12px;
+  color: #4d5b6a;
+  font-size: 0.86rem;
+  font-weight: 700;
 }
 
 .connection-detail,
@@ -538,6 +552,10 @@ h3 {
   grid-column: 1 / 2;
 }
 
+.export-panel {
+  grid-column: 1 / 2;
+}
+
 textarea {
   display: block;
   width: 100%;
@@ -584,6 +602,7 @@ textarea {
   .runs-panel,
   .visualization-panel,
   .note-panel,
+  .export-panel,
   .toolchain-panel,
   .report-panel,
   .log-panel {
