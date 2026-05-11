@@ -1,6 +1,16 @@
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import type { SimfeaClient } from '../api/simfeaClient';
 import type { RunEventHandlers } from './useRunEvents';
+
+export interface ComputeNodeConfig {
+  alias: string;
+  label: string;
+  host: string;
+  user: string;
+  port?: number;
+  remote_runs_root: string;
+  configured: boolean;
+}
 
 export interface RemoteStatus {
   checked: boolean;
@@ -35,8 +45,28 @@ export function useRemoteRuns(options: UseRemoteRunsOptions) {
     remoteWorkdir: '',
   });
 
-  const probeRemoteNodeAction = async (nodeAlias: string, nodeLabel: string) => {
-    if (!nodeAlias) {
+  const computeNodes = ref<ComputeNodeConfig[]>([]);
+  const selectedComputeNode = ref('');
+
+  const activeComputeNode = computed(() =>
+    computeNodes.value.find((node) => node.alias === selectedComputeNode.value) ?? null,
+  );
+
+  const activeComputeNodeLabel = computed(
+    () => activeComputeNode.value?.label || selectedComputeNode.value || '未配置计算节点',
+  );
+
+  const remoteLabel = computed(() =>
+    remoteStatus.value.connected ? '远程节点在线' : '远程节点待测试',
+  );
+
+  const setComputeNodes = (nodes: ComputeNodeConfig[], defaultNode: string) => {
+    computeNodes.value = nodes;
+    selectedComputeNode.value = defaultNode || nodes[0]?.alias || '';
+  };
+
+  const probeRemoteNodeAction = async () => {
+    if (!selectedComputeNode.value) {
       remoteStatus.value = {
         ...remoteStatus.value,
         checked: true,
@@ -48,16 +78,17 @@ export function useRemoteRuns(options: UseRemoteRunsOptions) {
       return;
     }
 
+    const label = activeComputeNodeLabel.value;
     try {
       remoteStatus.value = {
         ...remoteStatus.value,
         checked: true,
         connected: false,
         running: false,
-        message: `正在测试 ${nodeLabel}...`,
+        message: `正在测试 ${label}...`,
         output: '',
       };
-      const result = await api.probeComputeNode(nodeAlias);
+      const result = await api.probeComputeNode(selectedComputeNode.value);
       const details = result.data.details ?? {};
       const output = [
         `主机：${details.hostname ?? '未知'}`,
@@ -73,8 +104,8 @@ export function useRemoteRuns(options: UseRemoteRunsOptions) {
         connected: result.data.connected,
         running: false,
         message: result.data.connected
-          ? `${nodeLabel} 连接成功。`
-          : `${nodeLabel} 连接失败。`,
+          ? `${label} 连接成功。`
+          : `${label} 连接失败。`,
         output: `${output}${result.data.stderr ? `\n错误输出：\n${result.data.stderr}` : ''}`.trim(),
       };
     } catch (err) {
@@ -83,14 +114,14 @@ export function useRemoteRuns(options: UseRemoteRunsOptions) {
         checked: true,
         connected: false,
         running: false,
-        message: `${nodeLabel} 测试失败。`,
+        message: `${label} 测试失败。`,
         output: String(err),
       };
     }
   };
 
-  const probeSchedulerAction = async (nodeAlias: string, nodeLabel: string) => {
-    if (!nodeAlias) {
+  const probeSchedulerAction = async () => {
+    if (!selectedComputeNode.value) {
       remoteStatus.value = {
         ...remoteStatus.value,
         checked: true,
@@ -102,14 +133,15 @@ export function useRemoteRuns(options: UseRemoteRunsOptions) {
       return;
     }
 
+    const label = activeComputeNodeLabel.value;
     try {
       remoteStatus.value = {
         ...remoteStatus.value,
         checked: true,
-        message: `正在探测 ${nodeLabel} 的作业调度器...`,
+        message: `正在探测 ${label} 的作业调度器...`,
         output: '',
       };
-      const result = await api.probeScheduler(nodeAlias);
+      const result = await api.probeScheduler(selectedComputeNode.value);
       const details = result.data.details ?? {};
       const output = [
         `主机：${details.hostname ?? '未知'}`,
@@ -131,22 +163,22 @@ export function useRemoteRuns(options: UseRemoteRunsOptions) {
         checked: true,
         connected: result.data.connected,
         message: result.data.connected
-          ? `${nodeLabel} 调度器探测完成。`
-          : `${nodeLabel} 调度器探测失败。`,
+          ? `${label} 调度器探测完成。`
+          : `${label} 调度器探测失败。`,
         output: `${output}${result.data.stderr ? `\n错误输出：\n${result.data.stderr}` : ''}`.trim(),
       };
     } catch (err) {
       remoteStatus.value = {
         ...remoteStatus.value,
         checked: true,
-        message: `${nodeLabel} 调度器探测失败。`,
+        message: `${label} 调度器探测失败。`,
         output: String(err),
       };
     }
   };
 
-  const startRemoteDemoRunAction = async (nodeAlias: string, nodeLabel: string) => {
-    if (!nodeAlias) {
+  const startRemoteDemoRunAction = async () => {
+    if (!selectedComputeNode.value) {
       remoteStatus.value = {
         ...remoteStatus.value,
         running: false,
@@ -156,6 +188,7 @@ export function useRemoteRuns(options: UseRemoteRunsOptions) {
       return;
     }
 
+    const label = activeComputeNodeLabel.value;
     try {
       closeRunEventStream();
       remoteStatus.value = {
@@ -168,14 +201,14 @@ export function useRemoteRuns(options: UseRemoteRunsOptions) {
         remoteWorkdir: '',
       };
 
-      const result = await api.startDemoRun(nodeAlias);
+      const result = await api.startDemoRun(selectedComputeNode.value);
       const runId = result.data.run_id;
       remoteStatus.value = {
         ...remoteStatus.value,
         runId,
         archivePath: result.data.archive_path,
         remoteWorkdir: result.data.remote_workdir,
-        message: `${nodeLabel} 上的任务 ${runId} 已创建，正在接收实时日志。`,
+        message: `${label} 上的任务 ${runId} 已创建，正在接收实时日志。`,
       };
 
       openRunEventStream(runId, {
@@ -226,8 +259,8 @@ export function useRemoteRuns(options: UseRemoteRunsOptions) {
     }
   };
 
-  const startSlurmDemoRunAction = async (nodeAlias: string, nodeLabel: string) => {
-    if (!nodeAlias) {
+  const startSlurmDemoRunAction = async () => {
+    if (!selectedComputeNode.value) {
       remoteStatus.value = {
         ...remoteStatus.value,
         running: false,
@@ -237,6 +270,7 @@ export function useRemoteRuns(options: UseRemoteRunsOptions) {
       return;
     }
 
+    const label = activeComputeNodeLabel.value;
     try {
       closeRunEventStream();
       remoteStatus.value = {
@@ -249,7 +283,7 @@ export function useRemoteRuns(options: UseRemoteRunsOptions) {
         remoteWorkdir: '',
       };
 
-      const result = await api.startSlurmDemoRun(nodeAlias);
+      const result = await api.startSlurmDemoRun(selectedComputeNode.value);
       const runId = result.data.run_id;
       const resourceLines = [
         `调度器：${result.data.scheduler ?? 'slurm'}`,
@@ -263,7 +297,7 @@ export function useRemoteRuns(options: UseRemoteRunsOptions) {
         runId,
         archivePath: result.data.archive_path,
         remoteWorkdir: result.data.remote_workdir,
-        message: `${nodeLabel} 已创建 Slurm 运行 ${runId}，正在等待 JobID 和实时日志。`,
+        message: `${label} 已创建 Slurm 运行 ${runId}，正在等待 JobID 和实时日志。`,
         output: `${resourceLines}\n`,
       };
 
@@ -355,6 +389,12 @@ export function useRemoteRuns(options: UseRemoteRunsOptions) {
 
   return {
     remoteStatus,
+    computeNodes,
+    selectedComputeNode,
+    activeComputeNode,
+    activeComputeNodeLabel,
+    remoteLabel,
+    setComputeNodes,
     probeRemoteNodeAction,
     probeSchedulerAction,
     startRemoteDemoRunAction,

@@ -23,16 +23,6 @@ interface ConnectionStatus {
   message: string;
 }
 
-interface ComputeNodeConfig {
-  alias: string;
-  label: string;
-  host: string;
-  user: string;
-  port?: number;
-  remote_runs_root: string;
-  configured: boolean;
-}
-
 const status = ref<ConnectionStatus>({
   connected: false,
   host: '',
@@ -45,8 +35,6 @@ const status = ref<ConnectionStatus>({
   message: '尚未验证侧车服务连接。',
 });
 
-const computeNodes = ref<ComputeNodeConfig[]>([]);
-const selectedComputeNode = ref('');
 const archivedRuns = ref<RunArchive[]>([]);
 const selectedRun = ref<RunArchive | null>(null);
 const toolchainItems = ref<ToolchainItem[]>([]);
@@ -73,12 +61,6 @@ const availableLearningFormats = computed(() =>
   status.value.learningFormats.length > 0 ? status.value.learningFormats : ['md', 'json', 'txt'],
 );
 
-const activeComputeNode = computed(() =>
-  computeNodes.value.find((node) => node.alias === selectedComputeNode.value) ?? null,
-);
-
-const activeComputeNodeLabel = computed(() => activeComputeNode.value?.label || selectedComputeNode.value || '未配置计算节点');
-
 const appendLog = (line: string) => {
   logs.value += `\n${line}`;
 };
@@ -98,14 +80,16 @@ const remoteRuns = useRemoteRuns({
   appendLog,
 });
 
-const { remoteStatus } = remoteRuns;
+const {
+  remoteStatus,
+  computeNodes,
+  selectedComputeNode,
+  activeComputeNodeLabel,
+  remoteLabel,
+} = remoteRuns;
 
 const connectionLabel = computed(() =>
   status.value.connected ? '侧车服务在线' : '侧车服务待连接',
-);
-
-const remoteLabel = computed(() =>
-  remoteStatus.value.connected ? '远程节点在线' : '远程节点待测试',
 );
 
 const loadRunsAction = async () => {
@@ -217,8 +201,7 @@ const connectServerAction = async () => {
     };
     learningExportTarget.value = result.data.learning_export_root ?? '';
     selectedLearningFormat.value = result.data.learning_default_format ?? 'md';
-    computeNodes.value = result.data.compute_nodes ?? [];
-    selectedComputeNode.value = result.data.default_compute_node || computeNodes.value[0]?.alias || '';
+    remoteRuns.setComputeNodes(result.data.compute_nodes ?? [], result.data.default_compute_node ?? '');
     toolchainItems.value = result.data.toolchain ?? [];
     await loadRunsAction();
   } catch (err) {
@@ -378,16 +361,16 @@ onUnmounted(() => {
           尚未配置计算节点。请根据 simfea.config.example.json 创建 .simfea/config.json。
         </p>
         <div class="button-row">
-          <button type="button" class="primary-action" @click="remoteRuns.probeRemoteNodeAction(selectedComputeNode, activeComputeNodeLabel)" :disabled="!status.connected || !selectedComputeNode">
+          <button type="button" class="primary-action" @click="remoteRuns.probeRemoteNodeAction()" :disabled="!status.connected || !selectedComputeNode">
             测试远程节点
           </button>
-          <button type="button" @click="remoteRuns.probeSchedulerAction(selectedComputeNode, activeComputeNodeLabel)" :disabled="!status.connected || !selectedComputeNode || remoteStatus.running">
+          <button type="button" @click="remoteRuns.probeSchedulerAction()" :disabled="!status.connected || !selectedComputeNode || remoteStatus.running">
             探测调度器
           </button>
-          <button type="button" @click="remoteRuns.startRemoteDemoRunAction(selectedComputeNode, activeComputeNodeLabel)" :disabled="!status.connected || !selectedComputeNode || remoteStatus.running">
+          <button type="button" @click="remoteRuns.startRemoteDemoRunAction()" :disabled="!status.connected || !selectedComputeNode || remoteStatus.running">
             运行闭环样例
           </button>
-          <button type="button" @click="remoteRuns.startSlurmDemoRunAction(selectedComputeNode, activeComputeNodeLabel)" :disabled="!status.connected || !selectedComputeNode || remoteStatus.running">
+          <button type="button" @click="remoteRuns.startSlurmDemoRunAction()" :disabled="!status.connected || !selectedComputeNode || remoteStatus.running">
             运行 Slurm 样例
           </button>
           <button type="button" class="danger-action" @click="remoteRuns.cancelRemoteRunAction" :disabled="!remoteStatus.running || !remoteStatus.runId">
