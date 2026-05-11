@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
-import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import ResultEvidenceView from './components/ResultEvidenceView.vue';
 import type { RunArchive, ToolchainItem } from './types';
+import { createSimfeaClient } from './api/simfeaClient';
+import { useSidecarListeners } from './composables/useSidecarListeners';
+import { useRunEvents } from './composables/useRunEvents';
 
 const configuredApiBaseUrl = import.meta.env.VITE_SIMFEA_API_BASE_URL as string | undefined;
 const apiBaseUrl = (configuredApiBaseUrl?.replace(/\/$/, '') || `http://${window.location.hostname || 'localhost'}:8008`);
-
-type CleanupFunction = () => void;
 
 interface ConnectionStatus {
   connected: boolean;
@@ -80,9 +80,6 @@ const reportMessage = ref('运行完成后，这里会显示自动生成的学�
 const exportMessage = ref('学习记录可以导出到配置目录，也可以临时指定一个目录。');
 const logs = ref('[界面] 正在监听侧车服务和网络日志...');
 
-let cleanupListeners: CleanupFunction | null = null;
-let remoteEventSource: EventSource | null = null;
-
 const connectionLabel = computed(() =>
   status.value.connected ? '侧车服务在线' : '侧车服务待连接',
 );
@@ -115,51 +112,12 @@ const appendLog = (line: string) => {
   logs.value += `\n${line}`;
 };
 
-const apiAction = async (endpoint: string, method = 'GET', body?: unknown): Promise<any> => {
-  const url = `${apiBaseUrl}/${endpoint}`;
-  try {
-    const res = await fetch(url, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
-
-    if (!res.ok) {
-      throw new Error(`请求失败：${res.status} ${await res.text()}`);
-    }
-
-    const json = await res.json();
-    if (json?.message) {
-      appendLog(`[服务响应] ${json.message}`);
-    }
-    return json;
-  } catch (err: any) {
-    appendLog(`[服务响应] ${err}`);
-    throw err;
-  }
-};
-
-const initSidecarListeners = async () => {
-  const unlistenStdout = await listen<string>('sidecar-stdout', (event) => {
-    if (event.payload?.length > 0 && event.payload !== '\r\n') {
-      appendLog(event.payload);
-    }
-  });
-
-  const unlistenStderr = await listen<string>('sidecar-stderr', (event) => {
-    if (event.payload?.length > 0 && event.payload !== '\r\n') {
-      appendLog(event.payload);
-    }
-  });
-
-  cleanupListeners = () => {
-    unlistenStdout();
-    unlistenStderr();
-  };
-};
+const api = createSimfeaClient(apiBaseUrl, appendLog);
+const { initSidecarListeners, disposeSidecarListeners } = useSidecarListeners(appendLog);
+const { openRunEventStream, closeRunEventStream } = useRunEvents(apiBaseUrl);
 
 const loadRunsAction = async () => {
-  const result = await apiAction('v1/runs');
+  const result = await api.listRuns();
   archivedRuns.value = result.data.runs ?? [];
   if (!selectedRun.value && archivedRuns.value.length > 0) {
     await selectRunAction(archivedRuns.value[0].run_id);
@@ -167,7 +125,7 @@ const loadRunsAction = async () => {
 };
 
 const selectRunAction = async (runId: string) => {
-  const result = await apiAction(`v1/runs/${runId}`);
+  const result = await api.getRun(runId);
   if (!result.data) {
     noteMessage.value = '没有找到这次运行的归档。';
     return;
@@ -191,9 +149,7 @@ const saveNoteAction = async () => {
     return;
   }
 
-  const result = await apiAction(`v1/runs/${selectedRun.value.run_id}/note`, 'POST', {
-    note: learningNote.value,
-  });
+  const result = await api.saveRunNote(selectedRun.value.run_id, learningNote.value);
   noteMessage.value = result.data.saved
     ? `学习笔记已保存：${result.data.note_path}`
     : '学习笔记保存失败。';
@@ -209,7 +165,7 @@ const refreshReportAction = async () => {
     return;
   }
 
-  const result = await apiAction(`v1/runs/${selectedRun.value.run_id}/report`);
+  const result = await api.generateRunReport(selectedRun.value.run_id);
   if (!result.data) {
     reportMessage.value = '学习报告生成失败。';
     return;
@@ -232,10 +188,11 @@ const exportLearningRecordAction = async () => {
     return;
   }
 
-  const result = await apiAction(`v1/runs/${selectedRun.value.run_id}/learning-export`, 'POST', {
-    format: selectedLearningFormat.value,
-    target_dir: learningExportTarget.value.trim() || undefined,
-  });
+  const result = await api.exportLearningRecord(
+    selectedRun.value.run_id,
+    selectedLearningFormat.value,
+    learningExportTarget.value.trim() || undefined,
+  );
   if (!result.data?.exported) {
     exportMessage.value = '学习记录导出失败。';
     return;
@@ -254,7 +211,7 @@ const exportLearningRecordAction = async () => {
 
 const connectServerAction = async () => {
   try {
-    const result = await apiAction('v1/connect');
+    const result = await api.connect();
     status.value = {
       connected: true,
       host: result.data.host,
@@ -310,7 +267,7 @@ const probeRemoteNodeAction = async () => {
       message: `正在测试 ${activeComputeNodeLabel.value}...`,
       output: '',
     };
-    const result = await apiAction(`v1/compute-nodes/${selectedComputeNode.value}/probe`);
+    const result = await api.probeComputeNode(selectedComputeNode.value);
     const details = result.data.details ?? {};
     const output = [
       `主机：${details.hostname ?? '未知'}`,
@@ -360,7 +317,7 @@ const probeSchedulerAction = async () => {
       message: `正在探测 ${activeComputeNodeLabel.value} 的作业调度器...`,
       output: '',
     };
-    const result = await apiAction(`v1/compute-nodes/${selectedComputeNode.value}/scheduler-probe`);
+    const result = await api.probeScheduler(selectedComputeNode.value);
     const details = result.data.details ?? {};
     const output = [
       `主机：${details.hostname ?? '未知'}`,
@@ -406,7 +363,7 @@ const startRemoteDemoRunAction = async () => {
   }
 
   try {
-    remoteEventSource?.close();
+    closeRunEventStream();
     remoteStatus.value = {
       ...remoteStatus.value,
       checked: true,
@@ -417,7 +374,7 @@ const startRemoteDemoRunAction = async () => {
       remoteWorkdir: '',
     };
 
-    const result = await apiAction(`v1/runs/${selectedComputeNode.value}/demo`, 'POST');
+    const result = await api.startDemoRun(selectedComputeNode.value);
     const runId = result.data.run_id;
     remoteStatus.value = {
       ...remoteStatus.value,
@@ -427,9 +384,8 @@ const startRemoteDemoRunAction = async () => {
       message: `${activeComputeNodeLabel.value} 上的任务 ${runId} 已创建，正在接收实时日志。`,
     };
 
-    remoteEventSource = new EventSource(`${apiBaseUrl}/v1/runs/${runId}/events`);
-    remoteEventSource.onmessage = async (event) => {
-      const payload = JSON.parse(event.data);
+    openRunEventStream(runId, {
+      onEvent: async (payload) => {
       if (payload.line) {
         remoteStatus.value.output += `${payload.line}\n`;
         appendLog(`[远程任务] ${payload.line}`);
@@ -453,21 +409,20 @@ const startRemoteDemoRunAction = async () => {
               ? '远程闭环样例完成，日志和结果已进入物证仓库。'
               : '远程闭环样例失败，请查看日志。',
         };
-        remoteEventSource?.close();
-        remoteEventSource = null;
+        closeRunEventStream();
         await loadRunsAction();
         await selectRunAction(runId);
       }
-    };
-    remoteEventSource.onerror = () => {
+      },
+      onError: () => {
       remoteStatus.value = {
         ...remoteStatus.value,
         running: false,
         message: '远程实时日志通道中断。',
       };
-      remoteEventSource?.close();
-      remoteEventSource = null;
-    };
+      closeRunEventStream();
+      },
+    });
   } catch (err) {
     remoteStatus.value = {
       ...remoteStatus.value,
@@ -490,7 +445,7 @@ const startSlurmDemoRunAction = async () => {
   }
 
   try {
-    remoteEventSource?.close();
+    closeRunEventStream();
     remoteStatus.value = {
       ...remoteStatus.value,
       checked: true,
@@ -501,7 +456,7 @@ const startSlurmDemoRunAction = async () => {
       remoteWorkdir: '',
     };
 
-    const result = await apiAction(`v1/runs/${selectedComputeNode.value}/slurm-demo`, 'POST');
+    const result = await api.startSlurmDemoRun(selectedComputeNode.value);
     const runId = result.data.run_id;
     const resourceLines = [
       `调度器：${result.data.scheduler ?? 'slurm'}`,
@@ -519,9 +474,8 @@ const startSlurmDemoRunAction = async () => {
       output: `${resourceLines}\n`,
     };
 
-    remoteEventSource = new EventSource(`${apiBaseUrl}/v1/runs/${runId}/events`);
-    remoteEventSource.onmessage = async (event) => {
-      const payload = JSON.parse(event.data);
+    openRunEventStream(runId, {
+      onEvent: async (payload) => {
       if (payload.line) {
         remoteStatus.value.output += `${payload.line}\n`;
         appendLog(`[SlurmRunner] ${payload.line}`);
@@ -551,21 +505,20 @@ const startSlurmDemoRunAction = async () => {
               ? 'Slurm 闭环样例完成，真实计算节点日志和结果已归档。'
               : 'Slurm 闭环样例失败，请查看 stderr 和学习报告。',
         };
-        remoteEventSource?.close();
-        remoteEventSource = null;
+        closeRunEventStream();
         await loadRunsAction();
         await selectRunAction(runId);
       }
-    };
-    remoteEventSource.onerror = () => {
+      },
+      onError: () => {
       remoteStatus.value = {
         ...remoteStatus.value,
         running: false,
         message: 'Slurm 实时事件流中断。',
       };
-      remoteEventSource?.close();
-      remoteEventSource = null;
-    };
+      closeRunEventStream();
+      },
+    });
   } catch (err) {
     remoteStatus.value = {
       ...remoteStatus.value,
@@ -586,7 +539,7 @@ const cancelRemoteRunAction = async () => {
   }
 
   try {
-    await apiAction(`v1/runs/${remoteStatus.value.runId}/cancel`, 'POST');
+    await api.cancelRun(remoteStatus.value.runId);
     remoteStatus.value = {
       ...remoteStatus.value,
       running: true,
@@ -643,8 +596,8 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
-  cleanupListeners?.();
-  remoteEventSource?.close();
+  disposeSidecarListeners();
+  closeRunEventStream();
   window.removeEventListener('keydown', handleKeydown);
 });
 </script>

@@ -400,5 +400,8 @@ Cargo.lock
 # SimFEA Studio local evidence archive
 .simfea/
 
+# Local reference checkouts
+sim-main/
+
 uv.lock
 
