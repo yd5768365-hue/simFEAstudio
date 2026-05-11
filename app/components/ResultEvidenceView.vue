@@ -1,78 +1,80 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
-import VtkResultViewport from './VtkResultViewport.vue';
-import type { RunArchive } from '../types';
+import { computed, ref } from 'vue'
+import VtkResultViewport from '@/components/VtkResultViewport.vue'
+import type { RunArchive } from '@/types'
 
 interface VisualizationMetrics {
-  runId: string;
-  runner: string;
-  jobId: string;
-  partition: string;
-  runNode: string;
-  displacementMm: number | null;
-  stressMpa: number | null;
-  displacementRatio: number;
-  stressRatio: number;
-  status: string;
-  evidenceReady: boolean;
+  runId: string
+  runner: string
+  jobId: string
+  partition: string
+  runNode: string
+  displacementMm: number | null
+  stressMpa: number | null
+  displacementRatio: number
+  stressRatio: number
+  status: string
+  evidenceReady: boolean
 }
 
 const props = defineProps<{
-  run: RunArchive | null;
-  apiBaseUrl: string;
-  reportPreview: string;
-  remoteOutput: string;
-}>();
+  run: RunArchive | null
+  apiBaseUrl: string
+  reportPreview: string
+  remoteOutput: string
+}>()
 
-const viewMode = ref<'evidence' | 'vtk'>('evidence');
+const viewMode = ref<'evidence' | 'vtk'>('evidence')
 
-const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max)
 
 const extractValue = (source: string, key: string) => {
-  const match = new RegExp(`${key}=([^\\n\\r]+)`).exec(source);
-  return match?.[1]?.trim() ?? '';
-};
+  const match = new RegExp(`${key}=([^\\n\\r]+)`).exec(source)
+  return match?.[1]?.trim() ?? ''
+}
 
 const extractNumber = (source: string, key: string) => {
-  const value = Number.parseFloat(extractValue(source, key));
-  return Number.isFinite(value) ? value : null;
-};
+  const value = Number.parseFloat(extractValue(source, key))
+  return Number.isFinite(value) ? value : null
+}
 
-const evidenceArtifacts = computed(() =>
-  props.run?.artifacts?.filter((artifact) => artifact !== 'artifacts/result_summary.json') ?? [],
-);
+const evidenceArtifacts = computed(
+  () => props.run?.artifacts?.filter((artifact) => artifact !== 'artifacts/result_summary.json') ?? []
+)
 
 const selectedArtifacts = computed(() =>
-  evidenceArtifacts.value.length ? evidenceArtifacts.value.join('、') : '暂无结果文件',
-);
+  evidenceArtifacts.value.length ? evidenceArtifacts.value.join('、') : '暂无结果文件'
+)
 
 const visualizationDataSource = computed(() =>
-  props.run?.summary ? '结构化摘要：result_summary.json' : '兼容解析：日志与报告',
-);
+  props.run?.summary ? '结构化摘要：result_summary.json' : '兼容解析：日志与报告'
+)
 
-const visualizationSource = computed(() => `${props.reportPreview}\n${props.remoteOutput}`);
+const visualizationSource = computed(() => `${props.reportPreview}\n${props.remoteOutput}`)
 
 const hasVtkArtifact = computed(() =>
   Boolean(
     props.run?.summary?.visualization?.vtk_artifact ||
-    props.run?.artifacts?.some((artifact) => artifact.endsWith('.vtk') || artifact.endsWith('.vtu')),
-  ),
-);
+      props.run?.artifacts?.some((artifact) => artifact.endsWith('.vtk') || artifact.endsWith('.vtu'))
+  )
+)
 
 const visualizationMetrics = computed<VisualizationMetrics>(() => {
-  const source = visualizationSource.value;
-  const summary = props.run?.summary;
-  const displacementMm = summary?.metrics?.max_displacement_mm ?? extractNumber(source, 'max_displacement_mm');
-  const stressMpa = summary?.metrics?.max_von_mises_mpa ?? extractNumber(source, 'max_von_mises_mpa');
-  const jobId = props.run?.job_id || summary?.scheduler?.job_id || extractValue(source, 'job_id') || '暂无';
-  const partition = props.run?.partition || summary?.scheduler?.partition || extractValue(source, 'partition') || '暂无';
+  const source = visualizationSource.value
+  const summary = props.run?.summary
+  const displacementMm = summary?.metrics?.max_displacement_mm ?? extractNumber(source, 'max_displacement_mm')
+  const stressMpa = summary?.metrics?.max_von_mises_mpa ?? extractNumber(source, 'max_von_mises_mpa')
+  const jobId = props.run?.job_id || summary?.scheduler?.job_id || extractValue(source, 'job_id') || '暂无'
+  const partition =
+    props.run?.partition || summary?.scheduler?.partition || extractValue(source, 'partition') || '暂无'
   const runNode =
     props.run?.allocated_node ||
     summary?.scheduler?.allocated_node ||
     extractValue(source, 'run_node') ||
     extractValue(source, 'hostname') ||
-    '暂无';
-  const runner = props.run?.runner || summary?.runner || (source.includes('Slurm') ? 'SlurmRunner' : 'SSHRunner');
+    '暂无'
+  const runner =
+    props.run?.runner || summary?.runner || (source.includes('Slurm') ? 'SlurmRunner' : 'SSHRunner')
 
   return {
     runId: props.run?.run_id ?? '暂无',
@@ -87,37 +89,35 @@ const visualizationMetrics = computed<VisualizationMetrics>(() => {
     status: props.run?.status ?? summary?.status ?? '未选择',
     evidenceReady: Boolean(
       props.run &&
-      (
-        summary?.visualization?.ready ||
-        displacementMm !== null ||
-        stressMpa !== null ||
-        source.trim() ||
-        evidenceArtifacts.value.length
-      ),
+        (summary?.visualization?.ready ||
+          displacementMm !== null ||
+          stressMpa !== null ||
+          source.trim() ||
+          evidenceArtifacts.value.length)
     ),
-  };
-});
+  }
+})
 
 const beamDeformationPath = computed(() => {
-  const d = visualizationMetrics.value.displacementRatio;
-  return `M 150 150 C 260 ${150 + d * 10} 410 ${150 + d * 34} 600 ${150 + d * 72}`;
-});
+  const d = visualizationMetrics.value.displacementRatio
+  return `M 150 150 C 260 ${150 + d * 10} 410 ${150 + d * 34} 600 ${150 + d * 72}`
+})
 
-const loadArrowY = computed(() => 150 + visualizationMetrics.value.displacementRatio * 72);
+const loadArrowY = computed(() => 150 + visualizationMetrics.value.displacementRatio * 72)
 
 const stressSegments = computed(() =>
   Array.from({ length: 8 }, (_, index) => {
-    const position = (index + 1) / 8;
-    const intensity = clamp(visualizationMetrics.value.stressRatio * (0.45 + position * 0.85), 0.1, 1);
+    const position = (index + 1) / 8
+    const intensity = clamp(visualizationMetrics.value.stressRatio * (0.45 + position * 0.85), 0.1, 1)
     return {
       id: `stress-${index}`,
       x: 150 + index * 54,
       width: 50,
       fill: `rgb(${Math.round(70 + intensity * 170)}, ${Math.round(150 - intensity * 72)}, ${Math.round(88 - intensity * 42)})`,
       opacity: 0.76 + intensity * 0.18,
-    };
-  }),
-);
+    }
+  })
+)
 </script>
 
 <template>

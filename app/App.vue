@@ -1,26 +1,27 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue';
-import { invoke } from '@tauri-apps/api/core';
-import ResultEvidenceView from './components/ResultEvidenceView.vue';
-import type { RunArchive, ToolchainItem } from './types';
-import { createSimfeaClient } from './api/simfeaClient';
-import { useSidecarListeners } from './composables/useSidecarListeners';
-import { useRunEvents } from './composables/useRunEvents';
-import { useRemoteRuns } from './composables/useRemoteRuns';
+import { invoke } from '@tauri-apps/api/core'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { createSimfeaClient } from '@/api/simfeaClient'
+import ResultEvidenceView from '@/components/ResultEvidenceView.vue'
+import { useRemoteRuns } from '@/composables/useRemoteRuns'
+import { useRunEvents } from '@/composables/useRunEvents'
+import { useSidecarListeners } from '@/composables/useSidecarListeners'
+import type { RunArchive, ToolchainItem } from '@/types'
 
-const configuredApiBaseUrl = import.meta.env.VITE_SIMFEA_API_BASE_URL as string | undefined;
-const apiBaseUrl = (configuredApiBaseUrl?.replace(/\/$/, '') || `http://${window.location.hostname || 'localhost'}:8008`);
+const configuredApiBaseUrl = import.meta.env.VITE_SIMFEA_API_BASE_URL as string | undefined
+const apiBaseUrl =
+  configuredApiBaseUrl?.replace(/\/$/, '') || `http://${window.location.hostname || 'localhost'}:8008`
 
 interface ConnectionStatus {
-  connected: boolean;
-  host: string;
-  pid: string;
-  runsRoot: string;
-  configPath: string;
-  learningExportRoot: string;
-  learningFormats: string[];
-  learningDefaultFormat: string;
-  message: string;
+  connected: boolean
+  host: string
+  pid: string
+  runsRoot: string
+  configPath: string
+  learningExportRoot: string
+  learningFormats: string[]
+  learningDefaultFormat: string
+  message: string
 }
 
 const status = ref<ConnectionStatus>({
@@ -33,161 +34,153 @@ const status = ref<ConnectionStatus>({
   learningFormats: ['md', 'json', 'txt'],
   learningDefaultFormat: 'md',
   message: '尚未验证侧车服务连接。',
-});
+})
 
-const archivedRuns = ref<RunArchive[]>([]);
-const selectedRun = ref<RunArchive | null>(null);
-const toolchainItems = ref<ToolchainItem[]>([]);
-const learningNote = ref('');
-const reportPreview = ref('');
-const learningExportTarget = ref('');
-const selectedLearningFormat = ref('md');
-const noteMessage = ref('选择一次运行后，可以写下这次计算的判断、错误和下一步。');
-const reportMessage = ref('运行完成后，这里会显示自动生成的学习沉淀报告。');
-const exportMessage = ref('学习记录可以导出到配置目录，也可以临时指定一个目录。');
-const logs = ref('[界面] 正在监听侧车服务和网络日志...');
+const archivedRuns = ref<RunArchive[]>([])
+const selectedRun = ref<RunArchive | null>(null)
+const toolchainItems = ref<ToolchainItem[]>([])
+const learningNote = ref('')
+const reportPreview = ref('')
+const learningExportTarget = ref('')
+const selectedLearningFormat = ref('md')
+const noteMessage = ref('选择一次运行后，可以写下这次计算的判断、错误和下一步。')
+const reportMessage = ref('运行完成后，这里会显示自动生成的学习沉淀报告。')
+const exportMessage = ref('学习记录可以导出到配置目录，也可以临时指定一个目录。')
+const logs = ref('[界面] 正在监听侧车服务和网络日志...')
 
-const evidenceArtifacts = computed(() =>
-  selectedRun.value?.artifacts?.filter((artifact) => artifact !== 'artifacts/result_summary.json') ?? [],
-);
+const evidenceArtifacts = computed(
+  () => selectedRun.value?.artifacts?.filter((artifact) => artifact !== 'artifacts/result_summary.json') ?? []
+)
 
 const selectedArtifacts = computed(() =>
-  evidenceArtifacts.value.length ? evidenceArtifacts.value.join('、') : '暂无结果文件',
-);
+  evidenceArtifacts.value.length ? evidenceArtifacts.value.join('、') : '暂无结果文件'
+)
 
-const selectedToolchain = computed<ToolchainItem[]>(() => selectedRun.value?.toolchain ?? toolchainItems.value);
+const selectedToolchain = computed<ToolchainItem[]>(
+  () => selectedRun.value?.toolchain ?? toolchainItems.value
+)
 
 const availableLearningFormats = computed(() =>
-  status.value.learningFormats.length > 0 ? status.value.learningFormats : ['md', 'json', 'txt'],
-);
+  status.value.learningFormats.length > 0 ? status.value.learningFormats : ['md', 'json', 'txt']
+)
 
 const appendLog = (line: string) => {
-  logs.value += `\n${line}`;
-};
+  logs.value += `\n${line}`
+}
 
-const api = createSimfeaClient(apiBaseUrl, appendLog);
-const { initSidecarListeners, disposeSidecarListeners } = useSidecarListeners(appendLog);
-const { openRunEventStream, closeRunEventStream } = useRunEvents(apiBaseUrl);
+const api = createSimfeaClient(apiBaseUrl, appendLog)
+const { initSidecarListeners, disposeSidecarListeners } = useSidecarListeners(appendLog)
+const { openRunEventStream, closeRunEventStream } = useRunEvents(apiBaseUrl)
 
 const remoteRuns = useRemoteRuns({
   api,
   openRunEventStream,
   closeRunEventStream,
   onRunFinished: async (runId: string) => {
-    await loadRunsAction();
-    await selectRunAction(runId);
+    await loadRunsAction()
+    await selectRunAction(runId)
   },
   appendLog,
-});
+})
 
-const {
-  remoteStatus,
-  computeNodes,
-  selectedComputeNode,
-  activeComputeNodeLabel,
-  remoteLabel,
-} = remoteRuns;
+const { remoteStatus, computeNodes, selectedComputeNode, activeComputeNodeLabel, remoteLabel } = remoteRuns
 
-const connectionLabel = computed(() =>
-  status.value.connected ? '侧车服务在线' : '侧车服务待连接',
-);
+const connectionLabel = computed(() => (status.value.connected ? '侧车服务在线' : '侧车服务待连接'))
 
 const loadRunsAction = async () => {
-  const result = await api.listRuns();
-  archivedRuns.value = result.data.runs ?? [];
+  const result = await api.listRuns()
+  archivedRuns.value = result.data.runs ?? []
   if (!selectedRun.value && archivedRuns.value.length > 0) {
-    await selectRunAction(archivedRuns.value[0].run_id);
+    await selectRunAction(archivedRuns.value[0].run_id)
   }
-};
+}
 
 const selectRunAction = async (runId: string) => {
-  const result = await api.getRun(runId);
+  const result = await api.getRun(runId)
   if (!result.data) {
-    noteMessage.value = '没有找到这次运行的归档。';
-    return;
+    noteMessage.value = '没有找到这次运行的归档。'
+    return
   }
 
-  selectedRun.value = result.data;
-  learningNote.value = result.data.note ?? '';
-  reportPreview.value = result.data.report ?? '';
-  noteMessage.value = `当前笔记：${result.data.local_archive}\\note.md`;
+  selectedRun.value = result.data
+  learningNote.value = result.data.note ?? ''
+  reportPreview.value = result.data.report ?? ''
+  noteMessage.value = `当前笔记：${result.data.local_archive}\\note.md`
   reportMessage.value = result.data.learning_report
     ? `学习报告：${result.data.local_archive}\\${result.data.learning_report}`
-    : '这次运行还没有生成学习报告。';
+    : '这次运行还没有生成学习报告。'
   exportMessage.value = result.data.learning_export
     ? `最近导出：${result.data.learning_export.path}`
-    : '这次运行还没有导出到学习库。';
-};
+    : '这次运行还没有导出到学习库。'
+}
 
 const saveNoteAction = async () => {
   if (!selectedRun.value) {
-    noteMessage.value = '请先选择一次运行记录。';
-    return;
+    noteMessage.value = '请先选择一次运行记录。'
+    return
   }
 
-  const result = await api.saveRunNote(selectedRun.value.run_id, learningNote.value);
-  noteMessage.value = result.data.saved
-    ? `学习笔记已保存：${result.data.note_path}`
-    : '学习笔记保存失败。';
+  const result = await api.saveRunNote(selectedRun.value.run_id, learningNote.value)
+  noteMessage.value = result.data.saved ? `学习笔记已保存：${result.data.note_path}` : '学习笔记保存失败。'
   if (result.data.report_path) {
-    reportMessage.value = `学习报告已刷新：${result.data.report_path}`;
+    reportMessage.value = `学习报告已刷新：${result.data.report_path}`
   }
-  await selectRunAction(selectedRun.value.run_id);
-};
+  await selectRunAction(selectedRun.value.run_id)
+}
 
 const refreshReportAction = async () => {
   if (!selectedRun.value) {
-    reportMessage.value = '请先选择一次运行记录。';
-    return;
+    reportMessage.value = '请先选择一次运行记录。'
+    return
   }
 
-  const result = await api.generateRunReport(selectedRun.value.run_id);
+  const result = await api.generateRunReport(selectedRun.value.run_id)
   if (!result.data) {
-    reportMessage.value = '学习报告生成失败。';
-    return;
+    reportMessage.value = '学习报告生成失败。'
+    return
   }
 
-  reportPreview.value = result.data.report;
+  reportPreview.value = result.data.report
   if (selectedRun.value && result.data.summary) {
     selectedRun.value = {
       ...selectedRun.value,
       summary: result.data.summary,
-    };
+    }
   }
-  reportMessage.value = `学习报告已生成：${result.data.report_path}`;
-  await loadRunsAction();
-};
+  reportMessage.value = `学习报告已生成：${result.data.report_path}`
+  await loadRunsAction()
+}
 
 const exportLearningRecordAction = async () => {
   if (!selectedRun.value) {
-    exportMessage.value = '请先选择一次运行记录。';
-    return;
+    exportMessage.value = '请先选择一次运行记录。'
+    return
   }
 
   const result = await api.exportLearningRecord(
     selectedRun.value.run_id,
     selectedLearningFormat.value,
-    learningExportTarget.value.trim() || undefined,
-  );
+    learningExportTarget.value.trim() || undefined
+  )
   if (!result.data?.exported) {
-    exportMessage.value = '学习记录导出失败。';
-    return;
+    exportMessage.value = '学习记录导出失败。'
+    return
   }
 
-  exportMessage.value = `学习记录已导出：${result.data.export_path}`;
+  exportMessage.value = `学习记录已导出：${result.data.export_path}`
   if (result.data.summary) {
     selectedRun.value = {
       ...selectedRun.value,
       summary: result.data.summary,
       learning_export: result.data.record,
-    };
+    }
   }
-  await loadRunsAction();
-};
+  await loadRunsAction()
+}
 
 const connectServerAction = async () => {
   try {
-    const result = await api.connect();
+    const result = await api.connect()
     status.value = {
       connected: true,
       host: result.data.host,
@@ -198,12 +191,12 @@ const connectServerAction = async () => {
       learningFormats: result.data.learning_formats ?? ['md', 'json', 'txt'],
       learningDefaultFormat: result.data.learning_default_format ?? 'md',
       message: '侧车服务连接成功。',
-    };
-    learningExportTarget.value = result.data.learning_export_root ?? '';
-    selectedLearningFormat.value = result.data.learning_default_format ?? 'md';
-    remoteRuns.setComputeNodes(result.data.compute_nodes ?? [], result.data.default_compute_node ?? '');
-    toolchainItems.value = result.data.toolchain ?? [];
-    await loadRunsAction();
+    }
+    learningExportTarget.value = result.data.learning_export_root ?? ''
+    selectedLearningFormat.value = result.data.learning_default_format ?? 'md'
+    remoteRuns.setComputeNodes(result.data.compute_nodes ?? [], result.data.default_compute_node ?? '')
+    toolchainItems.value = result.data.toolchain ?? []
+    await loadRunsAction()
   } catch (err) {
     status.value = {
       connected: false,
@@ -215,14 +208,14 @@ const connectServerAction = async () => {
       learningFormats: ['md', 'json', 'txt'],
       learningDefaultFormat: 'md',
       message: '连接失败，请确认 FastAPI sidecar 已启动。',
-    };
-    appendLog(`[界面] 连接 API 服务失败：${err}`);
+    }
+    appendLog(`[界面] 连接 API 服务失败：${err}`)
   }
-};
+}
 
 const shutdownSidecarAction = async () => {
   try {
-    await invoke('shutdown_sidecar');
+    await invoke('shutdown_sidecar')
     status.value = {
       connected: false,
       host: '',
@@ -233,40 +226,40 @@ const shutdownSidecarAction = async () => {
       learningFormats: ['md', 'json', 'txt'],
       learningDefaultFormat: 'md',
       message: '已请求关闭侧车服务。',
-    };
-    appendLog('[界面] 已请求关闭侧车服务。');
+    }
+    appendLog('[界面] 已请求关闭侧车服务。')
   } catch (err) {
-    appendLog(`[界面] 关闭侧车服务失败：${err}`);
+    appendLog(`[界面] 关闭侧车服务失败：${err}`)
   }
-};
+}
 
 const startSidecarAction = async () => {
   try {
-    await invoke('start_sidecar');
-    appendLog('[界面] 已请求启动侧车服务，稍后自动验证连接。');
-    window.setTimeout(connectServerAction, 1000);
+    await invoke('start_sidecar')
+    appendLog('[界面] 已请求启动侧车服务，稍后自动验证连接。')
+    window.setTimeout(connectServerAction, 1000)
   } catch (err) {
-    appendLog(`[界面] 启动侧车服务失败：${err}`);
+    appendLog(`[界面] 启动侧车服务失败：${err}`)
   }
-};
+}
 
 const handleKeydown = (event: KeyboardEvent) => {
   if (event.key === 'F11') {
-    event.preventDefault();
-    invoke('toggle_fullscreen');
+    event.preventDefault()
+    invoke('toggle_fullscreen')
   }
-};
+}
 
 onMounted(() => {
-  initSidecarListeners();
-  window.addEventListener('keydown', handleKeydown);
-});
+  initSidecarListeners()
+  window.addEventListener('keydown', handleKeydown)
+})
 
 onUnmounted(() => {
-  disposeSidecarListeners();
-  closeRunEventStream();
-  window.removeEventListener('keydown', handleKeydown);
-});
+  disposeSidecarListeners()
+  closeRunEventStream()
+  window.removeEventListener('keydown', handleKeydown)
+})
 </script>
 
 <template>

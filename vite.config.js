@@ -1,24 +1,26 @@
 import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
+import { fileURLToPath, URL } from 'node:url';
 
-// https://vitejs.dev/config/
 export default defineConfig({
   plugins: [vue()],
-  // prevent vite from obscuring rust errors
   clearScreen: false,
   root: './app',
   publicDir: '../public',
-  // Tauri expects a fixed port, fail if that port is not available
+  resolve: {
+    alias: {
+      '@': fileURLToPath(new URL('./app', import.meta.url)),
+    },
+  },
   server: {
     port: 3000,
     strictPort: true,
     watch: {
-      // 3. tell vite to ignore watching `src-tauri`
-      ignored: ["**/src-tauri/**", "**/dist/**", "**/tmp/**"],
+      ignored: ['**/src-tauri/**', '**/dist/**', '**/tmp/**'],
     },
   },
   build: {
-    outDir: "../dist",
+    outDir: '../dist',
     emptyOutDir: true,
   },
 });

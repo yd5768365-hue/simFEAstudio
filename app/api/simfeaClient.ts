@@ -1,60 +1,118 @@
-export type HttpMethod = 'GET' | 'POST';
+import { contract, createClient } from '@/api/client'
+import {
+  cancelRunResponseSchema,
+  connectResponseSchema,
+  exportLearningBodySchema,
+  exportLearningResponseSchema,
+  generateReportResponseSchema,
+  getRunResponseSchema,
+  listRunsResponseSchema,
+  probeNodeResponseSchema,
+  probeSchedulerResponseSchema,
+  saveNoteBodySchema,
+  saveNoteResponseSchema,
+  startDemoRunResponseSchema,
+  startSlurmDemoRunResponseSchema,
+} from '@/api/contracts'
 
-export interface SimfeaClient {
-  connect(): Promise<any>;
-  listRuns(): Promise<any>;
-  getRun(runId: string): Promise<any>;
-  saveRunNote(runId: string, note: string): Promise<any>;
-  generateRunReport(runId: string): Promise<any>;
-  exportLearningRecord(runId: string, format: string, targetDir?: string): Promise<any>;
-  probeComputeNode(alias: string): Promise<any>;
-  probeScheduler(alias: string): Promise<any>;
-  startDemoRun(alias: string): Promise<any>;
-  startSlurmDemoRun(alias: string): Promise<any>;
-  cancelRun(runId: string): Promise<any>;
+const connectContract = contract({
+  method: 'GET',
+  path: '/v1/connect',
+  response: connectResponseSchema,
+})
+
+const listRunsContract = contract({
+  method: 'GET',
+  path: '/v1/runs',
+  response: listRunsResponseSchema,
+})
+
+const getRunContract = contract({
+  method: 'GET',
+  path: '/v1/runs/:runId',
+  params: ['runId'] as const,
+  response: getRunResponseSchema,
+})
+
+const saveNoteContract = contract({
+  method: 'POST',
+  path: '/v1/runs/:runId/note',
+  params: ['runId'] as const,
+  body: saveNoteBodySchema,
+  response: saveNoteResponseSchema,
+})
+
+const generateReportContract = contract({
+  method: 'GET',
+  path: '/v1/runs/:runId/report',
+  params: ['runId'] as const,
+  response: generateReportResponseSchema,
+})
+
+const exportLearningContract = contract({
+  method: 'POST',
+  path: '/v1/runs/:runId/learning-export',
+  params: ['runId'] as const,
+  body: exportLearningBodySchema,
+  response: exportLearningResponseSchema,
+})
+
+const probeNodeContract = contract({
+  method: 'GET',
+  path: '/v1/compute-nodes/:alias/probe',
+  params: ['alias'] as const,
+  response: probeNodeResponseSchema,
+})
+
+const probeSchedulerContract = contract({
+  method: 'GET',
+  path: '/v1/compute-nodes/:alias/scheduler-probe',
+  params: ['alias'] as const,
+  response: probeSchedulerResponseSchema,
+})
+
+const startDemoRunContract = contract({
+  method: 'POST',
+  path: '/v1/runs/:alias/demo',
+  params: ['alias'] as const,
+  response: startDemoRunResponseSchema,
+})
+
+const startSlurmDemoRunContract = contract({
+  method: 'POST',
+  path: '/v1/runs/:alias/slurm-demo',
+  params: ['alias'] as const,
+  response: startSlurmDemoRunResponseSchema,
+})
+
+const cancelRunContract = contract({
+  method: 'POST',
+  path: '/v1/runs/:runId/cancel',
+  params: ['runId'] as const,
+  response: cancelRunResponseSchema,
+})
+
+export function createSimfeaClient(baseUrl: string, appendLog: (line: string) => void) {
+  const { request } = createClient(baseUrl, appendLog)
+
+  return {
+    connect: () => request(connectContract),
+    listRuns: () => request(listRunsContract),
+    getRun: (runId: string) => request(getRunContract, { params: { runId } }),
+    saveRunNote: (runId: string, note: string) =>
+      request(saveNoteContract, { params: { runId }, body: { note } }),
+    generateRunReport: (runId: string) => request(generateReportContract, { params: { runId } }),
+    exportLearningRecord: (runId: string, format: string, targetDir?: string) =>
+      request(exportLearningContract, {
+        params: { runId },
+        body: { format, target_dir: targetDir || undefined },
+      }),
+    probeComputeNode: (alias: string) => request(probeNodeContract, { params: { alias } }),
+    probeScheduler: (alias: string) => request(probeSchedulerContract, { params: { alias } }),
+    startDemoRun: (alias: string) => request(startDemoRunContract, { params: { alias } }),
+    startSlurmDemoRun: (alias: string) => request(startSlurmDemoRunContract, { params: { alias } }),
+    cancelRun: (runId: string) => request(cancelRunContract, { params: { runId } }),
+  }
 }
 
-const createRequester = (baseUrl: string, appendLog: (line: string) => void) => {
-  return async (endpoint: string, method: HttpMethod = 'GET', body?: unknown): Promise<any> => {
-    const url = `${baseUrl}/${endpoint}`;
-    try {
-      const response = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: body === undefined ? undefined : JSON.stringify(body),
-      });
-      if (!response.ok) {
-        throw new Error(`request failed: ${response.status} ${await response.text()}`);
-      }
-      const json = await response.json();
-      if (json?.message) {
-        appendLog(`[服务响应] ${json.message}`);
-      }
-      return json;
-    } catch (error: any) {
-      appendLog(`[服务响应] ${error}`);
-      throw error;
-    }
-  };
-};
-
-export const createSimfeaClient = (baseUrl: string, appendLog: (line: string) => void): SimfeaClient => {
-  const request = createRequester(baseUrl, appendLog);
-  return {
-    connect: () => request('v1/connect'),
-    listRuns: () => request('v1/runs'),
-    getRun: (runId: string) => request(`v1/runs/${runId}`),
-    saveRunNote: (runId: string, note: string) => request(`v1/runs/${runId}/note`, 'POST', { note }),
-    generateRunReport: (runId: string) => request(`v1/runs/${runId}/report`),
-    exportLearningRecord: (runId: string, format: string, targetDir?: string) =>
-      request(`v1/runs/${runId}/learning-export`, 'POST', {
-        format,
-        target_dir: targetDir || undefined,
-      }),
-    probeComputeNode: (alias: string) => request(`v1/compute-nodes/${alias}/probe`),
-    probeScheduler: (alias: string) => request(`v1/compute-nodes/${alias}/scheduler-probe`),
-    startDemoRun: (alias: string) => request(`v1/runs/${alias}/demo`, 'POST'),
-    startSlurmDemoRun: (alias: string) => request(`v1/runs/${alias}/slurm-demo`, 'POST'),
-    cancelRun: (runId: string) => request(`v1/runs/${runId}/cancel`, 'POST'),
-  };
-};
+export type SimfeaClient = ReturnType<typeof createSimfeaClient>
