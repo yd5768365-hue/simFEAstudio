@@ -2,7 +2,12 @@ import { listen } from '@tauri-apps/api/event'
 
 type Cleanup = () => void
 
-export const useSidecarListeners = (appendLog: (line: string) => void) => {
+export interface UseSidecarListenersOptions {
+  appendLog: (line: string) => void
+}
+
+export const useSidecarListeners = (options: UseSidecarListenersOptions) => {
+  const { appendLog } = options
   let cleanup: Cleanup | null = null
 
   const initSidecarListeners = async () => {

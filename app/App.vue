@@ -2,6 +2,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { createSimfeaClient } from '@/api/simfeaClient'
+import RemotePanel from '@/components/RemotePanel.vue'
 import ResultEvidenceView from '@/components/ResultEvidenceView.vue'
 import { useRemoteRuns } from '@/composables/useRemoteRuns'
 import { useRunEvents } from '@/composables/useRunEvents'
@@ -69,8 +70,8 @@ const appendLog = (line: string) => {
 }
 
 const api = createSimfeaClient(apiBaseUrl, appendLog)
-const { initSidecarListeners, disposeSidecarListeners } = useSidecarListeners(appendLog)
-const { openRunEventStream, closeRunEventStream } = useRunEvents(apiBaseUrl)
+const { initSidecarListeners, disposeSidecarListeners } = useSidecarListeners({ appendLog })
+const { openRunEventStream, closeRunEventStream } = useRunEvents({ baseUrl: apiBaseUrl })
 
 const remoteRuns = useRemoteRuns({
   api,
@@ -337,46 +338,21 @@ onUnmounted(() => {
         </div>
       </section>
 
-      <section class="panel remote-panel" aria-labelledby="remote-title">
-        <div class="section-heading">
-          <p class="eyebrow">远程计算</p>
-          <h2 id="remote-title">计算节点：{{ activeComputeNodeLabel }}</h2>
-        </div>
-        <label class="node-selector">
-          <span>当前节点</span>
-          <select v-model="selectedComputeNode" :disabled="computeNodes.length === 0 || remoteStatus.running">
-            <option v-for="node in computeNodes" :key="node.alias" :value="node.alias">
-              {{ node.label }} / {{ node.alias }}
-            </option>
-          </select>
-        </label>
-        <p v-if="computeNodes.length === 0" class="empty-state">
-          尚未配置计算节点。请根据 simfea.config.example.json 创建 .simfea/config.json。
-        </p>
-        <div class="button-row">
-          <button type="button" class="primary-action" @click="remoteRuns.probeRemoteNodeAction()" :disabled="!status.connected || !selectedComputeNode">
-            测试远程节点
-          </button>
-          <button type="button" @click="remoteRuns.probeSchedulerAction()" :disabled="!status.connected || !selectedComputeNode || remoteStatus.running">
-            探测调度器
-          </button>
-          <button type="button" @click="remoteRuns.startRemoteDemoRunAction()" :disabled="!status.connected || !selectedComputeNode || remoteStatus.running">
-            运行闭环样例
-          </button>
-          <button type="button" @click="remoteRuns.startSlurmDemoRunAction()" :disabled="!status.connected || !selectedComputeNode || remoteStatus.running">
-            运行 Slurm 样例
-          </button>
-          <button type="button" class="danger-action" @click="remoteRuns.cancelRemoteRunAction" :disabled="!remoteStatus.running || !remoteStatus.runId">
-            取消当前任务
-          </button>
-        </div>
-        <div class="connection-detail">
-          <span>{{ remoteStatus.message }}</span>
-          <span v-if="remoteStatus.remoteWorkdir">远程目录：{{ remoteStatus.remoteWorkdir }}</span>
-          <span v-if="remoteStatus.archivePath">本地归档：{{ remoteStatus.archivePath }}</span>
-        </div>
-        <pre v-if="remoteStatus.output" class="remote-output"><code>{{ remoteStatus.output }}</code></pre>
-      </section>
+      <RemotePanel
+        :compute-nodes="computeNodes"
+        :selected-compute-node="selectedComputeNode"
+        :active-compute-node-label="activeComputeNodeLabel"
+        :remote-status="remoteStatus"
+        :connected="status.connected"
+        :actions="{
+          probeRemoteNodeAction: () => remoteRuns.probeRemoteNodeAction(),
+          probeSchedulerAction: () => remoteRuns.probeSchedulerAction(),
+          startRemoteDemoRunAction: () => remoteRuns.startRemoteDemoRunAction(),
+          startSlurmDemoRunAction: () => remoteRuns.startSlurmDemoRunAction(),
+          cancelRemoteRunAction: () => remoteRuns.cancelRemoteRunAction(),
+        }"
+        @update:selected-compute-node="selectedComputeNode = $event"
+      />
 
       <section class="panel toolchain-panel" aria-labelledby="toolchain-title">
         <div class="section-heading">

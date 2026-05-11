@@ -1,5 +1,6 @@
 export type { ComputeNodeConfig, RemoteStatus, UseRemoteRunsOptions } from './useRemoteRuns'
 export { useRemoteRuns } from './useRemoteRuns'
-export type { RunEventHandlers } from './useRunEvents'
+export type { RunEventHandlers, UseRunEventsOptions } from './useRunEvents'
 export { useRunEvents } from './useRunEvents'
+export type { UseSidecarListenersOptions } from './useSidecarListeners'
 export { useSidecarListeners } from './useSidecarListeners'

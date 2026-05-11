@@ -22,7 +22,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "biome check app/",
-    "format": "biome check --write app/"
+    "format": "biome check --write app/",
+    "prepare": "husky"
   },
   "dependencies": {
     "@kitware/vtk.js": "^34.11.1",
@@ -35,11 +36,21 @@
     "vue": "^3.5.13",
     "zod": "^4.4.3"
   },
+  "lint-staged": {
+    "app/**/*.{ts,vue,js}": [
+      "biome check --write --no-errors-on-unmatched"
+    ],
+    "*.{css,json,md}": [
+      "biome check --write --no-errors-on-unmatched"
+    ]
+  },
   "devDependencies": {
     "@biomejs/biome": "^2.4.15",
     "@tauri-apps/cli": "^2.5.0",
     "@types/cors": "^2.8.17",
     "@vitejs/plugin-vue": "^5.2.2",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.0.4",
     "vite": "^6.3.1",
     "vitest": "^4.1.5"
   }

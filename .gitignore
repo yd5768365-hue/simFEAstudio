@@ -402,6 +402,7 @@ Cargo.lock
 
 # Local reference checkouts
 sim-main/
+learning/
 
 uv.lock
 

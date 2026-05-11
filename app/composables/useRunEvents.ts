@@ -3,7 +3,12 @@ export interface RunEventHandlers {
   onError?: () => void
 }
 
-export const useRunEvents = (apiBaseUrl: string) => {
+export interface UseRunEventsOptions {
+  baseUrl: string
+}
+
+export const useRunEvents = (options: UseRunEventsOptions) => {
+  const { baseUrl } = options
   let eventSource: EventSource | null = null
 
   const closeRunEventStream = () => {
@@ -13,7 +18,7 @@ export const useRunEvents = (apiBaseUrl: string) => {
 
   const openRunEventStream = (runId: string, handlers: RunEventHandlers) => {
     closeRunEventStream()
-    eventSource = new EventSource(`${apiBaseUrl}/v1/runs/${runId}/events`)
+    eventSource = new EventSource(`${baseUrl}/v1/runs/${runId}/events`)
     eventSource.onmessage = async (event) => {
       const payload = JSON.parse(event.data)
       await handlers.onEvent(payload)

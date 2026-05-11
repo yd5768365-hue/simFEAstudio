@@ -102,21 +102,20 @@ export type RunArchive = z.output<typeof runArchiveSchema>
 // ── Connection ──────────────────────────────────────────────
 
 export const connectResponseSchema = z.object({
+  message: z.string(),
   data: z.object({
-    connected: z.boolean(),
+    port: z.number(),
+    pid: z.number(),
     host: z.string(),
-    pid: z.union([z.number(), z.string()]),
     runs_root: z.string(),
     config_path: z.string(),
     learning_export_root: z.string(),
     learning_formats: z.array(z.string()),
     learning_default_format: z.string(),
-    message: z.string(),
-    compute_nodes: z.array(computeNodeSchema),
     default_compute_node: z.string().optional(),
+    compute_nodes: z.array(computeNodeSchema),
     toolchain: z.array(toolchainItemSchema).optional(),
   }),
-  message: z.string().optional(),
 })
 
 export type ConnectResponse = z.output<typeof connectResponseSchema>
@@ -124,17 +123,21 @@ export type ConnectResponse = z.output<typeof connectResponseSchema>
 // ── Runs ────────────────────────────────────────────────────
 
 export const listRunsResponseSchema = z.object({
+  message: z.string(),
   data: z.object({
+    runs_root: z.string().optional(),
+    learning_export_root: z.string().optional(),
+    learning_formats: z.array(z.string()).optional(),
+    learning_default_format: z.string().optional(),
     runs: z.array(runArchiveSchema),
   }),
-  message: z.string().optional(),
 })
 
 export type ListRunsResponse = z.output<typeof listRunsResponseSchema>
 
 export const getRunResponseSchema = z.object({
-  data: runArchiveSchema,
-  message: z.string().optional(),
+  message: z.string(),
+  data: runArchiveSchema.nullable(),
 })
 
 export type GetRunResponse = z.output<typeof getRunResponseSchema>
@@ -144,23 +147,24 @@ export const saveNoteBodySchema = z.object({
 })
 
 export const saveNoteResponseSchema = z.object({
+  message: z.string(),
   data: z.object({
     saved: z.boolean(),
     note_path: z.string().optional(),
     report_path: z.string().optional(),
   }),
-  message: z.string().optional(),
 })
 
 export type SaveNoteResponse = z.output<typeof saveNoteResponseSchema>
 
 export const generateReportResponseSchema = z.object({
+  message: z.string(),
   data: z.object({
+    run_id: z.string().optional(),
     report: z.string(),
     report_path: z.string(),
     summary: z.unknown().optional(),
   }),
-  message: z.string().optional(),
 })
 
 export type GenerateReportResponse = z.output<typeof generateReportResponseSchema>
@@ -171,71 +175,84 @@ export const exportLearningBodySchema = z.object({
 })
 
 export const exportLearningResponseSchema = z.object({
+  message: z.string(),
   data: z.object({
     exported: z.boolean(),
     export_path: z.string().optional(),
     summary: z.unknown().optional(),
     record: z.unknown().optional(),
   }),
-  message: z.string().optional(),
 })
 
 export type ExportLearningResponse = z.output<typeof exportLearningResponseSchema>
 
 export const startDemoRunResponseSchema = z.object({
+  message: z.string(),
   data: z.object({
     run_id: z.string(),
+    status: z.string(),
     archive_path: z.string(),
     remote_workdir: z.string(),
+    compute_node: z.string(),
   }),
-  message: z.string().optional(),
 })
 
 export type StartDemoRunResponse = z.output<typeof startDemoRunResponseSchema>
 
 export const startSlurmDemoRunResponseSchema = z.object({
+  message: z.string(),
   data: z.object({
     run_id: z.string(),
+    status: z.string(),
     archive_path: z.string(),
     remote_workdir: z.string(),
+    compute_node: z.string(),
     scheduler: z.string().optional(),
     partition: z.string().optional(),
     requested_cpus: z.number().optional(),
     requested_memory: z.string().optional(),
   }),
-  message: z.string().optional(),
 })
 
 export type StartSlurmDemoRunResponse = z.output<typeof startSlurmDemoRunResponseSchema>
 
 export const cancelRunResponseSchema = z.object({
+  message: z.string(),
   data: z.unknown(),
-  message: z.string().optional(),
 })
 
 // ── Compute Nodes ───────────────────────────────────────────
 
+const runCommandResultSchema = z.object({
+  exit_code: z.number(),
+  stdout: z.string(),
+  stderr: z.string(),
+  duration_seconds: z.number(),
+})
+
 export const probeNodeResponseSchema = z.object({
-  data: z.object({
+  message: z.string(),
+  data: runCommandResultSchema.extend({
+    alias: z.string(),
+    label: z.string(),
     connected: z.boolean(),
-    duration_seconds: z.number(),
     details: z.object({
       hostname: z.string().optional(),
       user: z.string().optional(),
       cpu_cores: z.string().optional(),
       workdir: z.string().optional(),
     }),
-    stderr: z.string().optional(),
   }),
-  message: z.string().optional(),
 })
 
 export type ProbeNodeResponse = z.output<typeof probeNodeResponseSchema>
 
 export const probeSchedulerResponseSchema = z.object({
-  data: z.object({
+  message: z.string(),
+  data: runCommandResultSchema.extend({
+    alias: z.string(),
+    label: z.string(),
     connected: z.boolean(),
-    duration_seconds: z.number(),
     details: z.object({
       hostname: z.string().optional(),
       user: z.string().optional(),
@@ -249,9 +266,7 @@ export const probeSchedulerResponseSchema = z.object({
       memory: z.string().optional(),
       workdir: z.string().optional(),
     }),
-    stderr: z.string().optional(),
   }),
-  message: z.string().optional(),
 })
 
 export type ProbeSchedulerResponse = z.output<typeof probeSchedulerResponseSchema>

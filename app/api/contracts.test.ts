@@ -1,23 +1,20 @@
-import { describe, expect, it } from 'vitest';
-import {
-  runArchiveSchema,
-  connectResponseSchema,
-  probeNodeResponseSchema,
-} from './contracts';
+import { describe, expect, it } from 'vitest'
+import { connectResponseSchema, probeNodeResponseSchema, runArchiveSchema } from './contracts'
 
 describe('connectResponseSchema', () => {
   it('parses a full connect response', () => {
     const result = connectResponseSchema.parse({
+      message: 'Connected to SimFEA Studio API server on port 8008.',
       data: {
-        connected: true,
-        host: 'localhost',
+        port: 8008,
         pid: 12345,
+        host: 'http://localhost:8008',
         runs_root: '/tmp/runs',
         config_path: '/tmp/config.json',
         learning_export_root: '/tmp/learning',
         learning_formats: ['md', 'json'],
         learning_default_format: 'md',
-        message: 'connected',
+        default_compute_node: 'node1',
         compute_nodes: [
           {
             alias: 'node1',
@@ -28,34 +25,34 @@ describe('connectResponseSchema', () => {
             configured: true,
           },
         ],
-        default_compute_node: 'node1',
         toolchain: [{ name: 'test', role: 'solver', status: 'ready' }],
       },
-    });
-    expect(result.data.connected).toBe(true);
-    expect(result.data.compute_nodes).toHaveLength(1);
-    expect(result.data.compute_nodes[0].alias).toBe('node1');
-  });
+    })
+    expect(result.data.port).toBe(8008)
+    expect(result.data.compute_nodes).toHaveLength(1)
+    expect(result.data.compute_nodes[0].alias).toBe('node1')
+    expect(result.message).toContain('Connected')
+  })
 
   it('parses a minimal connect response', () => {
     const result = connectResponseSchema.parse({
+      message: 'Connected.',
       data: {
-        connected: false,
-        host: '',
+        port: 8008,
         pid: 0,
+        host: '',
         runs_root: '',
         config_path: '',
         learning_export_root: '',
         learning_formats: ['md'],
         learning_default_format: 'md',
-        message: 'failed',
         compute_nodes: [],
       },
-    });
-    expect(result.data.connected).toBe(false);
-    expect(result.data.compute_nodes).toHaveLength(0);
-  });
-});
+    })
+    expect(result.data.port).toBe(8008)
+    expect(result.data.compute_nodes).toHaveLength(0)
+  })
+})
 
 describe('runArchiveSchema', () => {
   it('parses a minimal run archive', () => {
@@ -70,10 +67,10 @@ describe('runArchiveSchema', () => {
       remote_workdir: '/home/test/runs/run-001',
       local_archive: '/tmp/runs/run-001',
       artifacts: ['result.txt'],
-    });
-    expect(result.run_id).toBe('run-001');
-    expect(result.artifacts).toHaveLength(1);
-  });
+    })
+    expect(result.run_id).toBe('run-001')
+    expect(result.artifacts).toHaveLength(1)
+  })
 
   it('parses a full run archive', () => {
     const result = runArchiveSchema.parse({
@@ -118,20 +115,26 @@ describe('runArchiveSchema', () => {
           requested_memory: '8G',
         },
       },
-    });
-    expect(result.exit_code).toBe(0);
-    expect(result.summary?.metrics?.max_displacement_mm).toBe(1.5);
-    expect(result.scheduler).toBe('slurm');
-    expect(result.requested_cpus).toBe(4);
-  });
-});
+    })
+    expect(result.exit_code).toBe(0)
+    expect(result.summary?.metrics?.max_displacement_mm).toBe(1.5)
+    expect(result.scheduler).toBe('slurm')
+    expect(result.requested_cpus).toBe(4)
+  })
+})
 
 describe('probeNodeResponseSchema', () => {
   it('parses a probe response', () => {
     const result = probeNodeResponseSchema.parse({
+      message: 'node1 remote compute node probe completed.',
       data: {
+        alias: 'node1',
+        label: 'Node 1',
         connected: true,
         duration_seconds: 1.23,
+        exit_code: 0,
+        stdout: 'hostname=node1\nuser=test\ncpu_cores=8\nworkdir=/home/test\n',
+        stderr: '',
         details: {
           hostname: 'node1',
           user: 'test',
@@ -139,8 +142,11 @@ describe('probeNodeResponseSchema', () => {
           workdir: '/home/test',
         },
       },
-    });
-    expect(result.data.connected).toBe(true);
-    expect(result.data.details.hostname).toBe('node1');
-  });
-});
+    })
+    expect(result.data.connected).toBe(true)
+    expect(result.data.details.hostname).toBe('node1')
+    expect(result.data.duration_seconds).toBe(1.23)
+    expect(result.data.exit_code).toBe(0)
+    expect(result.message).toContain('completed')
+  })
+})
