@@ -6,6 +6,7 @@ import type { RunArchive, ToolchainItem } from './types';
 import { createSimfeaClient } from './api/simfeaClient';
 import { useSidecarListeners } from './composables/useSidecarListeners';
 import { useRunEvents } from './composables/useRunEvents';
+import { useRemoteRuns } from './composables/useRemoteRuns';
 
 const configuredApiBaseUrl = import.meta.env.VITE_SIMFEA_API_BASE_URL as string | undefined;
 const apiBaseUrl = (configuredApiBaseUrl?.replace(/\/$/, '') || `http://${window.location.hostname || 'localhost'}:8008`);
@@ -32,17 +33,6 @@ interface ComputeNodeConfig {
   configured: boolean;
 }
 
-interface RemoteStatus {
-  checked: boolean;
-  connected: boolean;
-  running: boolean;
-  runId: string;
-  message: string;
-  output: string;
-  archivePath: string;
-  remoteWorkdir: string;
-}
-
 const status = ref<ConnectionStatus>({
   connected: false,
   host: '',
@@ -53,17 +43,6 @@ const status = ref<ConnectionStatus>({
   learningFormats: ['md', 'json', 'txt'],
   learningDefaultFormat: 'md',
   message: '尚未验证侧车服务连接。',
-});
-
-const remoteStatus = ref<RemoteStatus>({
-  checked: false,
-  connected: false,
-  running: false,
-  runId: '',
-  message: '尚未测试远程计算节点。',
-  output: '',
-  archivePath: '',
-  remoteWorkdir: '',
 });
 
 const computeNodes = ref<ComputeNodeConfig[]>([]);
@@ -79,14 +58,6 @@ const noteMessage = ref('选择一次运行后，可以写下这次计算的判�
 const reportMessage = ref('运行完成后，这里会显示自动生成的学习沉淀报告。');
 const exportMessage = ref('学习记录可以导出到配置目录，也可以临时指定一个目录。');
 const logs = ref('[界面] 正在监听侧车服务和网络日志...');
-
-const connectionLabel = computed(() =>
-  status.value.connected ? '侧车服务在线' : '侧车服务待连接',
-);
-
-const remoteLabel = computed(() =>
-  remoteStatus.value.connected ? '远程节点在线' : '远程节点待测试',
-);
 
 const evidenceArtifacts = computed(() =>
   selectedRun.value?.artifacts?.filter((artifact) => artifact !== 'artifacts/result_summary.json') ?? [],
@@ -115,6 +86,27 @@ const appendLog = (line: string) => {
 const api = createSimfeaClient(apiBaseUrl, appendLog);
 const { initSidecarListeners, disposeSidecarListeners } = useSidecarListeners(appendLog);
 const { openRunEventStream, closeRunEventStream } = useRunEvents(apiBaseUrl);
+
+const remoteRuns = useRemoteRuns({
+  api,
+  openRunEventStream,
+  closeRunEventStream,
+  onRunFinished: async (runId: string) => {
+    await loadRunsAction();
+    await selectRunAction(runId);
+  },
+  appendLog,
+});
+
+const { remoteStatus } = remoteRuns;
+
+const connectionLabel = computed(() =>
+  status.value.connected ? '侧车服务在线' : '侧车服务待连接',
+);
+
+const remoteLabel = computed(() =>
+  remoteStatus.value.connected ? '远程节点在线' : '远程节点待测试',
+);
 
 const loadRunsAction = async () => {
   const result = await api.listRuns();
@@ -242,314 +234,6 @@ const connectServerAction = async () => {
       message: '连接失败，请确认 FastAPI sidecar 已启动。',
     };
     appendLog(`[界面] 连接 API 服务失败：${err}`);
-  }
-};
-
-const probeRemoteNodeAction = async () => {
-  if (!selectedComputeNode.value) {
-    remoteStatus.value = {
-      ...remoteStatus.value,
-      checked: true,
-      connected: false,
-      running: false,
-      message: '请先在配置文件中添加计算节点。',
-      output: '',
-    };
-    return;
-  }
-
-  try {
-    remoteStatus.value = {
-      ...remoteStatus.value,
-      checked: true,
-      connected: false,
-      running: false,
-      message: `正在测试 ${activeComputeNodeLabel.value}...`,
-      output: '',
-    };
-    const result = await api.probeComputeNode(selectedComputeNode.value);
-    const details = result.data.details ?? {};
-    const output = [
-      `主机：${details.hostname ?? '未知'}`,
-      `用户：${details.user ?? '未知'}`,
-      `CPU 核心：${details.cpu_cores ?? '未知'}`,
-      `远程目录：${details.workdir ?? '未知'}`,
-      `探测耗时：${result.data.duration_seconds} 秒`,
-    ].join('\n');
-
-    remoteStatus.value = {
-      ...remoteStatus.value,
-      checked: true,
-      connected: result.data.connected,
-      running: false,
-      message: result.data.connected ? `${activeComputeNodeLabel.value} 连接成功。` : `${activeComputeNodeLabel.value} 连接失败。`,
-      output: `${output}${result.data.stderr ? `\n错误输出：\n${result.data.stderr}` : ''}`.trim(),
-    };
-  } catch (err) {
-    remoteStatus.value = {
-      ...remoteStatus.value,
-      checked: true,
-      connected: false,
-      running: false,
-      message: `${activeComputeNodeLabel.value} 测试失败。`,
-      output: String(err),
-    };
-  }
-};
-
-const probeSchedulerAction = async () => {
-  if (!selectedComputeNode.value) {
-    remoteStatus.value = {
-      ...remoteStatus.value,
-      checked: true,
-      connected: false,
-      running: false,
-      message: '请先在配置文件中添加计算节点。',
-      output: '',
-    };
-    return;
-  }
-
-  try {
-    remoteStatus.value = {
-      ...remoteStatus.value,
-      checked: true,
-      message: `正在探测 ${activeComputeNodeLabel.value} 的作业调度器...`,
-      output: '',
-    };
-    const result = await api.probeScheduler(selectedComputeNode.value);
-    const details = result.data.details ?? {};
-    const output = [
-      `主机：${details.hostname ?? '未知'}`,
-      `用户：${details.user ?? '未知'}`,
-      `调度器：${details.scheduler ?? '未知'}`,
-      `sbatch：${details.sbatch || '未发现'}`,
-      `srun：${details.srun || '未发现'}`,
-      `squeue：${details.squeue || '未发现'}`,
-      `qsub：${details.qsub || '未发现'}`,
-      `bsub：${details.bsub || '未发现'}`,
-      `CPU 核心：${details.cpu_cores ?? '未知'}`,
-      `内存：${details.memory ?? '未知'}`,
-      `远程目录：${details.workdir ?? '未知'}`,
-      `探测耗时：${result.data.duration_seconds} 秒`,
-    ].join('\n');
-
-    remoteStatus.value = {
-      ...remoteStatus.value,
-      checked: true,
-      connected: result.data.connected,
-      message: result.data.connected ? `${activeComputeNodeLabel.value} 调度器探测完成。` : `${activeComputeNodeLabel.value} 调度器探测失败。`,
-      output: `${output}${result.data.stderr ? `\n错误输出：\n${result.data.stderr}` : ''}`.trim(),
-    };
-  } catch (err) {
-    remoteStatus.value = {
-      ...remoteStatus.value,
-      checked: true,
-      message: `${activeComputeNodeLabel.value} 调度器探测失败。`,
-      output: String(err),
-    };
-  }
-};
-
-const startRemoteDemoRunAction = async () => {
-  if (!selectedComputeNode.value) {
-    remoteStatus.value = {
-      ...remoteStatus.value,
-      running: false,
-      message: '请先在配置文件中添加计算节点。',
-      output: '',
-    };
-    return;
-  }
-
-  try {
-    closeRunEventStream();
-    remoteStatus.value = {
-      ...remoteStatus.value,
-      checked: true,
-      running: true,
-      message: '正在启动远程闭环样例...',
-      output: '',
-      archivePath: '',
-      remoteWorkdir: '',
-    };
-
-    const result = await api.startDemoRun(selectedComputeNode.value);
-    const runId = result.data.run_id;
-    remoteStatus.value = {
-      ...remoteStatus.value,
-      runId,
-      archivePath: result.data.archive_path,
-      remoteWorkdir: result.data.remote_workdir,
-      message: `${activeComputeNodeLabel.value} 上的任务 ${runId} 已创建，正在接收实时日志。`,
-    };
-
-    openRunEventStream(runId, {
-      onEvent: async (payload) => {
-      if (payload.line) {
-        remoteStatus.value.output += `${payload.line}\n`;
-        appendLog(`[远程任务] ${payload.line}`);
-      }
-      if (payload.archive_path) {
-        remoteStatus.value.archivePath = payload.archive_path;
-      }
-      if (payload.remote_workdir) {
-        remoteStatus.value.remoteWorkdir = payload.remote_workdir;
-      }
-      if (payload.type === 'finished') {
-        const finishedNormally = payload.status === 'finished' && payload.exit_code === 0;
-        const canceled = payload.status === 'canceled';
-        remoteStatus.value = {
-          ...remoteStatus.value,
-          connected: canceled ? remoteStatus.value.connected : finishedNormally,
-          running: false,
-          message: canceled
-            ? '远程任务已取消，取消记录已进入物证仓库。'
-            : finishedNormally
-              ? '远程闭环样例完成，日志和结果已进入物证仓库。'
-              : '远程闭环样例失败，请查看日志。',
-        };
-        closeRunEventStream();
-        await loadRunsAction();
-        await selectRunAction(runId);
-      }
-      },
-      onError: () => {
-      remoteStatus.value = {
-        ...remoteStatus.value,
-        running: false,
-        message: '远程实时日志通道中断。',
-      };
-      closeRunEventStream();
-      },
-    });
-  } catch (err) {
-    remoteStatus.value = {
-      ...remoteStatus.value,
-      running: false,
-      message: '远程闭环样例启动失败。',
-      output: String(err),
-    };
-  }
-};
-
-const startSlurmDemoRunAction = async () => {
-  if (!selectedComputeNode.value) {
-    remoteStatus.value = {
-      ...remoteStatus.value,
-      running: false,
-      message: '请先在配置文件中添加计算节点。',
-      output: '',
-    };
-    return;
-  }
-
-  try {
-    closeRunEventStream();
-    remoteStatus.value = {
-      ...remoteStatus.value,
-      checked: true,
-      running: true,
-      message: '正在提交 Slurm 远程闭环样例...',
-      output: '',
-      archivePath: '',
-      remoteWorkdir: '',
-    };
-
-    const result = await api.startSlurmDemoRun(selectedComputeNode.value);
-    const runId = result.data.run_id;
-    const resourceLines = [
-      `调度器：${result.data.scheduler ?? 'slurm'}`,
-      `分区：${result.data.partition ?? '未知'}`,
-      `申请 CPU：${result.data.requested_cpus ?? '未知'}`,
-      `申请内存：${result.data.requested_memory ?? '未知'}`,
-    ].join('\n');
-
-    remoteStatus.value = {
-      ...remoteStatus.value,
-      runId,
-      archivePath: result.data.archive_path,
-      remoteWorkdir: result.data.remote_workdir,
-      message: `${activeComputeNodeLabel.value} 已创建 Slurm 运行 ${runId}，正在等待 JobID 和实时日志。`,
-      output: `${resourceLines}\n`,
-    };
-
-    openRunEventStream(runId, {
-      onEvent: async (payload) => {
-      if (payload.line) {
-        remoteStatus.value.output += `${payload.line}\n`;
-        appendLog(`[SlurmRunner] ${payload.line}`);
-      }
-      if (payload.archive_path) {
-        remoteStatus.value.archivePath = payload.archive_path;
-      }
-      if (payload.remote_workdir) {
-        remoteStatus.value.remoteWorkdir = payload.remote_workdir;
-      }
-      if (payload.job_id) {
-        remoteStatus.value.output += `JobID：${payload.job_id}\n`;
-      }
-      if (payload.allocated_node) {
-        remoteStatus.value.output += `运行节点：${payload.allocated_node}\n`;
-      }
-      if (payload.type === 'finished') {
-        const finishedNormally = payload.status === 'finished' && payload.exit_code === 0;
-        const canceled = payload.status === 'canceled';
-        remoteStatus.value = {
-          ...remoteStatus.value,
-          connected: canceled ? remoteStatus.value.connected : finishedNormally,
-          running: false,
-          message: canceled
-            ? 'Slurm 任务已取消，取消记录已进入物证仓库。'
-            : finishedNormally
-              ? 'Slurm 闭环样例完成，真实计算节点日志和结果已归档。'
-              : 'Slurm 闭环样例失败，请查看 stderr 和学习报告。',
-        };
-        closeRunEventStream();
-        await loadRunsAction();
-        await selectRunAction(runId);
-      }
-      },
-      onError: () => {
-      remoteStatus.value = {
-        ...remoteStatus.value,
-        running: false,
-        message: 'Slurm 实时事件流中断。',
-      };
-      closeRunEventStream();
-      },
-    });
-  } catch (err) {
-    remoteStatus.value = {
-      ...remoteStatus.value,
-      running: false,
-      message: 'Slurm 闭环样例提交失败。',
-      output: String(err),
-    };
-  }
-};
-
-const cancelRemoteRunAction = async () => {
-  if (!remoteStatus.value.runId) {
-    remoteStatus.value = {
-      ...remoteStatus.value,
-      message: '当前没有可取消的运行任务。',
-    };
-    return;
-  }
-
-  try {
-    await api.cancelRun(remoteStatus.value.runId);
-    remoteStatus.value = {
-      ...remoteStatus.value,
-      running: true,
-      message: `已请求取消任务 ${remoteStatus.value.runId}，等待远程通道结束。`,
-    };
-  } catch (err) {
-    remoteStatus.value = {
-      ...remoteStatus.value,
-      message: `取消任务失败：${err}`,
-    };
   }
 };
 
@@ -694,19 +378,19 @@ onUnmounted(() => {
           尚未配置计算节点。请根据 simfea.config.example.json 创建 .simfea/config.json。
         </p>
         <div class="button-row">
-          <button type="button" class="primary-action" @click="probeRemoteNodeAction" :disabled="!status.connected || !selectedComputeNode">
+          <button type="button" class="primary-action" @click="remoteRuns.probeRemoteNodeAction(selectedComputeNode, activeComputeNodeLabel)" :disabled="!status.connected || !selectedComputeNode">
             测试远程节点
           </button>
-          <button type="button" @click="probeSchedulerAction" :disabled="!status.connected || !selectedComputeNode || remoteStatus.running">
+          <button type="button" @click="remoteRuns.probeSchedulerAction(selectedComputeNode, activeComputeNodeLabel)" :disabled="!status.connected || !selectedComputeNode || remoteStatus.running">
             探测调度器
           </button>
-          <button type="button" @click="startRemoteDemoRunAction" :disabled="!status.connected || !selectedComputeNode || remoteStatus.running">
+          <button type="button" @click="remoteRuns.startRemoteDemoRunAction(selectedComputeNode, activeComputeNodeLabel)" :disabled="!status.connected || !selectedComputeNode || remoteStatus.running">
             运行闭环样例
           </button>
-          <button type="button" @click="startSlurmDemoRunAction" :disabled="!status.connected || !selectedComputeNode || remoteStatus.running">
+          <button type="button" @click="remoteRuns.startSlurmDemoRunAction(selectedComputeNode, activeComputeNodeLabel)" :disabled="!status.connected || !selectedComputeNode || remoteStatus.running">
             运行 Slurm 样例
           </button>
-          <button type="button" class="danger-action" @click="cancelRemoteRunAction" :disabled="!remoteStatus.running || !remoteStatus.runId">
+          <button type="button" class="danger-action" @click="remoteRuns.cancelRemoteRunAction" :disabled="!remoteStatus.running || !remoteStatus.runId">
             取消当前任务
           </button>
         </div>
