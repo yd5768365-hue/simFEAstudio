@@ -284,4 +284,6 @@ git diff --check
 
 ## License
 
-Apache-2.0
+Apache-2.0。
+
+本项目代码以仓库根目录的 `LICENSE` 为准。项目最初使用的 Tauri + Vue + FastAPI sidecar 模板，以及 Vue、Tauri、FastAPI、VTK.js、CalculiX 等第三方工具或依赖，分别遵循其各自的许可证；在使用、分发或集成这些第三方组件时，请同时遵守对应项目的许可条款。
