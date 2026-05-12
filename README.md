@@ -1,49 +1,111 @@
-# SimFEA Studio
+<div align="center">
+  <h1>SimFEA Studio</h1>
+  <p><strong>仿真学习桌面工作台</strong></p>
+  <p>为开源求解器、远程算力和学习记录提供统一的图形化执行环境。</p>
 
-SimFEA Studio is a desktop-oriented CAE workflow studio built with Vue 3, Tauri, and a FastAPI sidecar. It turns local, SSH, Slurm, and solver executions into reproducible engineering evidence: command logs, archived inputs, solver artifacts, result summaries, VTK visualization data, and learning notes.
+  ![Vue.js](https://img.shields.io/badge/Frontend-Vue_3-4FC08D?logo=vuedotjs)
+  ![Tauri](https://img.shields.io/badge/Desktop-Tauri_v2-FFC131?logo=tauri)
+  ![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688?logo=fastapi)
+  ![Python](https://img.shields.io/badge/Language-Python_3.11-3776AB?logo=python)
+  ![Rust](https://img.shields.io/badge/Desktop-Rust-CE422B?logo=rust)
+  ![VTK.js](https://img.shields.io/badge/Visualization-VTK.js-5C6BC0)
+  ![CalculiX](https://img.shields.io/badge/Solver-CalculiX-2F6DB3)
+  ![License](https://img.shields.io/badge/License-Apache_2.0-8162C3)
+</div>
 
-The current milestone is no longer just a UI proof of concept. The project can run a real local CalculiX cantilever case, collect FRD/DAT/STA artifacts, convert FRD output to VTK, summarize displacement and stress metrics, and stream run events back to the frontend.
+---
 
-## Highlights
+## 项目定位
 
-- Vue 3 + Vite frontend inside a Tauri desktop shell.
-- FastAPI Python sidecar for run orchestration and evidence APIs.
-- Local, SSH, Slurm, and declarative solver runner paths.
-- OpenCAEHub-inspired solver configuration with `pre_commands`, `command_template`, `post_commands`, `artifact_patterns`, and `input_files`.
-- CalculiX local end-to-end path with FRD to VTK conversion.
-- VTK.js result viewport with lazy-loaded visualization modules.
-- SSE run event stream with reconnect replay via `from_seq`.
-- Archived run directory containing metadata, command scripts, stdout/stderr, events, inputs, artifacts, reports, and notes.
-- Backend and frontend contract tests covering the current workflow.
+SimFEA Studio 不是新的仿真引擎，不是商业 CAE 的竞品，也不是把物理问题黑盒化的“一键仿真”工具。
 
-## Architecture
+它是一个面向机械仿真学习与工程复盘的个人工作台：把已有命令行求解器、远程算力、本地算力、运行日志、结果文件、VTK 可视化和学习笔记收进同一个可回放的物证仓库。
+
+> 不造求解器，只管理求解器、算力、运行环境和学习记录。
+
+当前版本已经从模板验证推进到真实求解链路：本地 CalculiX 悬臂梁算例可以端到端运行，归档 `.frd/.dat/.sta`，转换 FRD 到 VTK，并生成位移、应力摘要。
+
+## 模板来源
+
+本项目最初基于 [AlanSynn/vue-tauri-fastapi-sidecar-template](https://github.com/AlanSynn/vue-tauri-fastapi-sidecar-template) 搭建 `Tauri + Vue + FastAPI sidecar` 技术骨架。
+
+当前仓库已经改造为 SimFEA Studio 的独立项目：原模板主要提供桌面壳、前端和 Python sidecar 的启动链路；本地/远程执行、Slurm 闭环、求解器声明式配置、FRD 到 VTK、物证归档和学习记录沉淀是围绕机械仿真学习目标扩展出来的功能。
+
+## 当前架构
 
 ```text
-Vue 3 / Vite / Tauri
-  -> HTTP + SSE
-FastAPI sidecar
-  -> LocalRunner / SSHRunner / SlurmRunner / SolverRunner
-  -> CalculiX / OpenFOAM / Elmer adapters
-  -> run archive + result summary + learning report
-  -> VTK.js visualization in the frontend
+Tauri 桌面壳
+→ Vue / Vite 前端 + VTK.js 结果视图
+→ FastAPI Python sidecar
+→ Local / SSH / Slurm / SolverRunner
+→ CalculiX / OpenFOAM / Elmer
+→ .simfea/runs/<run_id> 物证仓库
 ```
 
-The repository keeps the runner boundary explicit:
+SimFEA Studio 的目标不是“替你理解物理”，而是把每一次亲手拆解过的物理概念留下证据：
 
-- `LocalRunner`: runs commands on the local machine.
-- `SSHRunner`: runs commands on a configured remote node.
-- `SlurmRunner`: submits and polls batch jobs.
-- `SolverRunner`: writes solver input files, runs solver commands, collects artifacts, and triggers post-processing.
+- 输入：算例脚本、求解器参数、输入文件、工作目录。
+- 过程：stdout/stderr 实时日志、调度器状态、JobID、SSE 事件流。
+- 结果：求解器原始产物、`result_summary.json`、`solver_result.vtk`。
+- 复盘：`note.md`、`learning_report.md`、可导出的学习记录。
 
-## Current Solver Status
+## 核心特性
 
-| Solver | Status | Notes |
+### 桌面外壳，而非求解器
+
+SimFEA Studio 本身不求解任何物理方程。它的职责是在图形界面中管理那些真正会求解的工具。
+
+| 繁琐的事 | SimFEA Studio 替你管理 |
+| --- | --- |
+| SSH 连接参数、密钥、主机别名 | 统一节点配置，一键探测 |
+| 命令在本地还是远程执行 | Runner 抽象，前端无感切换 |
+| 手动复制粘贴运行日志 | SSE 流式回传，界面实时显示 |
+| 运行记录散落在各处终端 | 每一次运行都归档为学习物证 |
+| 求解器输出格式不统一 | artifact glob 收集 + 后处理摘要 |
+
+### 声明式求解器接入
+
+求解器定义采用 JSON 声明式配置，借鉴 OpenCAEHub `PluginConfig.xml` 的工程化思路：
+
+- `pre_commands`：求解前命令链，例如环境加载或文件准备。
+- `command_template`：求解器命令模板。
+- `post_commands`：求解后命令链，例如指标提取。
+- `artifact_patterns`：结果文件通配符收集，例如 `*.frd`, `*.dat`, `*.sta`。
+- `input_files`：自动写入算例输入文件。
+
+### 统一执行通道
+
+| Runner | 适用场景 | 实现 |
 | --- | --- | --- |
-| CalculiX | Working local end-to-end path | Runs a real cantilever case, archives `.frd/.dat/.sta`, converts FRD to VTK, and extracts summary metrics. |
-| OpenFOAM | Adapter placeholder | Configuration shape is present; a real case bundle still needs to be added. |
-| Elmer | Adapter placeholder | Configuration shape is present; a real case bundle still needs to be added. |
+| LocalRunner | 本地 Windows / Linux | `asyncio.create_subprocess_shell` |
+| SSHRunner | SSH 远程节点 | `ssh` + `scp` 文件操作 |
+| SlurmRunner | HPC 集群 | `sbatch` 提交 + `squeue` 轮询 |
+| SolverRunner | 求解器编排 | 写输入、跑 solver、收集 artifacts、触发后处理 |
 
-Example verified CalculiX output:
+### 结果可视化
+
+- VTK.js 结果视图支持 `.vtk` 和 `.vtu`。
+- VTK 模块按需加载，避免拖慢主界面首屏。
+- CalculiX FRD 输出可转换为 ASCII VTK unstructured grid。
+- 结果摘要会提取 `max_displacement_mm` 和 `max_von_mises_mpa` 等关键指标。
+
+### SSE 运行事件
+
+- 前端实时接收运行日志和状态。
+- 后端事件包含单调递增 `seq`。
+- 断线重连时前端会用 `/events?from_seq=N` 补回最近遗漏事件。
+
+## 求解器支持
+
+| 求解器 | 状态 | 说明 |
+| --- | --- | --- |
+| **CalculiX** | 已端到端验证 | 本地悬臂梁算例，FRD → VTK，指标摘要，物证归档。 |
+| OpenFOAM | 适配器骨架就绪 | 需要接入真实 case 文件。 |
+| Elmer | 适配器骨架就绪 | 需要接入真实 case 文件。 |
+
+### CalculiX 端到端实测
+
+本地 CalculiX v2.10 链路已经打通：
 
 ```text
 status=finished
@@ -54,32 +116,75 @@ max_von_mises_mpa=37.502
 artifacts=cantilever.frd, cantilever.dat, cantilever.sta, result.txt, result_summary.json, solver_result.vtk
 ```
 
-## Quick Start
+## 物证仓库
 
-### 1. Install dependencies
+```text
+.simfea/runs/<run_id>/
+├── meta.json
+├── command.sh
+├── stdout.log
+├── stderr.log
+├── events.jsonl
+├── note.md
+├── learning_report.md
+├── inputs/
+└── artifacts/
+    ├── cantilever.frd
+    ├── cantilever.dat
+    ├── cantilever.sta
+    ├── result.txt
+    ├── result_summary.json
+    └── solver_result.vtk
+```
+
+`.simfea/` 是本地私有目录，已经被 `.gitignore` 忽略。不要把真实服务器账号、密钥、本地求解器路径或运行归档提交到仓库。
+
+## 快速开始
+
+### 1. 准备环境
+
+推荐使用 miniconda 环境：
+
+```powershell
+conda activate simfea
+```
+
+需要安装：
+
+- Node.js / Corepack / pnpm
+- Python 3.11+
+- Rust stable
+- Windows OpenSSH
+- Tauri 构建依赖
+
+### 2. 安装依赖
 
 ```powershell
 corepack pnpm install
 python -m pip install -e .
 ```
 
-For the known Windows development environment, the `simfea` conda environment has been used for Python verification.
+### 3. 配置计算节点
 
-### 2. Create local configuration
+复制示例配置：
 
 ```powershell
 New-Item -ItemType Directory -Force .simfea
 Copy-Item simfea.config.example.json .simfea\config.json
 ```
 
-For a local Windows CalculiX run, configure a local node and point the solver executable to your CalculiX wrapper or binary:
+本地 CalculiX 运行示例：
 
 ```json
 {
   "compute": {
     "default_node": "local",
     "nodes": [
-      { "alias": "local", "label": "Local workstation", "host": "localhost" }
+      {
+        "alias": "local",
+        "label": "Local workstation",
+        "host": "localhost"
+      }
     ]
   },
   "solvers": [
@@ -92,75 +197,52 @@ For a local Windows CalculiX run, configure a local node and point the solver ex
 }
 ```
 
-`.simfea/` is intentionally ignored by Git because it contains local machine paths and run archives.
-
-### 3. Start the sidecar
+### 4. 启动 sidecar
 
 ```powershell
 python src/backends/main.py
 ```
 
-### 4. Start the frontend
+### 5. 启动前端
 
 ```powershell
 corepack pnpm dev:frontend
 ```
 
-### 5. Trigger a local solver run
+### 6. 触发本地 CalculiX 求解
 
 ```powershell
 curl -X POST http://localhost:8008/v1/runs/local/solvers/calculix
 curl http://localhost:8008/v1/runs
 ```
 
-## API Surface
+## API 概览
 
-| Endpoint | Method | Purpose |
+| 接口 | 方法 | 作用 |
 | --- | --- | --- |
-| `/v1/connect` | GET | Sidecar connection and configuration summary. |
-| `/v1/config` | GET | Current API, compute node, solver, and learning settings. |
-| `/v1/compute-nodes` | GET | List configured compute nodes. |
-| `/v1/compute-nodes/{alias}/probe` | GET | Probe node reachability and basic environment details. |
-| `/v1/compute-nodes/{alias}/scheduler-probe` | GET | Probe Slurm/PBS/LSF-style scheduler tools. |
-| `/v1/compute-nodes/{alias}/solvers/probe` | GET | Probe configured solver executables. |
-| `/v1/solvers` | GET | List public solver definitions. |
-| `/v1/runs` | GET | List archived runs. |
-| `/v1/runs/{run_id}` | GET | Load one run archive. |
-| `/v1/runs/{alias}/demo` | POST | Start an SSH demo run. |
-| `/v1/runs/{alias}/slurm-demo` | POST | Start a Slurm demo run. |
-| `/v1/runs/{alias}/solvers/{solver_alias}` | POST | Start a configured solver run. |
-| `/v1/runs/{run_id}/events` | GET | SSE run events; supports `?from_seq=N` replay. |
-| `/v1/runs/{run_id}/artifacts/{artifact_path}` | GET | Download archived artifacts. |
-| `/v1/runs/{run_id}/result-summary` | GET | Load generated result summary. |
-| `/v1/runs/{run_id}/report` | GET | Generate or load a learning report. |
-| `/v1/runs/{run_id}/learning-export` | POST | Export a learning record as md/json/txt. |
-| `/v1/runs/{run_id}/note` | POST | Save a run note. |
-| `/v1/runs/{run_id}/cancel` | POST | Request run cancellation. |
+| `/v1/connect` | GET | sidecar 连接和配置摘要 |
+| `/v1/config` | GET | API、节点、求解器、学习导出配置 |
+| `/v1/compute-nodes` | GET | 计算节点列表 |
+| `/v1/compute-nodes/{alias}/probe` | GET | 探测节点连接和环境 |
+| `/v1/compute-nodes/{alias}/scheduler-probe` | GET | 探测 Slurm / PBS / LSF 工具 |
+| `/v1/compute-nodes/{alias}/solvers/probe` | GET | 探测求解器可执行文件 |
+| `/v1/solvers` | GET | 求解器公开定义 |
+| `/v1/runs` | GET | 运行归档列表 |
+| `/v1/runs/{run_id}` | GET | 单次运行归档详情 |
+| `/v1/runs/{alias}/demo` | POST | 启动 SSH demo 运行 |
+| `/v1/runs/{alias}/slurm-demo` | POST | 启动 Slurm demo 运行 |
+| `/v1/runs/{alias}/solvers/{solver_alias}` | POST | 启动声明式求解器运行 |
+| `/v1/runs/{run_id}/events` | GET | SSE 运行事件，支持 `?from_seq=N` |
+| `/v1/runs/{run_id}/artifacts/{artifact_path}` | GET | 读取归档产物 |
+| `/v1/runs/{run_id}/result-summary` | GET | 读取结果摘要 |
+| `/v1/runs/{run_id}/report` | GET | 生成或读取学习报告 |
+| `/v1/runs/{run_id}/learning-export` | POST | 导出 md/json/txt 学习记录 |
+| `/v1/runs/{run_id}/note` | POST | 保存运行笔记 |
+| `/v1/runs/{run_id}/cancel` | POST | 请求取消运行 |
 
-## Run Archive Layout
+## 验证
 
-```text
-.simfea/runs/<run_id>/
-  meta.json
-  command.sh
-  stdout.log
-  stderr.log
-  events.jsonl
-  note.md
-  learning_report.md
-  inputs/
-  artifacts/
-    cantilever.frd
-    cantilever.dat
-    cantilever.sta
-    result.txt
-    result_summary.json
-    solver_result.vtk
-```
-
-## Verification
-
-Current verification recorded in the development log:
+当前开发日志记录的最新验证：
 
 ```powershell
 python -m unittest discover -s src/backends/tests -v
@@ -170,27 +252,35 @@ python -m py_compile src/backends/main.py src/backends/simfea_api/*.py src/backe
 git diff --check
 ```
 
-Latest known coverage:
+已知结果：
 
-- Backend: 75 unit tests passing.
-- Frontend: 20 Vitest tests passing.
-- Production frontend build passes with only the known lazy-loaded VTK XML reader chunk warning.
+- 后端：75 个单元测试通过。
+- 前端：20 个 Vitest 测试通过。
+- 生产构建通过，仅保留 VTK XML reader 按需 chunk 偏大的提示。
 
-## Documentation
+## 文档
 
-- `docs/DEV_LOG_2026-05-12.md`: detailed development log and verification notes.
-- `docs/ARCHITECTURE_ROADMAP.md`: architecture direction and borrowed patterns from sim-main and OpenCAEHub.
-- `docs/RUNNER_DESIGN.md`: runner boundaries and execution model.
-- `docs/API_CONTRACTS.md`: API contract examples.
-- `docs/AI_FEA_EXPLORATION_NOTE_2030.md`: project introduction and AI + FEA exploration note.
+- `docs/DEV_LOG_2026-05-12.md`：开发日志和验证记录。
+- `docs/ARCHITECTURE_ROADMAP.md`：架构路线图，以及 sim-main / OpenCAEHub 借鉴分析。
+- `docs/RUNNER_DESIGN.md`：Runner 边界和执行模型。
+- `docs/API_CONTRACTS.md`：API 契约和示例响应。
+- `docs/AI_FEA_EXPLORATION_NOTE_2030.md`：AI + 有限元探索笔记和项目介绍。
 
-## Roadmap
+## 路线图
 
-- Add real OpenFOAM case integration.
-- Add real Elmer case integration.
-- Add FreeCAD or Salome preprocessing hooks.
-- Improve frontend result inspection around generated VTK and solver artifacts.
-- Continue evolving AI-assisted learning reports and engineering evidence review.
+- [x] Vue / Tauri / FastAPI sidecar 闭环。
+- [x] SSH 远程运行和物证归档。
+- [x] Slurm 提交、轮询和取消。
+- [x] LocalRunner 本地运行。
+- [x] 声明式 SolverRunner。
+- [x] SSE 断线重连和 `from_seq` 回放。
+- [x] VTK.js 结果视图。
+- [x] CalculiX 本地端到端链路。
+- [x] CalculiX FRD → VTK 转换。
+- [ ] OpenFOAM 真实 case 接入。
+- [ ] Elmer 真实 case 接入。
+- [ ] FreeCAD / Salome 前处理入口。
+- [ ] AI 辅助工程证据评分和复盘建议。
 
 ## License
 
