@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { connectResponseSchema, probeNodeResponseSchema, runArchiveSchema } from './contracts'
+import { ApiClientError, extractValidationIssues } from './client'
+import {
+  connectResponseSchema,
+  probeNodeResponseSchema,
+  probeSolversResponseSchema,
+  runArchiveSchema,
+  sseEventSchema,
+  startSolverRunResponseSchema,
+} from './contracts'
 
 describe('connectResponseSchema', () => {
   it('parses a full connect response', () => {
@@ -25,12 +33,22 @@ describe('connectResponseSchema', () => {
             configured: true,
           },
         ],
+        solvers: [
+          {
+            alias: 'calculix',
+            label: 'CalculiX',
+            kind: 'structural',
+            executable: 'ccx',
+            artifact_patterns: ['*.frd', 'result.txt'],
+          },
+        ],
         toolchain: [{ name: 'test', role: 'solver', status: 'ready' }],
       },
     })
     expect(result.data.port).toBe(8008)
     expect(result.data.compute_nodes).toHaveLength(1)
     expect(result.data.compute_nodes[0].alias).toBe('node1')
+    expect(result.data.solvers?.[0].alias).toBe('calculix')
     expect(result.message).toContain('Connected')
   })
 
@@ -87,6 +105,7 @@ describe('runArchiveSchema', () => {
       remote_workdir: '/home/test/runs/run-002',
       local_archive: '/tmp/runs/run-002',
       artifacts: ['result.txt', 'result.vtk', 'logs.out'],
+      input_files: ['inputs/case.inp'],
       learning_report: '/tmp/runs/run-002/report.md',
       note: 'test note',
       report: '# Report',
@@ -120,6 +139,136 @@ describe('runArchiveSchema', () => {
     expect(result.summary?.metrics?.max_displacement_mm).toBe(1.5)
     expect(result.scheduler).toBe('slurm')
     expect(result.requested_cpus).toBe(4)
+    expect(result.input_files).toEqual(['inputs/case.inp'])
+  })
+})
+
+describe('sseEventSchema', () => {
+  it('discriminates stdout events', () => {
+    const result = sseEventSchema.parse({
+      run_id: 'run-001',
+      type: 'stdout',
+      seq: 1,
+      archive_path: '/tmp/run-001',
+      line: 'computation step 1 done',
+    })
+    expect(result.type).toBe('stdout')
+  })
+
+  it('discriminates stderr events', () => {
+    const result = sseEventSchema.parse({
+      run_id: 'run-001',
+      type: 'stderr',
+      seq: 2,
+      archive_path: '/tmp/run-001',
+      line: 'warning: deprecated flag',
+    })
+    expect(result.type).toBe('stderr')
+  })
+
+  it('discriminates status events', () => {
+    const result = sseEventSchema.parse({
+      run_id: 'run-001',
+      type: 'status',
+      seq: 3,
+      archive_path: '/tmp/run-001',
+      status: 'running',
+      line: 'Task started.',
+      remote_workdir: '/tmp/remote/run-001',
+    })
+    expect(result.type).toBe('status')
+    expect(result.status).toBe('running')
+  })
+
+  it('discriminates finished events', () => {
+    const result = sseEventSchema.parse({
+      run_id: 'run-001',
+      type: 'finished',
+      seq: 4,
+      archive_path: '/tmp/run-001',
+      status: 'ok',
+      exit_code: 0,
+      line: 'Completed.',
+      job_id: '225383',
+      allocated_node: 'node42',
+    })
+    expect(result.type).toBe('finished')
+    expect(result.exit_code).toBe(0)
+    expect(result.job_id).toBe('225383')
+  })
+
+  it('discriminates artifact events', () => {
+    const result = sseEventSchema.parse({
+      run_id: 'run-001',
+      type: 'artifact',
+      seq: 5,
+      archive_path: '/tmp/run-001',
+      line: 'artifact archived',
+      artifact: 'artifacts/result.txt',
+    })
+    expect(result.type).toBe('artifact')
+    expect(result.artifact).toBe('artifacts/result.txt')
+  })
+
+  it('rejects unknown event types', () => {
+    expect(() =>
+      sseEventSchema.parse({
+        run_id: 'run-001',
+        type: 'unknown_event',
+        seq: 0,
+        archive_path: '/tmp/run-001',
+      })
+    ).toThrow()
+  })
+})
+
+describe('solver contracts', () => {
+  it('parses a solver probe response', () => {
+    const result = probeSolversResponseSchema.parse({
+      message: 'node1 solver probe completed.',
+      data: {
+        alias: 'node1',
+        label: 'Node 1',
+        connected: true,
+        duration_seconds: 0.5,
+        exit_code: 0,
+        stdout: 'calculix=/usr/bin/ccx\n',
+        stderr: '',
+        solvers: [
+          {
+            alias: 'calculix',
+            label: 'CalculiX',
+            kind: 'structural',
+            executable: 'ccx',
+            artifact_patterns: ['*.frd', 'result.txt'],
+            available: true,
+            path: '/usr/bin/ccx',
+          },
+        ],
+      },
+    })
+    expect(result.data.solvers[0].available).toBe(true)
+  })
+
+  it('parses a start solver run response', () => {
+    const result = startSolverRunResponseSchema.parse({
+      message: 'node1 calculix solver run started.',
+      data: {
+        run_id: 'run-001',
+        status: 'created',
+        archive_path: '/tmp/run-001',
+        remote_workdir: '/home/test/run-001',
+        compute_node: 'node1',
+        solver: {
+          alias: 'calculix',
+          label: 'CalculiX',
+          kind: 'structural',
+          executable: 'ccx',
+          artifact_patterns: ['*.frd', 'result.txt'],
+        },
+      },
+    })
+    expect(result.data.solver.alias).toBe('calculix')
   })
 })
 
@@ -148,5 +297,35 @@ describe('probeNodeResponseSchema', () => {
     expect(result.data.duration_seconds).toBe(1.23)
     expect(result.data.exit_code).toBe(0)
     expect(result.message).toContain('completed')
+  })
+})
+
+describe('ApiClientError', () => {
+  it('stores status and message', () => {
+    const err = new ApiClientError(404, 'Not found', { detail: 'missing' })
+    expect(err.name).toBe('ApiClientError')
+    expect(err.status).toBe(404)
+    expect(err.message).toBe('Not found')
+    expect(err.body).toEqual({ detail: 'missing' })
+  })
+
+  it('extractValidationIssues extracts details array', () => {
+    const err = new ApiClientError(422, 'Validation failed', {
+      message: 'Validation failed',
+      details: [{ msg: 'field required' }, { msg: 'invalid type' }],
+    })
+    const issues = extractValidationIssues(err)
+    expect(issues).toEqual(['field required', 'invalid type'])
+  })
+
+  it('extractValidationIssues falls back to message', () => {
+    const err = new ApiClientError(500, 'Server error', null)
+    const issues = extractValidationIssues(err)
+    expect(issues).toEqual(['Server error'])
+  })
+
+  it('extractValidationIssues handles non-ApiClientError', () => {
+    const issues = extractValidationIssues(new Error('boom'))
+    expect(issues).toEqual(['boom'])
   })
 })

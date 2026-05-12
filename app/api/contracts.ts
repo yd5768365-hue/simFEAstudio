@@ -10,6 +10,17 @@ export const toolchainItemSchema = z.object({
 
 export type ToolchainItem = z.output<typeof toolchainItemSchema>
 
+export const solverDefinitionSchema = z.object({
+  alias: z.string(),
+  label: z.string(),
+  kind: z.string(),
+  executable: z.string(),
+  description: z.string().optional(),
+  artifact_patterns: z.array(z.string()),
+})
+
+export type SolverDefinition = z.output<typeof solverDefinitionSchema>
+
 export const computeNodeSchema = z.object({
   alias: z.string(),
   label: z.string(),
@@ -80,6 +91,7 @@ export const runArchiveSchema = z.object({
   exit_code: z.number().optional(),
   remote_workdir: z.string(),
   local_archive: z.string(),
+  input_files: z.array(z.string()).optional(),
   artifacts: z.array(z.string()),
   learning_report: z.string().optional(),
   result_summary: z.string().optional(),
@@ -114,6 +126,7 @@ export const connectResponseSchema = z.object({
     learning_default_format: z.string(),
     default_compute_node: z.string().optional(),
     compute_nodes: z.array(computeNodeSchema),
+    solvers: z.array(solverDefinitionSchema).optional(),
     toolchain: z.array(toolchainItemSchema).optional(),
   }),
 })
@@ -216,6 +229,20 @@ export const startSlurmDemoRunResponseSchema = z.object({
 
 export type StartSlurmDemoRunResponse = z.output<typeof startSlurmDemoRunResponseSchema>
 
+export const startSolverRunResponseSchema = z.object({
+  message: z.string(),
+  data: z.object({
+    run_id: z.string(),
+    status: z.string(),
+    archive_path: z.string(),
+    remote_workdir: z.string(),
+    compute_node: z.string(),
+    solver: solverDefinitionSchema,
+  }),
+})
+
+export type StartSolverRunResponse = z.output<typeof startSolverRunResponseSchema>
+
 export const cancelRunResponseSchema = z.object({
   message: z.string(),
   data: z.unknown(),
@@ -247,6 +274,64 @@ export const probeNodeResponseSchema = z.object({
 
 export type ProbeNodeResponse = z.output<typeof probeNodeResponseSchema>
 
+// ── SSE Events ──────────────────────────────────────────────
+// Mirrors src/backends/simfea_api/schemas.py
+
+export const sseEventBaseSchema = z.object({
+  run_id: z.string(),
+  type: z.string(),
+  seq: z.number(),
+  archive_path: z.string(),
+})
+
+export const stdoutEventSchema = sseEventBaseSchema.extend({
+  type: z.literal('stdout'),
+  line: z.string(),
+})
+
+export const stderrEventSchema = sseEventBaseSchema.extend({
+  type: z.literal('stderr'),
+  line: z.string(),
+})
+
+export const statusEventSchema = sseEventBaseSchema.extend({
+  type: z.literal('status'),
+  status: z.enum(['running', 'submitting', 'queued', 'canceling']),
+  line: z.string(),
+  remote_workdir: z.string().nullable().optional(),
+  job_id: z.string().nullable().optional(),
+})
+
+export const artifactEventSchema = sseEventBaseSchema.extend({
+  type: z.literal('artifact'),
+  line: z.string(),
+  artifact: z.string().optional(),
+})
+
+export const finishedEventSchema = sseEventBaseSchema.extend({
+  type: z.literal('finished'),
+  status: z.string(),
+  exit_code: z.number(),
+  line: z.string(),
+  job_id: z.string().nullable().optional(),
+  allocated_node: z.string().nullable().optional(),
+})
+
+export const sseEventSchema = z.discriminatedUnion('type', [
+  stdoutEventSchema,
+  stderrEventSchema,
+  statusEventSchema,
+  artifactEventSchema,
+  finishedEventSchema,
+])
+
+export type SseEvent = z.output<typeof sseEventSchema>
+export type StdoutEvent = z.output<typeof stdoutEventSchema>
+export type StderrEvent = z.output<typeof stderrEventSchema>
+export type StatusEvent = z.output<typeof statusEventSchema>
+export type ArtifactEvent = z.output<typeof artifactEventSchema>
+export type FinishedEvent = z.output<typeof finishedEventSchema>
+
 export const probeSchedulerResponseSchema = z.object({
   message: z.string(),
   data: runCommandResultSchema.extend({
@@ -270,3 +355,29 @@ export const probeSchedulerResponseSchema = z.object({
 })
 
 export type ProbeSchedulerResponse = z.output<typeof probeSchedulerResponseSchema>
+
+export const probeSolversResponseSchema = z.object({
+  message: z.string(),
+  data: runCommandResultSchema.extend({
+    alias: z.string(),
+    label: z.string(),
+    connected: z.boolean(),
+    solvers: z.array(
+      solverDefinitionSchema.extend({
+        available: z.boolean(),
+        path: z.string(),
+      })
+    ),
+  }),
+})
+
+export type ProbeSolversResponse = z.output<typeof probeSolversResponseSchema>
+
+export const listSolversResponseSchema = z.object({
+  message: z.string(),
+  data: z.object({
+    solvers: z.array(solverDefinitionSchema),
+  }),
+})
+
+export type ListSolversResponse = z.output<typeof listSolversResponseSchema>

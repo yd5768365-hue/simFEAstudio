@@ -2,7 +2,7 @@ import json
 import os
 import shutil
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
@@ -75,6 +75,20 @@ class ComputeNode:
 
 
 @dataclass
+class SolverDefinition:
+    alias: str
+    label: str
+    kind: str
+    executable: str
+    command_template: str
+    input_files: dict[str, str]
+    artifact_patterns: list[str]
+    description: str = ""
+    pre_commands: list[str] = field(default_factory=list)
+    post_commands: list[str] = field(default_factory=list)
+
+
+@dataclass
 class AppSettings:
     api_port: int
     api_public_host: str
@@ -87,7 +101,10 @@ class AppSettings:
     scp_exe: str
     compute_nodes: dict[str, ComputeNode]
     default_compute_node: str
+    solvers: dict[str, SolverDefinition]
     toolchain: list[dict[str, str]]
+    run_retention_days: int = 90
+    max_runs: int = 100
 
 
 def deep_merge(base: dict, override: dict) -> dict:
@@ -141,6 +158,10 @@ def default_config() -> dict:
         "paths": {
             "runs_root": os.getenv("SIMFEA_RUNS_ROOT", str(DEFAULT_RUNS_ROOT)),
         },
+        "cleanup": {
+            "run_retention_days": int(os.getenv("SIMFEA_RUN_RETENTION_DAYS", "90")),
+            "max_runs": int(os.getenv("SIMFEA_MAX_RUNS", "100")),
+        },
         "learning": {
             "export_root": os.getenv("SIMFEA_LEARNING_EXPORT_ROOT", str(PROJECT_ROOT / ".simfea" / "learning")),
             "default_format": os.getenv("SIMFEA_LEARNING_DEFAULT_FORMAT", "md"),
@@ -151,9 +172,102 @@ def default_config() -> dict:
             "scp_exe": os.getenv("SIMFEA_SCP_EXE", ""),
         },
         "compute": {
-            "default_node": os.getenv("SIMFEA_DEFAULT_COMPUTE_NODE", ""),
-            "nodes": [],
+            "default_node": os.getenv("SIMFEA_DEFAULT_COMPUTE_NODE", "local"),
+            "nodes": [
+                {
+                    "alias": "local",
+                    "label": "Local Machine",
+                    "host": "localhost",
+                    "user": "",
+                    "remote_runs_root": ".simfea/runs",
+                },
+            ],
         },
+        "solvers": [
+            {
+                "alias": "calculix",
+                "label": "CalculiX",
+                "kind": "structural",
+                "executable": "ccx",
+                "description": "Structural finite element solver adapter.",
+                "command_template": "ccx cantilever",
+                "artifact_patterns": ["*.frd", "*.dat", "*.sta", "result.txt"],
+                "pre_commands": [],
+                "post_commands": [
+                    "printf 'max_displacement_mm=' && grep -o 'U[[:space:]]*[0-9.]*' cantilever.dat 2>/dev/null | tail -1 | awk '{print $NF}' || true",
+                    "printf 'max_von_mises_mpa=' && grep -o 'S[[:space:]]*[0-9.]*' cantilever.dat 2>/dev/null | tail -1 | awk '{print $NF}' || true",
+                ],
+                "input_files": {
+                    "cantilever.inp": """*HEADING
+SimFEA Studio CalculiX adapter smoke case (N, mm, MPa)
+*NODE
+1, 0., 0., 0.
+2, 1000., 0., 0.
+*ELEMENT, TYPE=B31, ELSET=beam
+1, 1, 2
+*MATERIAL, NAME=steel
+*ELASTIC
+210000., 0.3
+*BEAM SECTION, ELSET=beam, MATERIAL=steel, SECTION=RECT
+20., 20.
+0., 0., 1.
+*BOUNDARY
+1, 1, 6
+*STEP
+*STATIC
+*CLOAD
+2, 2, -100.
+*NODE FILE
+U
+*EL FILE, ELSET=beam
+S
+*END STEP
+""",
+                },
+            },
+            {
+                "alias": "openfoam",
+                "label": "OpenFOAM",
+                "kind": "fluid",
+                "executable": "icoFoam",
+                "description": "OpenFOAM case adapter. Provide a real case through config for production runs.",
+                "command_template": "foamDictionary -help >/dev/null 2>&1 || true; echo 'OpenFOAM adapter ready: provide case files in solvers.openfoam.input_files'; touch result.txt",
+                "artifact_patterns": ["log.*", "postProcessing/**", "result.txt"],
+                "pre_commands": [],
+                "post_commands": [
+                    "printf 'solver=openfoam\n'",
+                ],
+                "input_files": {
+                    "README.simfea.txt": "OpenFOAM adapter placeholder. Replace input_files with a real OpenFOAM case in .simfea/config.json.\n",
+                },
+            },
+            {
+                "alias": "elmer",
+                "label": "Elmer",
+                "kind": "multiphysics",
+                "executable": "ElmerSolver",
+                "description": "Elmer multiphysics solver adapter.",
+                "command_template": "ElmerSolver case.sif",
+                "artifact_patterns": ["case.result", "*.ep", "*.vtu", "result.txt"],
+                "pre_commands": [],
+                "post_commands": [
+                    "printf 'solver=elmer\n'",
+                ],
+                "input_files": {
+                    "case.sif": """Header
+  CHECK KEYWORDS Warn
+End
+Simulation
+  Max Output Level = 3
+  Coordinate System = Cartesian
+  Simulation Type = Steady State
+  Steady State Max Iterations = 1
+  Output File = case.result
+End
+""",
+                },
+            },
+        ],
         "toolchain": DEFAULT_TOOLCHAIN,
     }
 
@@ -170,6 +284,23 @@ def load_settings() -> AppSettings:
         relative_to_project=True,
     )
     raw_config = deep_merge(default_config(), load_config_file(config_path))
+
+    # Merge solvers by alias: default solvers provide the base (including
+    # input_files templates); user config solvers with the same alias override
+    # individual fields.  This lets the user set e.g. the calculix executable
+    # without losing the openfoam / elmer defaults.
+    default_solver_items = {s["alias"]: s for s in default_config().get("solvers", [])}
+    raw_config.setdefault("solvers", [])
+    for item in raw_config["solvers"]:
+        alias = item["alias"]
+        if alias in default_solver_items:
+            merged = dict(default_solver_items[alias])
+            merged.update(item)
+            default_solver_items[alias] = merged
+        else:
+            default_solver_items[alias] = item
+    # Put merged result back
+    raw_config["solvers"] = list(default_solver_items.values())
 
     nodes = {}
     for item in raw_config.get("compute", {}).get("nodes", []):
@@ -200,6 +331,22 @@ def load_settings() -> AppSettings:
     if learning_default_format not in learning_formats:
         learning_default_format = learning_formats[0]
 
+    solvers = {}
+    for item in raw_config.get("solvers", []):
+        solver = SolverDefinition(
+            alias=item["alias"],
+            label=item.get("label") or item["alias"],
+            kind=item.get("kind", "external"),
+            executable=item.get("executable", item["alias"]),
+            command_template=item.get("command_template", ""),
+            input_files=dict(item.get("input_files", {})),
+            artifact_patterns=list(item.get("artifact_patterns", ["result.txt"])),
+            description=item.get("description", ""),
+            pre_commands=list(item.get("pre_commands", [])),
+            post_commands=list(item.get("post_commands", [])),
+        )
+        solvers[solver.alias] = solver
+
     return AppSettings(
         api_port=int(raw_config["api"]["port"]),
         api_public_host=raw_config["api"].get("public_host", "localhost"),
@@ -215,10 +362,12 @@ def load_settings() -> AppSettings:
         scp_exe=find_executable(raw_config["ssh"].get("scp_exe", ""), "scp", DEFAULT_WINDOWS_SCP),
         compute_nodes=nodes,
         default_compute_node=default_node,
+        solvers=solvers,
         toolchain=raw_config.get("toolchain", DEFAULT_TOOLCHAIN),
+        run_retention_days=int(raw_config.get("cleanup", {}).get("run_retention_days", 90)),
+        max_runs=int(raw_config.get("cleanup", {}).get("max_runs", 100)),
     )
 
 
 def settings() -> AppSettings:
     return load_settings()
-

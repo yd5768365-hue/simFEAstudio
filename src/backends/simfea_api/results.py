@@ -3,7 +3,37 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from .run_archive import read_optional_text
+from .run_archive import append_text, read_optional_text
+
+
+def post_process_solver_artifacts(run_dir: Path) -> dict:
+    """Convert solver-native result files to VTK and extract metrics.
+
+    Finds .frd files in artifacts/, converts first one to VTK via frd_to_vtk,
+    and appends extracted metrics to result.txt.
+    """
+    artifacts_dir = run_dir / "artifacts"
+    frd_files = sorted(artifacts_dir.glob("*.frd"))
+    if not frd_files:
+        return {}
+
+    from .frd_to_vtk import frd_to_vtk
+
+    vtk_path = artifacts_dir / "solver_result.vtk"
+    try:
+        metrics = frd_to_vtk(frd_files[0], vtk_path)
+    except (ValueError, OSError) as exc:
+        return {"error": str(exc)}
+
+    result_path = artifacts_dir / "result.txt"
+    lines = []
+    if result_path.exists():
+        lines.append(result_path.read_text(encoding="utf-8").rstrip())
+    lines.append(f"max_displacement_mm={metrics['max_displacement_mm']:.6f}")
+    lines.append(f"max_von_mises_mpa={metrics['max_von_mises_mpa']:.6f}")
+    result_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    return metrics
 
 
 def utc_now() -> str:
@@ -47,6 +77,14 @@ def run_artifacts(run_dir: Path, *, include_summary: bool = True) -> list[str]:
             continue
         artifacts.append(relative)
     return artifacts
+
+
+def primary_vtk_artifact(artifacts: list[str]) -> str:
+    for suffix in (".vtk", ".vtu"):
+        for artifact in artifacts:
+            if artifact.lower().endswith(suffix):
+                return artifact
+    return ""
 
 
 def generate_cantilever_vtk_artifact(
@@ -140,9 +178,11 @@ def generate_result_summary(run_dir: Path) -> Optional[dict]:
         **parse_key_value_text(result_text),
     }
 
+    artifacts = run_artifacts(run_dir, include_summary=False)
     solver = meta.get("solver") or parsed.get("solver") or ""
     runner = meta.get("runner") or ""
-    case_type = "cantilever_beam" if solver in {"demo-shell", "demo-slurm-shell"} else "unknown"
+    solver_kind = meta.get("solver_kind") or ""
+    case_type = "cantilever_beam" if solver in {"demo-shell", "demo-slurm-shell"} else solver_kind or "unknown"
     run_node = (
         meta.get("allocated_node")
         or parsed.get("run_node")
@@ -155,13 +195,15 @@ def generate_result_summary(run_dir: Path) -> Optional[dict]:
     requested_memory = meta.get("requested_memory") or parsed.get("requested_memory") or parsed.get("memory_request") or ""
     displacement_mm = parse_optional_float(parsed.get("max_displacement_mm"))
     stress_mpa = parse_optional_float(parsed.get("max_von_mises_mpa"))
-    vtk_artifact = ""
+    vtk_artifact = primary_vtk_artifact(artifacts)
     if case_type == "cantilever_beam":
         vtk_artifact = generate_cantilever_vtk_artifact(
             run_dir,
             displacement_mm=displacement_mm,
             stress_mpa=stress_mpa,
         )
+        artifacts = run_artifacts(run_dir, include_summary=False)
+    visualization_ready = bool(vtk_artifact) or case_type == "cantilever_beam"
 
     summary = {
         "schema_version": "simfea.result-summary.v1",
@@ -199,7 +241,7 @@ def generate_result_summary(run_dir: Path) -> Optional[dict]:
             "max_displacement_mm": "mm",
             "max_von_mises_mpa": "MPa",
         },
-        "artifacts": run_artifacts(run_dir, include_summary=False),
+        "artifacts": artifacts,
         "sources": {
             "result_text": "artifacts/result.txt" if (artifacts_dir / "result.txt").exists() else "",
             "stdout_log": "stdout.log" if (run_dir / "stdout.log").exists() else "",
@@ -210,7 +252,7 @@ def generate_result_summary(run_dir: Path) -> Optional[dict]:
             "primary_metric": "max_displacement_mm",
             "stress_metric": "max_von_mises_mpa",
             "vtk_artifact": vtk_artifact,
-            "ready": case_type != "unknown",
+            "ready": visualization_ready,
         },
         "raw_values": parsed,
     }
@@ -222,4 +264,3 @@ def generate_result_summary(run_dir: Path) -> Optional[dict]:
     meta["artifacts"] = run_artifacts(run_dir)
     meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
     return summary
-

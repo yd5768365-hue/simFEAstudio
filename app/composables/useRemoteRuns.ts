@@ -1,6 +1,7 @@
 import { computed, ref } from 'vue'
 import type { SimfeaClient } from '@/api/simfeaClient'
 import type { RunEventHandlers } from '@/composables/useRunEvents'
+import type { SolverDefinition } from '@/types'
 
 export interface ComputeNodeConfig {
   alias: string
@@ -47,6 +48,7 @@ export function useRemoteRuns(options: UseRemoteRunsOptions) {
 
   const computeNodes = ref<ComputeNodeConfig[]>([])
   const selectedComputeNode = ref('')
+  const solvers = ref<SolverDefinition[]>([])
 
   const activeComputeNode = computed(
     () => computeNodes.value.find((node) => node.alias === selectedComputeNode.value) ?? null
@@ -61,6 +63,10 @@ export function useRemoteRuns(options: UseRemoteRunsOptions) {
   const setComputeNodes = (nodes: ComputeNodeConfig[], defaultNode: string) => {
     computeNodes.value = nodes
     selectedComputeNode.value = defaultNode || nodes[0]?.alias || ''
+  }
+
+  const setSolvers = (items: SolverDefinition[]) => {
+    solvers.value = items
   }
 
   const probeRemoteNodeAction = async () => {
@@ -166,6 +172,48 @@ export function useRemoteRuns(options: UseRemoteRunsOptions) {
         ...remoteStatus.value,
         checked: true,
         message: `${label} 调度器探测失败。`,
+        output: String(err),
+      }
+    }
+  }
+
+  const probeSolversAction = async () => {
+    if (!selectedComputeNode.value) {
+      remoteStatus.value = {
+        ...remoteStatus.value,
+        checked: true,
+        connected: false,
+        running: false,
+        message: '请先在配置文件中添加计算节点。',
+        output: '',
+      }
+      return
+    }
+
+    const label = activeComputeNodeLabel.value
+    try {
+      remoteStatus.value = {
+        ...remoteStatus.value,
+        checked: true,
+        message: `正在探测 ${label} 上的求解器...`,
+        output: '',
+      }
+      const result = await api.probeSolvers(selectedComputeNode.value)
+      const output = result.data.solvers
+        .map((solver) => `${solver.label} / ${solver.alias}: ${solver.available ? solver.path : '未发现'}`)
+        .join('\n')
+      remoteStatus.value = {
+        ...remoteStatus.value,
+        checked: true,
+        connected: result.data.connected,
+        message: result.data.connected ? `${label} 求解器探测完成。` : `${label} 求解器探测失败。`,
+        output: `${output}${result.data.stderr ? `\n错误输出：\n${result.data.stderr}` : ''}`.trim(),
+      }
+    } catch (err) {
+      remoteStatus.value = {
+        ...remoteStatus.value,
+        checked: true,
+        message: `${label} 求解器探测失败。`,
         output: String(err),
       }
     }
@@ -349,6 +397,89 @@ export function useRemoteRuns(options: UseRemoteRunsOptions) {
     }
   }
 
+  const startSolverRunAction = async (solverAlias: string) => {
+    if (!selectedComputeNode.value) {
+      remoteStatus.value = {
+        ...remoteStatus.value,
+        running: false,
+        message: '请先在配置文件中添加计算节点。',
+        output: '',
+      }
+      return
+    }
+
+    const solver = solvers.value.find((item) => item.alias === solverAlias)
+    const label = activeComputeNodeLabel.value
+    try {
+      closeRunEventStream()
+      remoteStatus.value = {
+        ...remoteStatus.value,
+        checked: true,
+        running: true,
+        message: `正在启动 ${solver?.label ?? solverAlias} 求解器运行...`,
+        output: '',
+        archivePath: '',
+        remoteWorkdir: '',
+      }
+
+      const result = await api.startSolverRun(selectedComputeNode.value, solverAlias)
+      const runId = result.data.run_id
+      remoteStatus.value = {
+        ...remoteStatus.value,
+        runId,
+        archivePath: result.data.archive_path,
+        remoteWorkdir: result.data.remote_workdir,
+        message: `${label} 上的 ${result.data.solver.label} 运行 ${runId} 已创建，正在接收实时日志。`,
+      }
+
+      openRunEventStream(runId, {
+        onEvent: async (payload) => {
+          if (payload.line) {
+            remoteStatus.value.output += `${payload.line}\n`
+            appendLog(`[SolverRunner] ${payload.line}`)
+          }
+          if (payload.archive_path) {
+            remoteStatus.value.archivePath = payload.archive_path
+          }
+          if (payload.remote_workdir) {
+            remoteStatus.value.remoteWorkdir = payload.remote_workdir
+          }
+          if (payload.type === 'finished') {
+            const finishedNormally = payload.status === 'finished' && payload.exit_code === 0
+            const canceled = payload.status === 'canceled'
+            remoteStatus.value = {
+              ...remoteStatus.value,
+              connected: canceled ? remoteStatus.value.connected : finishedNormally,
+              running: false,
+              message: canceled
+                ? '求解器任务已取消，取消记录已进入物证仓库。'
+                : finishedNormally
+                  ? '求解器运行完成，输入、日志和结果已进入物证仓库。'
+                  : '求解器运行失败，请查看 stderr 和学习报告。',
+            }
+            closeRunEventStream()
+            await onRunFinished(runId)
+          }
+        },
+        onError: () => {
+          remoteStatus.value = {
+            ...remoteStatus.value,
+            running: false,
+            message: '求解器实时事件流中断。',
+          }
+          closeRunEventStream()
+        },
+      })
+    } catch (err) {
+      remoteStatus.value = {
+        ...remoteStatus.value,
+        running: false,
+        message: '求解器运行启动失败。',
+        output: String(err),
+      }
+    }
+  }
+
   const cancelRemoteRunAction = async () => {
     if (!remoteStatus.value.runId) {
       remoteStatus.value = {
@@ -384,15 +515,19 @@ export function useRemoteRuns(options: UseRemoteRunsOptions) {
   return {
     remoteStatus,
     computeNodes,
+    solvers,
     selectedComputeNode,
     activeComputeNode,
     activeComputeNodeLabel,
     remoteLabel,
     setComputeNodes,
+    setSolvers,
     probeRemoteNodeAction,
     probeSchedulerAction,
+    probeSolversAction,
     startRemoteDemoRunAction,
     startSlurmDemoRunAction,
+    startSolverRunAction,
     cancelRemoteRunAction,
     clearRemoteOutputAction,
   }

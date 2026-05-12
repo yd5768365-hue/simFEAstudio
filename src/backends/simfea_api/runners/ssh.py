@@ -46,6 +46,10 @@ def sh_quote(value: str) -> str:
     return "'" + value.replace("'", "'\"'\"'") + "'"
 
 
+def is_local_node(node: ComputeNode) -> bool:
+    return node.host in ("localhost", "127.0.0.1", "::1") or node.alias == "local"
+
+
 def remote_workdir_for(node: ComputeNode, run_id: str) -> str:
     return f"{node.remote_runs_root.rstrip('/')}/{run_id}"
 

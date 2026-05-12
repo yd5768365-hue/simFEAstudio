@@ -21,13 +21,15 @@ except ImportError:
     from inference import infer_text_api
 
 try:
-    from .simfea_api.config import ComputeNode, settings
+    from .simfea_api.config import ComputeNode, SolverDefinition, settings
     from .simfea_api.run_archive import (
         RemoteRun,
         append_text,
         ensure_run_files,
         load_archived_runs,
+        remember_run_event,
         read_optional_text,
+        replay_run_events,
         run_metadata,
         save_run_metadata,
     )
@@ -37,11 +39,13 @@ try:
     )
     from .simfea_api.results import (
         generate_result_summary as service_generate_result_summary,
+        post_process_solver_artifacts,
         run_artifacts as service_run_artifacts,
     )
     from .simfea_api.runners.ssh import (
         build_scp_command as runner_build_scp_command,
         build_ssh_command as runner_build_ssh_command,
+        is_local_node as runner_is_local_node,
         remote_workdir_for as runner_remote_workdir_for,
         run_command as runner_run_command,
         sh_quote as runner_sh_quote,
@@ -55,6 +59,7 @@ try:
     )
     from .simfea_api.runners.remote_files import (
         download_remote_file as runner_download_remote_file,
+        download_remote_artifacts as runner_download_remote_artifacts,
         download_remote_result as runner_download_remote_result,
         download_slurm_artifacts as runner_download_slurm_artifacts,
         read_remote_text as runner_read_remote_text,
@@ -64,14 +69,25 @@ try:
         apply_slurm_completion_status as runner_apply_slurm_completion_status,
         poll_slurm_until_done as runner_poll_slurm_until_done,
     )
+    from .simfea_api.runners.solver import (
+        build_solver_probe_command as runner_build_solver_probe_command,
+        build_solver_run_script as runner_build_solver_run_script,
+        public_solver as runner_public_solver,
+        render_command_template as runner_render_command_template,
+    )
+    from .simfea_api.cleanup import cleanup_old_runs
+    from .simfea_api.logger import create_logger
 except ImportError:
-    from simfea_api.config import ComputeNode, settings
+    from simfea_api.cleanup import cleanup_old_runs
+    from simfea_api.config import ComputeNode, SolverDefinition, settings
     from simfea_api.run_archive import (
         RemoteRun,
         append_text,
         ensure_run_files,
         load_archived_runs,
+        remember_run_event,
         read_optional_text,
+        replay_run_events,
         run_metadata,
         save_run_metadata,
     )
@@ -81,11 +97,13 @@ except ImportError:
     )
     from simfea_api.results import (
         generate_result_summary as service_generate_result_summary,
+        post_process_solver_artifacts,
         run_artifacts as service_run_artifacts,
     )
     from simfea_api.runners.ssh import (
         build_scp_command as runner_build_scp_command,
         build_ssh_command as runner_build_ssh_command,
+        is_local_node as runner_is_local_node,
         remote_workdir_for as runner_remote_workdir_for,
         run_command as runner_run_command,
         sh_quote as runner_sh_quote,
@@ -99,6 +117,7 @@ except ImportError:
     )
     from simfea_api.runners.remote_files import (
         download_remote_file as runner_download_remote_file,
+        download_remote_artifacts as runner_download_remote_artifacts,
         download_remote_result as runner_download_remote_result,
         download_slurm_artifacts as runner_download_slurm_artifacts,
         read_remote_text as runner_read_remote_text,
@@ -108,6 +127,15 @@ except ImportError:
         apply_slurm_completion_status as runner_apply_slurm_completion_status,
         poll_slurm_until_done as runner_poll_slurm_until_done,
     )
+    from simfea_api.runners.solver import (
+        build_solver_probe_command as runner_build_solver_probe_command,
+        build_solver_run_script as runner_build_solver_run_script,
+        public_solver as runner_public_solver,
+        render_command_template as runner_render_command_template,
+    )
+    from simfea_api.logger import create_logger
+
+log = create_logger("sidecar")
 
 server_instance = None
 remote_runs = {}
@@ -171,12 +199,20 @@ def get_compute_node(alias: str | None = None) -> ComputeNode:
     return node
 
 
+def get_solver(solver_alias: str) -> SolverDefinition:
+    solver = settings().solvers.get(solver_alias)
+    if solver is None:
+        raise HTTPException(status_code=404, detail=f"Solver not found: {solver_alias}")
+    return solver
+
+
 run_artifacts = service_run_artifacts
 generate_result_summary = service_generate_result_summary
 generate_learning_report = service_generate_learning_report
 export_learning_record = service_export_learning_record
 build_scp_command = runner_build_scp_command
 build_ssh_command = runner_build_ssh_command
+is_local_node = runner_is_local_node
 remote_workdir_for = runner_remote_workdir_for
 run_command = runner_run_command
 sh_quote = runner_sh_quote
@@ -185,12 +221,17 @@ build_slurm_submit_script = runner_build_slurm_submit_script
 parse_sbatch_job_id = runner_parse_sbatch_job_id
 query_slurm_state = runner_query_slurm_state
 download_remote_file = runner_download_remote_file
+download_remote_artifacts = runner_download_remote_artifacts
 download_remote_result = runner_download_remote_result
 download_slurm_artifacts = runner_download_slurm_artifacts
 read_remote_text = runner_read_remote_text
 sync_remote_log_file = runner_sync_remote_log_file
 poll_slurm_until_done = runner_poll_slurm_until_done
 apply_slurm_completion_status = runner_apply_slurm_completion_status
+build_solver_probe_command = runner_build_solver_probe_command
+build_solver_run_script = runner_build_solver_run_script
+public_solver = runner_public_solver
+render_command_template = runner_render_command_template
 
 
 
@@ -234,13 +275,16 @@ async def emit_finished_event(
 
 
 async def emit_remote_event(run: RemoteRun, event_type: str, **payload):
+    run._event_seq += 1
     message = {
         "run_id": run.run_id,
         "type": event_type,
+        "seq": run._event_seq,
         "archive_path": str(run.local_dir),
         **payload,
     }
     append_text(run.local_dir / "events.jsonl", json.dumps(message, ensure_ascii=False))
+    remember_run_event(run, message)
     await run.queue.put(message)
 
 
@@ -298,6 +342,133 @@ async def cancel_slurm_job(run: RemoteRun, node: ComputeNode):
     await emit_remote_event(run, "status", status="canceling", line=f"已向 Slurm 发送 scancel：{run.job_id}")
 
 
+def _find_local_shell() -> str | None:
+    """Find an available shell for local command execution."""
+    import shutil
+    for shell in ["bash", "sh", "zsh"]:
+        if shutil.which(shell):
+            return shell
+    return None
+
+
+async def _run_local_command(cmd: str, cwd: Path):
+    """Run a command locally via the platform shell (cmd.exe on Windows).
+
+    We intentionally use the platform shell (not bash) because solver commands
+    often contain Windows paths (C:\\..., backslashes) and .bat wrappers that
+    only work with cmd.exe.  bash -lc would mangle the backslashes.
+    """
+    proc = await asyncio.create_subprocess_shell(
+        cmd, cwd=str(cwd),
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+    )
+    stdout, stderr = await proc.communicate()
+    return proc.returncode, stdout, stderr
+
+
+async def execute_local_run(run: RemoteRun, solver_definition=None):
+    """Execute a solver run locally without SSH.
+
+    Does what build_solver_run_script() does for remote runs, but
+    natively in Python — write inputs, run pre_commands, solver,
+    post_commands, collect artifacts, and post-process results.
+    """
+    run.status = "running"
+    run.started_at = utc_now()
+    save_run_metadata(run)
+    await emit_remote_event(
+        run, "status", status="running",
+        line="本地求解器启动。",
+        remote_workdir=str(run.local_dir),
+    )
+
+    workdir = run.local_dir
+    solver = solver_definition
+
+    # Write input files
+    for name, content in run.input_files.items():
+        input_path = workdir / name
+        input_path.parent.mkdir(parents=True, exist_ok=True)
+        input_path.write_text(content, encoding="utf-8")
+        await emit_remote_event(run, "stdout", line=f"写入输入文件: {name}")
+
+    # Pre-commands
+    for cmd in (solver.pre_commands if solver else []):
+        await emit_remote_event(run, "stdout", line=f"pre_command={cmd}")
+        _, stdout, stderr = await _run_local_command(cmd, workdir)
+        for line in stdout.decode("utf-8", errors="replace").splitlines():
+            await emit_remote_event(run, "stdout", line=line)
+        for line in stderr.decode("utf-8", errors="replace").splitlines():
+            await emit_remote_event(run, "stderr", line=line)
+
+    # Solver command
+    command = run.command or (
+        render_command_template(solver.command_template, run, solver) if solver else ""
+    )
+    await emit_remote_event(run, "stdout", line=f"command={command}")
+    exit_code, stdout, stderr = await _run_local_command(command, workdir)
+    for line in stdout.decode("utf-8", errors="replace").splitlines():
+        append_text(run.local_dir / "stdout.log", line)
+        await emit_remote_event(run, "stdout", line=line)
+    for line in stderr.decode("utf-8", errors="replace").splitlines():
+        append_text(run.local_dir / "stderr.log", line)
+        await emit_remote_event(run, "stderr", line=line)
+
+    # Post-commands
+    for cmd in (solver.post_commands if solver else []):
+        await emit_remote_event(run, "stdout", line=f"post_command={cmd}")
+        _, stdout, stderr = await _run_local_command(cmd, workdir)
+        for line in stdout.decode("utf-8", errors="replace").splitlines():
+            await emit_remote_event(run, "stdout", line=line)
+
+    # Write result.txt
+    result_lines = [
+        "SimFEA Studio local solver result",
+        f"run_id={run.run_id}",
+        f"solver={run.solver}",
+        f"solver_executable={solver.executable if solver else ''}",
+        "hostname=localhost",
+        f"status={'success' if exit_code == 0 else 'failed'}",
+        f"exit_code={exit_code}",
+        f"artifact_patterns={' '.join(run.artifact_patterns)}",
+    ]
+    (workdir / "result.txt").write_text("\n".join(result_lines) + "\n", encoding="utf-8")
+
+    # Collect artifacts locally
+    artifacts_dir = run.artifacts_dir
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
+    for pattern in run.artifact_patterns:
+        for match in sorted(workdir.glob(pattern)):
+            if not match.is_file():
+                continue
+            dest = artifacts_dir / match.relative_to(workdir)
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(match.read_bytes())
+            if match.name == "result.txt":
+                run.result_downloaded = True
+
+    # Post-process solver artifacts (FRD→VTK)
+    if run.solver_kind and run.solver_kind not in ("", "cantilever_beam"):
+        post_process_solver_artifacts(run.local_dir)
+
+    run.exit_code = exit_code
+    if run.cancel_requested:
+        run.status = "canceled"
+    elif exit_code == 0:
+        run.status = "finished"
+    else:
+        run.status = "failed"
+    run.finished_at = utc_now()
+    persist_run_outputs(run)
+    final_line = "本地任务已取消。" if run.status == "canceled" else f"本地任务结束，退出码 {exit_code}。"
+    await emit_finished_event(
+        run, status=run.status,
+        exit_code=exit_code if exit_code is not None else -1,
+        line=final_line, include_archive_path=True,
+    )
+    await run.queue.put(None)
+
+
 async def execute_remote_run(run: RemoteRun, node: ComputeNode):
     if run.cancel_requested:
         run.status = "canceled"
@@ -339,10 +510,15 @@ async def execute_remote_run(run: RemoteRun, node: ComputeNode):
         if run.cancel_requested:
             run.status = "canceled"
         elif run.exit_code == 0:
-            await download_remote_result(run, node, emit_event=emit_remote_event)
+            await download_remote_artifacts(run, node, run.artifact_patterns, emit_event=emit_remote_event)
+            if not run.result_downloaded:
+                await download_remote_result(run, node, emit_event=emit_remote_event)
             run.status = "finished"
         else:
+            await download_remote_artifacts(run, node, run.artifact_patterns, emit_event=emit_remote_event)
             run.status = "failed"
+        if run.solver_kind and run.solver_kind not in ("", "cantilever_beam"):
+            post_process_solver_artifacts(run.local_dir)
         run.finished_at = utc_now()
         persist_run_outputs(run)
         final_line = "远程任务已取消。" if run.status == "canceled" else f"远程任务结束，退出码 {run.exit_code}。"
@@ -532,6 +708,7 @@ def get_app_config():
                 "default_node": current.default_compute_node,
                 "nodes": [public_compute_node(node) for node in current.compute_nodes.values()],
             },
+            "solvers": [public_solver(solver) for solver in current.solvers.values()],
             "toolchain": current.toolchain,
         },
     }
@@ -539,7 +716,7 @@ def get_app_config():
 
 @app.get("/v1/connect")
 def connect_to_api_server():
-    print("[server] Connecting to server...", flush=True)
+    log.info("Connecting to server...")
     current = settings()
     host = f"http://{current.api_public_host}:{current.api_port}"
     return {
@@ -555,6 +732,7 @@ def connect_to_api_server():
             "learning_default_format": current.learning_default_format,
             "default_compute_node": current.default_compute_node,
             "compute_nodes": [public_compute_node(node) for node in current.compute_nodes.values()],
+            "solvers": [public_solver(solver) for solver in current.solvers.values()],
             "toolchain": current.toolchain,
         },
     }
@@ -631,6 +809,45 @@ async def probe_compute_node_scheduler(alias: str):
             "label": node.label,
             "connected": ok,
             "details": details,
+            **result,
+        },
+    }
+
+
+@app.get("/v1/solvers")
+def list_solvers():
+    current = settings()
+    return {
+        "message": "SimFEA Studio solvers loaded.",
+        "data": {
+            "solvers": [public_solver(solver) for solver in current.solvers.values()],
+        },
+    }
+
+
+@app.get("/v1/compute-nodes/{alias}/solvers/probe")
+async def probe_compute_node_solvers(alias: str):
+    node = get_compute_node(alias)
+    current = settings()
+    solvers = list(current.solvers.values())
+    result = await run_command(build_ssh_command(node, build_solver_probe_command(solvers)), timeout=25.0)
+    ok = result["exit_code"] == 0
+    values = parse_key_value_stdout(result["stdout"]) if ok else {}
+    solver_statuses = [
+        {
+            **public_solver(solver),
+            "available": bool(values.get(solver.alias)),
+            "path": values.get(solver.alias, ""),
+        }
+        for solver in solvers
+    ]
+    return {
+        "message": f"{alias} solver probe completed." if ok else f"{alias} solver probe failed.",
+        "data": {
+            "alias": node.alias,
+            "label": node.label,
+            "connected": ok,
+            "solvers": solver_statuses,
             **result,
         },
     }
@@ -823,10 +1040,14 @@ async def start_demo_run(alias: str):
         created_at=utc_now(),
         toolchain=current.toolchain,
     )
-    run.command = f"bash -lc {sh_quote(build_evidence_demo_script(run))}"
     ensure_run_files(run)
     remote_runs[run_id] = run
-    asyncio.create_task(execute_remote_run(run, node))
+    if is_local_node(node):
+        asyncio.create_task(execute_local_run(run))
+    else:
+        run.command = f"bash -lc {sh_quote(build_evidence_demo_script(run))}"
+        save_run_metadata(run)
+        asyncio.create_task(execute_remote_run(run, node))
     return {
         "message": f"{node.alias} remote evidence run started.",
         "data": {
@@ -881,6 +1102,53 @@ async def start_slurm_demo_run(alias: str):
             "partition": run.partition,
             "requested_cpus": run.requested_cpus,
             "requested_memory": run.requested_memory,
+        },
+    }
+
+
+@app.post("/v1/runs/{alias}/solvers/{solver_alias}")
+async def start_solver_run(alias: str, solver_alias: str):
+    node = get_compute_node(alias)
+    solver = get_solver(solver_alias)
+    current = settings()
+    run_id = f"run_{uuid.uuid4().hex[:10]}"
+    remote_workdir = remote_workdir_for(node, run_id)
+    local_dir = current.runs_root / run_id
+    run = RemoteRun(
+        run_id=run_id,
+        case_name=f"{solver.label} solver adapter run",
+        solver=solver.alias,
+        solver_label=solver.label,
+        solver_kind=solver.kind,
+        node_alias=node.alias,
+        node_label=node.label,
+        remote_workdir=remote_workdir,
+        local_dir=local_dir,
+        artifacts_dir=local_dir / "artifacts",
+        command="",
+        created_at=utc_now(),
+        runner="SolverRunner",
+        toolchain=current.toolchain,
+        artifact_patterns=solver.artifact_patterns,
+        input_files=solver.input_files,
+    )
+    ensure_run_files(run)
+    remote_runs[run_id] = run
+    if is_local_node(node):
+        asyncio.create_task(execute_local_run(run, solver))
+    else:
+        run.command = f"bash -lc {sh_quote(build_solver_run_script(run, solver))}"
+        save_run_metadata(run)
+        asyncio.create_task(execute_remote_run(run, node))
+    return {
+        "message": f"{node.alias} {solver.alias} solver run started.",
+        "data": {
+            "run_id": run_id,
+            "status": run.status,
+            "archive_path": str(run.local_dir),
+            "remote_workdir": run.remote_workdir,
+            "compute_node": node.alias,
+            "solver": public_solver(solver),
         },
     }
 
@@ -978,7 +1246,7 @@ async def cancel_run(run_id: str):
 
 
 @app.get("/v1/runs/{run_id}/events")
-async def stream_run_events(run_id: str):
+async def stream_run_events(run_id: str, from_seq: int | None = None):
     run = remote_runs.get(run_id)
     if run is None:
         async def missing_run_events():
@@ -988,6 +1256,8 @@ async def stream_run_events(run_id: str):
                     {
                         "run_id": run_id,
                         "type": "finished",
+                        "seq": 0,
+                        "archive_path": "",
                         "status": "failed",
                         "exit_code": -1,
                         "line": "没有找到这个运行任务。",
@@ -999,9 +1269,37 @@ async def stream_run_events(run_id: str):
         return EventSourceResponse(missing_run_events())
 
     async def event_generator():
+        replayed = replay_run_events(run, from_seq)
+        for event in replayed:
+            yield {
+                "event": "message",
+                "data": json.dumps(event, ensure_ascii=False),
+            }
+
+        if run._stream_closed or run.status in ("finished", "failed", "canceled"):
+            if replayed and replayed[-1].get("type") == "finished":
+                return
+            yield {
+                "event": "message",
+                "data": json.dumps(
+                    {
+                        "run_id": run.run_id,
+                        "type": "finished",
+                        "seq": run._event_seq,
+                        "archive_path": str(run.local_dir),
+                        "status": run.status,
+                        "exit_code": run.exit_code if run.exit_code is not None else -1,
+                        "line": "运行已结束。",
+                    },
+                    ensure_ascii=False,
+                ),
+            }
+            return
+
         while True:
             event = await run.queue.get()
             if event is None:
+                run._stream_closed = True
                 break
             yield {
                 "event": "message",
@@ -1020,21 +1318,18 @@ def start_api_server(**kwargs):
     port = kwargs.get("port", settings().api_port)
     try:
         if server_instance is None:
-            print("[sidecar] Starting API server...", flush=True)
+            log.info("Starting API server...", port=port)
             config = Config(app, host="0.0.0.0", port=port, log_level="info")
             server_instance = Server(config)
             asyncio.run(server_instance.serve())
         else:
-            print(
-                "[sidecar] Failed to start new server. Server instance already running.",
-                flush=True,
-            )
+            log.warn("Failed to start new server. Server instance already running.")
     except Exception as e:
-        print(f"[sidecar] Error, failed to start API server {e}", flush=True)
+        log.error(f"Failed to start API server: {e}")
 
 
 def stdin_loop():
-    print("[sidecar] Waiting for commands...", flush=True)
+    log.info("Waiting for commands...")
     while True:
         raw_input = sys.stdin.readline()
         if raw_input == "":
@@ -1045,13 +1340,10 @@ def stdin_loop():
         user_input = raw_input.strip()
         match user_input:
             case "sidecar shutdown":
-                print("[sidecar] Received 'sidecar shutdown' command.", flush=True)
+                log.info("Received shutdown command.")
                 kill_process()
             case _:
-                print(
-                    f"[sidecar] Invalid command [{user_input}]. Try again.",
-                    flush=True,
-                )
+                log.warn(f"Invalid command: {user_input}")
 
 
 def start_input_thread():
@@ -1060,9 +1352,15 @@ def start_input_thread():
         input_thread.daemon = True
         input_thread.start()
     except Exception:
-        print("[sidecar] Failed to start input handler.", flush=True)
+        log.error("Failed to start input handler.")
 
 
 if __name__ == "__main__":
+    try:
+        result = cleanup_old_runs(settings())
+        if result["removed"]:
+            log.info(f"Startup cleanup: removed {result['removed']} old runs, {result['kept']} kept")
+    except Exception as e:
+        log.warn(f"Startup cleanup skipped: {e}")
     start_input_thread()
     start_api_server()

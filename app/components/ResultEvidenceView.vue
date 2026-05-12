@@ -42,8 +42,14 @@ const evidenceArtifacts = computed(
   () => props.run?.artifacts?.filter((artifact) => artifact !== 'artifacts/result_summary.json') ?? []
 )
 
+const inputFiles = computed(() => props.run?.input_files ?? [])
+
 const selectedArtifacts = computed(() =>
   evidenceArtifacts.value.length ? evidenceArtifacts.value.join('、') : '暂无结果文件'
+)
+
+const selectedInputFiles = computed(() =>
+  inputFiles.value.length ? inputFiles.value.join('、') : '暂无输入文件'
 )
 
 const visualizationDataSource = computed(() =>
@@ -207,6 +213,11 @@ const stressSegments = computed(() =>
           <span>归档</span>
           <strong>{{ selectedArtifacts }}</strong>
           <small>artifacts</small>
+        </article>
+        <article>
+          <span>输入</span>
+          <strong>{{ selectedInputFiles }}</strong>
+          <small>inputs</small>
         </article>
       </div>
     </div>

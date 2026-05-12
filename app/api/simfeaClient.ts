@@ -7,12 +7,15 @@ import {
   generateReportResponseSchema,
   getRunResponseSchema,
   listRunsResponseSchema,
+  listSolversResponseSchema,
   probeNodeResponseSchema,
   probeSchedulerResponseSchema,
+  probeSolversResponseSchema,
   saveNoteBodySchema,
   saveNoteResponseSchema,
   startDemoRunResponseSchema,
   startSlurmDemoRunResponseSchema,
+  startSolverRunResponseSchema,
 } from '@/api/contracts'
 
 const connectContract = contract({
@@ -71,6 +74,19 @@ const probeSchedulerContract = contract({
   response: probeSchedulerResponseSchema,
 })
 
+const probeSolversContract = contract({
+  method: 'GET',
+  path: '/v1/compute-nodes/:alias/solvers/probe',
+  params: ['alias'] as const,
+  response: probeSolversResponseSchema,
+})
+
+const listSolversContract = contract({
+  method: 'GET',
+  path: '/v1/solvers',
+  response: listSolversResponseSchema,
+})
+
 const startDemoRunContract = contract({
   method: 'POST',
   path: '/v1/runs/:alias/demo',
@@ -83,6 +99,13 @@ const startSlurmDemoRunContract = contract({
   path: '/v1/runs/:alias/slurm-demo',
   params: ['alias'] as const,
   response: startSlurmDemoRunResponseSchema,
+})
+
+const startSolverRunContract = contract({
+  method: 'POST',
+  path: '/v1/runs/:alias/solvers/:solverAlias',
+  params: ['alias', 'solverAlias'] as const,
+  response: startSolverRunResponseSchema,
 })
 
 const cancelRunContract = contract({
@@ -109,8 +132,12 @@ export function createSimfeaClient(baseUrl: string, appendLog: (line: string) =>
       }),
     probeComputeNode: (alias: string) => request(probeNodeContract, { params: { alias } }),
     probeScheduler: (alias: string) => request(probeSchedulerContract, { params: { alias } }),
+    probeSolvers: (alias: string) => request(probeSolversContract, { params: { alias } }),
+    listSolvers: () => request(listSolversContract),
     startDemoRun: (alias: string) => request(startDemoRunContract, { params: { alias } }),
     startSlurmDemoRun: (alias: string) => request(startSlurmDemoRunContract, { params: { alias } }),
+    startSolverRun: (alias: string, solverAlias: string) =>
+      request(startSolverRunContract, { params: { alias, solverAlias } }),
     cancelRun: (runId: string) => request(cancelRunContract, { params: { runId } }),
   }
 }

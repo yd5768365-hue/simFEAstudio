@@ -84,7 +84,8 @@ const remoteRuns = useRemoteRuns({
   appendLog,
 })
 
-const { remoteStatus, computeNodes, selectedComputeNode, activeComputeNodeLabel, remoteLabel } = remoteRuns
+const { remoteStatus, computeNodes, solvers, selectedComputeNode, activeComputeNodeLabel, remoteLabel } =
+  remoteRuns
 
 const connectionLabel = computed(() => (status.value.connected ? '侧车服务在线' : '侧车服务待连接'))
 
@@ -196,6 +197,7 @@ const connectServerAction = async () => {
     learningExportTarget.value = result.data.learning_export_root ?? ''
     selectedLearningFormat.value = result.data.learning_default_format ?? 'md'
     remoteRuns.setComputeNodes(result.data.compute_nodes ?? [], result.data.default_compute_node ?? '')
+    remoteRuns.setSolvers(result.data.solvers ?? [])
     toolchainItems.value = result.data.toolchain ?? []
     await loadRunsAction()
   } catch (err) {
@@ -340,6 +342,7 @@ onUnmounted(() => {
 
       <RemotePanel
         :compute-nodes="computeNodes"
+        :solvers="solvers"
         :selected-compute-node="selectedComputeNode"
         :active-compute-node-label="activeComputeNodeLabel"
         :remote-status="remoteStatus"
@@ -347,8 +350,10 @@ onUnmounted(() => {
         :actions="{
           probeRemoteNodeAction: () => remoteRuns.probeRemoteNodeAction(),
           probeSchedulerAction: () => remoteRuns.probeSchedulerAction(),
+          probeSolversAction: () => remoteRuns.probeSolversAction(),
           startRemoteDemoRunAction: () => remoteRuns.startRemoteDemoRunAction(),
           startSlurmDemoRunAction: () => remoteRuns.startSlurmDemoRunAction(),
+          startSolverRunAction: (solverAlias: string) => remoteRuns.startSolverRunAction(solverAlias),
           cancelRemoteRunAction: () => remoteRuns.cancelRemoteRunAction(),
         }"
         @update:selected-compute-node="selectedComputeNode = $event"

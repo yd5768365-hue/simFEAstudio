@@ -399,6 +399,13 @@ Cargo.lock
 
 # SimFEA Studio local evidence archive
 .simfea/
+.codex-run/
+
+# Local solver installations (CalculiX, OpenFOAM, etc.)
+CalculiX_2_10_win_002/
+
+# Temp files
+*.tmp
 
 # Local reference checkouts
 sim-main/

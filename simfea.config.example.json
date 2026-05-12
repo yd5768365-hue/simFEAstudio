@@ -16,8 +16,15 @@
     "scp_exe": ""
   },
   "compute": {
-    "default_node": "remote-main",
+    "default_node": "local",
     "nodes": [
+      {
+        "alias": "local",
+        "label": "Local Machine",
+        "host": "localhost",
+        "user": "",
+        "remote_runs_root": ".simfea/runs"
+      },
       {
         "alias": "remote-main",
         "label": "Remote SSH compute node",
@@ -32,6 +39,53 @@
       }
     ]
   },
+  "solvers": [
+    {
+      "alias": "calculix",
+      "label": "CalculiX",
+      "kind": "structural",
+      "executable": "ccx",
+      "description": "Structural finite element solver adapter.",
+      "command_template": "ccx cantilever",
+      "artifact_patterns": ["*.frd", "*.dat", "*.sta", "result.txt"],
+      "pre_commands": [],
+      "post_commands": [
+        "printf 'max_displacement_mm=' && grep -o 'U[[:space:]]*[0-9.]*' cantilever.dat 2>/dev/null | tail -1 | awk '{print $NF}' || true",
+        "printf 'max_von_mises_mpa=' && grep -o 'S[[:space:]]*[0-9.]*' cantilever.dat 2>/dev/null | tail -1 | awk '{print $NF}' || true"
+      ],
+      "input_files": {
+        "cantilever.inp": "*HEADING\nSimFEA Studio CalculiX adapter smoke case (N, mm, MPa)\n*NODE\n1, 0., 0., 0.\n2, 1000., 0., 0.\n*ELEMENT, TYPE=B31, ELSET=beam\n1, 1, 2\n*MATERIAL, NAME=steel\n*ELASTIC\n210000., 0.3\n*BEAM SECTION, ELSET=beam, MATERIAL=steel, SECTION=RECT\n20., 20.\n0., 0., 1.\n*BOUNDARY\n1, 1, 6\n*STEP\n*STATIC\n*CLOAD\n2, 2, -100.\n*NODE FILE\nU\n*EL FILE, ELSET=beam\nS\n*END STEP\n"
+      }
+    },
+    {
+      "alias": "openfoam",
+      "label": "OpenFOAM",
+      "kind": "fluid",
+      "executable": "icoFoam",
+      "description": "OpenFOAM adapter. Replace input_files with a real case before production runs.",
+      "command_template": "foamDictionary -help >/dev/null 2>&1 || true; echo 'OpenFOAM adapter ready'; touch result.txt",
+      "artifact_patterns": ["log.*", "postProcessing/**", "result.txt"],
+      "pre_commands": [],
+      "post_commands": ["printf 'solver=openfoam\n'"],
+      "input_files": {
+        "README.simfea.txt": "OpenFOAM adapter placeholder. Replace input_files with a real OpenFOAM case in .simfea/config.json.\n"
+      }
+    },
+    {
+      "alias": "elmer",
+      "label": "Elmer",
+      "kind": "multiphysics",
+      "executable": "ElmerSolver",
+      "description": "Elmer multiphysics solver adapter.",
+      "command_template": "ElmerSolver case.sif",
+      "artifact_patterns": ["case.result", "*.ep", "*.vtu", "result.txt"],
+      "pre_commands": [],
+      "post_commands": ["printf 'solver=elmer\n'"],
+      "input_files": {
+        "case.sif": "Header\n  CHECK KEYWORDS Warn\nEnd\nSimulation\n  Max Output Level = 3\n  Coordinate System = Cartesian\n  Simulation Type = Steady State\n  Steady State Max Iterations = 1\n  Output File = case.result\nEnd\n"
+      }
+    }
+  ],
   "toolchain": [
     {
       "name": "FreeCAD",

@@ -1,10 +1,4 @@
 <script setup lang="ts">
-import '@kitware/vtk.js/Rendering/Profiles/Geometry'
-
-import vtkPolyDataReader from '@kitware/vtk.js/IO/Legacy/PolyDataReader'
-import vtkActor from '@kitware/vtk.js/Rendering/Core/Actor'
-import vtkMapper from '@kitware/vtk.js/Rendering/Core/Mapper'
-import vtkFullScreenRenderWindow from '@kitware/vtk.js/Rendering/Misc/FullScreenRenderWindow'
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import type { RunArchive } from '@/types'
 
@@ -21,6 +15,31 @@ let fullScreenRenderer: any = null
 let actor: any = null
 let mapper: any = null
 let reader: any = null
+let vtkModulesPromise: Promise<{
+  vtkActor: any
+  vtkMapper: any
+  vtkFullScreenRenderWindow: any
+  vtkPolyDataReader: any
+  vtkXMLPolyDataReader: any
+}> | null = null
+
+const loadVtkModules = () => {
+  vtkModulesPromise ??= Promise.all([
+    import('@kitware/vtk.js/Rendering/Profiles/Geometry'),
+    import('@kitware/vtk.js/IO/Legacy/PolyDataReader'),
+    import('@kitware/vtk.js/IO/XML/XMLPolyDataReader'),
+    import('@kitware/vtk.js/Rendering/Core/Actor'),
+    import('@kitware/vtk.js/Rendering/Core/Mapper'),
+    import('@kitware/vtk.js/Rendering/Misc/FullScreenRenderWindow'),
+  ]).then(([, polyDataReader, xmlPolyDataReader, actorModule, mapperModule, renderWindowModule]) => ({
+    vtkActor: actorModule.default,
+    vtkMapper: mapperModule.default,
+    vtkFullScreenRenderWindow: renderWindowModule.default,
+    vtkPolyDataReader: polyDataReader.default,
+    vtkXMLPolyDataReader: xmlPolyDataReader.default,
+  }))
+  return vtkModulesPromise
+}
 
 const vtkArtifact = computed(() => {
   const fromSummary = props.run?.summary?.visualization?.vtk_artifact
@@ -73,9 +92,15 @@ const renderVtk = async () => {
       throw new Error(`VTK 文件读取失败：${response.status}`)
     }
 
-    const vtkText = await response.text()
-    reader = vtkPolyDataReader.newInstance()
-    reader.parseAsText(vtkText)
+    const { vtkActor, vtkMapper, vtkFullScreenRenderWindow, vtkPolyDataReader, vtkXMLPolyDataReader } =
+      await loadVtkModules()
+    const isVtu = vtkArtifact.value.toLowerCase().endsWith('.vtu')
+    reader = isVtu ? vtkXMLPolyDataReader.newInstance() : vtkPolyDataReader.newInstance()
+    if (isVtu) {
+      reader.parseAsArrayBuffer(await response.arrayBuffer())
+    } else {
+      reader.parseAsText(await response.text())
+    }
     const polyData = reader.getOutputData(0)
     const scalars = polyData.getPointData().getScalars()
 

@@ -6,6 +6,8 @@ from typing import Optional
 
 from .config import settings
 
+EVENT_BUFFER_LIMIT = 200
+
 
 @dataclass
 class RemoteRun:
@@ -37,6 +39,36 @@ class RemoteRun:
     requested_memory: Optional[str] = None
     slurm_script: Optional[str] = None
     last_scheduler_state: Optional[str] = None
+    solver_label: Optional[str] = None
+    solver_kind: Optional[str] = None
+    artifact_patterns: list[str] = field(default_factory=lambda: ["result.txt"])
+    input_files: dict[str, str] = field(default_factory=dict)
+    event_buffer: list[dict] = field(default_factory=list)
+    _event_seq: int = 0
+    _stream_closed: bool = False
+
+
+def remember_run_event(run: RemoteRun, event: dict, limit: int = EVENT_BUFFER_LIMIT):
+    run.event_buffer.append(event)
+    if len(run.event_buffer) > limit:
+        del run.event_buffer[: len(run.event_buffer) - limit]
+
+
+def replay_run_events(run: RemoteRun, from_seq: int | None) -> list[dict]:
+    if from_seq is None:
+        return []
+    return [event for event in run.event_buffer if event.get("seq", 0) > from_seq]
+
+
+def run_input_files(run: RemoteRun) -> list[str]:
+    inputs_dir = run.local_dir / "inputs"
+    if not inputs_dir.exists():
+        return []
+    return [
+        str(path.relative_to(run.local_dir)).replace("\\", "/")
+        for path in sorted(inputs_dir.rglob("*"))
+        if path.is_file()
+    ]
 
 
 def run_metadata(run: RemoteRun):
@@ -55,6 +87,8 @@ def run_metadata(run: RemoteRun):
         "run_id": run.run_id,
         "case_name": run.case_name,
         "solver": run.solver,
+        "solver_label": run.solver_label,
+        "solver_kind": run.solver_kind,
         "runner": run.runner,
         "compute_node": run.node_alias,
         "compute_node_label": run.node_label,
@@ -78,6 +112,8 @@ def run_metadata(run: RemoteRun):
         "requested_cpus": run.requested_cpus,
         "requested_memory": run.requested_memory,
         "last_scheduler_state": run.last_scheduler_state,
+        "artifact_patterns": run.artifact_patterns,
+        "input_files": run_input_files(run),
     }
 
 
@@ -96,6 +132,10 @@ def ensure_run_files(run: RemoteRun):
     (run.local_dir / "stderr.log").touch(exist_ok=True)
     (run.local_dir / "events.jsonl").touch(exist_ok=True)
     (run.local_dir / "command.sh").write_text(run.command, encoding="utf-8")
+    for name, content in run.input_files.items():
+        input_path = run.local_dir / "inputs" / name
+        input_path.parent.mkdir(parents=True, exist_ok=True)
+        input_path.write_text(content, encoding="utf-8")
     if run.slurm_script:
         (run.local_dir / "slurm_job.slurm").write_text(run.slurm_script, encoding="utf-8")
     save_run_metadata(run)
@@ -140,4 +180,3 @@ def read_tail(path: Path, max_lines: int = 28) -> str:
     if not content.strip():
         return "暂无"
     return "\n".join(content.splitlines()[-max_lines:])
-

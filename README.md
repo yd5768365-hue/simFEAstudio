@@ -1,291 +1,196 @@
-<div align="center">
-  <h1>SimFEA Studio</h1>
-  <p><strong>仿真学习桌面工作台</strong></p>
-  <p>为开源求解器、远程算力和学习记录提供统一的图形化执行环境。</p>
+# SimFEA Studio
 
-  ![Vue.js](https://img.shields.io/badge/Frontend-Vue_3-4FC08D?logo=vuedotjs)
-  ![Tauri](https://img.shields.io/badge/Desktop-Tauri_v2-FFC131?logo=tauri)
-  ![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688?logo=fastapi)
-  ![Python](https://img.shields.io/badge/Language-Python_3.11-3776AB?logo=python)
-  ![Rust](https://img.shields.io/badge/Desktop-Rust-CE422B?logo=rust)
-  ![License](https://img.shields.io/badge/License-Apache_2.0-8162C3)
-</div>
+SimFEA Studio is a desktop-oriented CAE workflow studio built with Vue 3, Tauri, and a FastAPI sidecar. It turns local, SSH, Slurm, and solver executions into reproducible engineering evidence: command logs, archived inputs, solver artifacts, result summaries, VTK visualization data, and learning notes.
 
----
+The current milestone is no longer just a UI proof of concept. The project can run a real local CalculiX cantilever case, collect FRD/DAT/STA artifacts, convert FRD output to VTK, summarize displacement and stress metrics, and stream run events back to the frontend.
 
-## 项目定位
+## Highlights
 
-SimFEA Studio 不是新的仿真引擎，不是商业 CAE 的竞品，也不是 AI 自动化工具。
+- Vue 3 + Vite frontend inside a Tauri desktop shell.
+- FastAPI Python sidecar for run orchestration and evidence APIs.
+- Local, SSH, Slurm, and declarative solver runner paths.
+- OpenCAEHub-inspired solver configuration with `pre_commands`, `command_template`, `post_commands`, `artifact_patterns`, and `input_files`.
+- CalculiX local end-to-end path with FRD to VTK conversion.
+- VTK.js result viewport with lazy-loaded visualization modules.
+- SSE run event stream with reconnect replay via `from_seq`.
+- Archived run directory containing metadata, command scripts, stdout/stderr, events, inputs, artifacts, reports, and notes.
+- Backend and frontend contract tests covering the current workflow.
 
-它是一个面向机械仿真学习的个人工作台：把已有命令行求解器、远程算力、运行日志、结果文件和学习笔记收进同一个可回放的物证仓库。
-
-> 不造求解器，只管理求解器、算力、运行环境和学习记录。
-
-## 模板来源
-
-本项目最初基于 [AlanSynn/vue-tauri-fastapi-sidecar-template](https://github.com/AlanSynn/vue-tauri-fastapi-sidecar-template) 搭建 `Tauri + Vue + FastAPI sidecar` 技术骨架。
-
-当前仓库已经改造为 SimFEA Studio 的独立项目：原模板主要提供桌面壳、前端和 Python sidecar 的启动链路；远程计算、Slurm 闭环、物证归档、VTK 可视化和学习记录沉淀是本项目后续围绕机械仿真学习目标扩展出来的功能。
-
-## 当前架构
+## Architecture
 
 ```text
-Tauri 桌面壳
-→ Vue / Vite 前端
-→ FastAPI Python sidecar
-→ SSH / Slurm / 本地归档
-```
-
-SimFEA Studio 的目标不是“一键自动仿真”，而是把每一次亲手拆解过的物理概念留下证据：
-
-- 输入：算例脚本、求解参数、远程工作目录。
-- 过程：stdout/stderr 实时日志、调度器状态、JobID。
-- 结果：`result.txt`、`result_summary.json`、`cantilever_result.vtk`。
-- 复盘：`note.md`、`learning_report.md`。
-
-## 核心特性
-
-### 桌面外壳，而非求解器
-
-SimFEA Studio 本身不求解任何物理方程。它的职责是在图形界面中管理那些真正会求解的工具。
-
-| 繁琐的事 | SimFEA Studio 替你管理 |
-|---|---|
-| SSH 连接参数、密钥、主机别名 | 统一节点配置，一键连接 |
-| 命令在本地还是远程执行 | Runner 抽象，前端无感切换 |
-| 手动复制粘贴运行日志 | 自动 SSE 流式回传，界面实时显示 |
-| 运行记录散落在各处终端 | 每一次运行都归档为学习物证 |
-
-### 统一命令执行通道
-
-```text
-Vue 3 + Tauri
-    ↓ HTTP / SSE
+Vue 3 / Vite / Tauri
+  -> HTTP + SSE
 FastAPI sidecar
-    ↓
-SSH / Slurm / WSL / Docker / Local
-    ↓
-真实求解器
+  -> LocalRunner / SSHRunner / SlurmRunner / SolverRunner
+  -> CalculiX / OpenFOAM / Elmer adapters
+  -> run archive + result summary + learning report
+  -> VTK.js visualization in the frontend
 ```
 
-你可以在本地 WSL 里调 CalculiX 小算例，也可以在远程 HPC 节点上跑大作业，所有输出都通过统一事件流回到同一个界面。
+The repository keeps the runner boundary explicit:
 
-## 已实现能力
+- `LocalRunner`: runs commands on the local machine.
+- `SSHRunner`: runs commands on a configured remote node.
+- `SlurmRunner`: submits and polls batch jobs.
+- `SolverRunner`: writes solver input files, runs solver commands, collects artifacts, and triggers post-processing.
 
-- Tauri v2 桌面壳启动 Python sidecar，并在退出时清理 sidecar 进程。
-- FastAPI 提供连接、运行记录、学习报告、artifact 文件读取接口。
-- Vue 工作台展示侧车状态、计算节点、实时日志、运行记录、学习笔记和结果视图。
-- 计算节点配置从 `.simfea/config.json` 读取，避免硬编码真实服务器信息。
-- SSHRunner 最小闭环：远程执行命令、实时回传日志、下载结果、生成学习报告。
-- SlurmRunner 最小闭环：写入 `.slurm`、`sbatch` 提交、解析 JobID、轮询 `squeue`、同步 `slurm-*.out/.err`。
-- 结构化结果摘要：每次运行生成 `artifacts/result_summary.json`。
-- 结果可视化：
-  - 轻量 SVG 悬臂梁证据图。
-  - VTK.js 视图入口，读取 `artifacts/cantilever_result.vtk`。
-- 物证仓库自动归档在 `.simfea/runs/<run_id>/`。
+## Current Solver Status
 
-## 物证仓库
+| Solver | Status | Notes |
+| --- | --- | --- |
+| CalculiX | Working local end-to-end path | Runs a real cantilever case, archives `.frd/.dat/.sta`, converts FRD to VTK, and extracts summary metrics. |
+| OpenFOAM | Adapter placeholder | Configuration shape is present; a real case bundle still needs to be added. |
+| Elmer | Adapter placeholder | Configuration shape is present; a real case bundle still needs to be added. |
+
+Example verified CalculiX output:
 
 ```text
-.simfea/runs/<run_id>/
-├── meta.json
-├── command.sh
-├── stdout.log
-├── stderr.log
-├── events.jsonl
-├── note.md
-├── learning_report.md
-└── artifacts/
-    ├── result.txt
-    ├── result_summary.json
-    └── cantilever_result.vtk
+status=finished
+exit_code=0
+solver=calculix
+max_displacement_mm=8.933
+max_von_mises_mpa=37.502
+artifacts=cantilever.frd, cantilever.dat, cantilever.sta, result.txt, result_summary.json, solver_result.vtk
 ```
 
-`.simfea/` 是本地私有目录，已经被 `.gitignore` 忽略。不要把真实服务器账号、密钥、运行归档提交到仓库。
+## Quick Start
 
-## 界面组件
-
-| 组件 | 功能 |
-|---|---|
-| 顶部状态徽章 | 侧车服务与远程节点状态 |
-| 侧车控制台 | 验证连接、启动/关闭侧车 |
-| 远程计算面板 | 探测 SSH 节点、探测调度器、提交 demo / Slurm 运行 |
-| 工具链地图 | FreeCAD、Salome、CalculiX、OpenFOAM、Elmer 的后续入口 |
-| 物证仓库 | 运行记录选择与归档查看 |
-| 结果可视化 | SVG 证据图和 VTK 视图 |
-| 学习笔记 | 保存运行复盘 |
-| 沉淀报告 | 自动生成 `learning_report.md` |
-| 实时日志 | 侧车、远程命令、Slurm 输出 |
-
-## 快速开始
-
-### 1. 准备环境
-
-推荐使用 miniconda 环境：
-
-```powershell
-conda activate simfea
-```
-
-需要安装：
-
-- Node.js / pnpm
-- Python 3.11
-- Rust stable
-- Windows OpenSSH
-- Tauri 构建依赖
-
-### 2. 安装依赖
-
-```powershell
-pnpm install
-python -m pip install -e .
-```
-
-如果当前 PowerShell 找不到 `pnpm`，可以使用本机 Node.js 自带的 Corepack：
+### 1. Install dependencies
 
 ```powershell
 corepack pnpm install
+python -m pip install -e .
 ```
 
-### 3. 配置计算节点
+For the known Windows development environment, the `simfea` conda environment has been used for Python verification.
 
-复制示例配置：
+### 2. Create local configuration
 
 ```powershell
 New-Item -ItemType Directory -Force .simfea
 Copy-Item simfea.config.example.json .simfea\config.json
 ```
 
-然后编辑 `.simfea/config.json`：
+For a local Windows CalculiX run, configure a local node and point the solver executable to your CalculiX wrapper or binary:
 
 ```json
 {
   "compute": {
-    "default_node": "remote-main",
+    "default_node": "local",
     "nodes": [
-      {
-        "alias": "remote-main",
-        "label": "Remote SSH compute node",
-        "host": "example.hpc.edu",
-        "user": "your_username",
-        "port": 22,
-        "identity_file": "~/.ssh/id_ed25519",
-        "remote_runs_root": "$HOME/simfea-runs"
-      }
+      { "alias": "local", "label": "Local workstation", "host": "localhost" }
     ]
-  }
+  },
+  "solvers": [
+    {
+      "alias": "calculix",
+      "executable": "C:\\path\\to\\CalculiX\\bin\\ccx.bat",
+      "command_template": "C:\\path\\to\\CalculiX\\bin\\ccx.bat cantilever"
+    }
+  ]
 }
 ```
 
-学习记录可以额外导出到长期笔记库，目录和默认格式也放在同一个配置文件里：
+`.simfea/` is intentionally ignored by Git because it contains local machine paths and run archives.
 
-```json
-{
-  "learning": {
-    "export_root": ".simfea/learning",
-    "default_format": "md",
-    "formats": ["md", "json", "txt"]
-  }
-}
-```
-
-### 4. 打包 sidecar
-
-Tauri dev 使用 PyInstaller 打包后的 sidecar：
+### 3. Start the sidecar
 
 ```powershell
-pnpm build:sidecar-winos
+python src/backends/main.py
 ```
 
-### 5. 启动桌面应用
+### 4. Start the frontend
 
 ```powershell
-pnpm tauri dev
+corepack pnpm dev:frontend
 ```
 
-如果只想分离启动前后端：
+### 5. Trigger a local solver run
 
 ```powershell
-pnpm dev:all
+curl -X POST http://localhost:8008/v1/runs/local/solvers/calculix
+curl http://localhost:8008/v1/runs
 ```
 
-前端默认地址：`http://localhost:3000`
-API 默认地址：`http://localhost:8008`
+## API Surface
 
-## 使用流程
+| Endpoint | Method | Purpose |
+| --- | --- | --- |
+| `/v1/connect` | GET | Sidecar connection and configuration summary. |
+| `/v1/config` | GET | Current API, compute node, solver, and learning settings. |
+| `/v1/compute-nodes` | GET | List configured compute nodes. |
+| `/v1/compute-nodes/{alias}/probe` | GET | Probe node reachability and basic environment details. |
+| `/v1/compute-nodes/{alias}/scheduler-probe` | GET | Probe Slurm/PBS/LSF-style scheduler tools. |
+| `/v1/compute-nodes/{alias}/solvers/probe` | GET | Probe configured solver executables. |
+| `/v1/solvers` | GET | List public solver definitions. |
+| `/v1/runs` | GET | List archived runs. |
+| `/v1/runs/{run_id}` | GET | Load one run archive. |
+| `/v1/runs/{alias}/demo` | POST | Start an SSH demo run. |
+| `/v1/runs/{alias}/slurm-demo` | POST | Start a Slurm demo run. |
+| `/v1/runs/{alias}/solvers/{solver_alias}` | POST | Start a configured solver run. |
+| `/v1/runs/{run_id}/events` | GET | SSE run events; supports `?from_seq=N` replay. |
+| `/v1/runs/{run_id}/artifacts/{artifact_path}` | GET | Download archived artifacts. |
+| `/v1/runs/{run_id}/result-summary` | GET | Load generated result summary. |
+| `/v1/runs/{run_id}/report` | GET | Generate or load a learning report. |
+| `/v1/runs/{run_id}/learning-export` | POST | Export a learning record as md/json/txt. |
+| `/v1/runs/{run_id}/note` | POST | Save a run note. |
+| `/v1/runs/{run_id}/cancel` | POST | Request run cancellation. |
 
-1. 点击“验证连接”，确认 FastAPI sidecar 在线。
-2. 选择计算节点。
-3. 点击“测试远程节点”，验证 SSH 通道。
-4. 点击“探测调度器”，识别 Slurm/PBS/LSF 命令。
-5. 点击“运行闭环样例”或“运行 Slurm 样例”。
-6. 在实时日志中观察远程输出。
-7. 在物证仓库选择运行记录。
-8. 查看证据图或 VTK 视图。
-9. 写入学习笔记并刷新 `learning_report.md`。
-10. 在“学习记录导出”里选择 `md/json/txt`，把本次记录同步到指定学习库目录。
-
-## API 端点
-
-| Endpoint | 用途 |
-|---|---|
-| `GET /v1/connect` | 验证 sidecar 和配置 |
-| `GET /v1/compute-nodes/{alias}/probe` | SSH 节点探测 |
-| `GET /v1/compute-nodes/{alias}/scheduler-probe` | 调度器探测 |
-| `POST /v1/runs/{alias}/demo` | SSHRunner 闭环样例 |
-| `POST /v1/runs/{alias}/slurm-demo` | SlurmRunner 闭环样例 |
-| `GET /v1/runs/{run_id}/events` | SSE 实时事件流 |
-| `POST /v1/runs/{run_id}/cancel` | 取消运行 |
-| `GET /v1/runs` | 运行记录列表 |
-| `GET /v1/runs/{run_id}` | 单次运行详情 |
-| `GET /v1/runs/{run_id}/result-summary` | 生成/读取结构化摘要 |
-| `GET /v1/runs/{run_id}/artifacts/{path}` | 读取归档文件 |
-| `POST /v1/runs/{run_id}/note` | 保存学习笔记 |
-| `GET /v1/runs/{run_id}/report` | 刷新学习报告 |
-| `POST /v1/runs/{run_id}/learning-export` | 导出学习记录到指定目录 |
-
-## 项目结构
+## Run Archive Layout
 
 ```text
-SimFEA-Studio/
-├── app/
-│   ├── App.vue
-│   ├── style.css
-│   ├── types.ts
-│   └── components/
-│       ├── ResultEvidenceView.vue
-│       └── VtkResultViewport.vue
-├── src/backends/
-│   └── main.py
-├── src-tauri/
-│   ├── src/main.rs
-│   └── tauri.conf.json
-├── docs/
-└── simfea.config.example.json
+.simfea/runs/<run_id>/
+  meta.json
+  command.sh
+  stdout.log
+  stderr.log
+  events.jsonl
+  note.md
+  learning_report.md
+  inputs/
+  artifacts/
+    cantilever.frd
+    cantilever.dat
+    cantilever.sta
+    result.txt
+    result_summary.json
+    solver_result.vtk
 ```
 
-## 后续路线图
+## Verification
 
-- [x] Vue / Tauri / FastAPI 基础链路
-- [x] SSH 远程执行和实时日志
-- [x] 本地物证仓库
-- [x] 学习笔记和学习报告
-- [x] Slurm 最小闭环
-- [x] 结构化结果摘要
-- [x] VTK.js 最小视图入口
-- [ ] 抽象 Runner 接口
-- [ ] CalculiX 悬臂梁真实算例
-- [ ] CalculiX 结果转换为 `.vtk/.vtu`
-- [ ] FreeCAD / Salome 输入文件接入
-- [ ] OpenFOAM / Elmer 运行模板
+Current verification recorded in the development log:
 
-## 安全提醒
+```powershell
+python -m unittest discover -s src/backends/tests -v
+corepack pnpm test
+corepack pnpm build
+python -m py_compile src/backends/main.py src/backends/simfea_api/*.py src/backends/simfea_api/runners/*.py src/backends/inference/*.py
+git diff --check
+```
 
-- `.simfea/config.json` 不提交。
-- SSH 私钥不提交。
-- `.simfea/runs/` 不提交。
-- 公开文档中不要写真实服务器地址、端口、用户名、私钥路径。
+Latest known coverage:
+
+- Backend: 75 unit tests passing.
+- Frontend: 20 Vitest tests passing.
+- Production frontend build passes with only the known lazy-loaded VTK XML reader chunk warning.
+
+## Documentation
+
+- `docs/DEV_LOG_2026-05-12.md`: detailed development log and verification notes.
+- `docs/ARCHITECTURE_ROADMAP.md`: architecture direction and borrowed patterns from sim-main and OpenCAEHub.
+- `docs/RUNNER_DESIGN.md`: runner boundaries and execution model.
+- `docs/API_CONTRACTS.md`: API contract examples.
+- `docs/AI_FEA_EXPLORATION_NOTE_2030.md`: project introduction and AI + FEA exploration note.
+
+## Roadmap
+
+- Add real OpenFOAM case integration.
+- Add real Elmer case integration.
+- Add FreeCAD or Salome preprocessing hooks.
+- Improve frontend result inspection around generated VTK and solver artifacts.
+- Continue evolving AI-assisted learning reports and engineering evidence review.
 
 ## License
 

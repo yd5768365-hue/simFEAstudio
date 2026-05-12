@@ -1,16 +1,20 @@
 <script setup lang="ts">
 import type { ComputeNodeConfig, RemoteStatus } from '@/composables/useRemoteRuns'
+import type { SolverDefinition } from '@/types'
 
 interface RemotePanelActions {
   probeRemoteNodeAction: () => void
   probeSchedulerAction: () => void
+  probeSolversAction: () => void
   startRemoteDemoRunAction: () => void
   startSlurmDemoRunAction: () => void
+  startSolverRunAction: (solverAlias: string) => void
   cancelRemoteRunAction: () => void
 }
 
 const props = defineProps<{
   computeNodes: ComputeNodeConfig[]
+  solvers: SolverDefinition[]
   selectedComputeNode: string
   activeComputeNodeLabel: string
   remoteStatus: RemoteStatus
@@ -62,6 +66,13 @@ const emit = defineEmits<{
       <button
         type="button"
         :disabled="!connected || !selectedComputeNode || remoteStatus.running"
+        @click="actions.probeSolversAction()"
+      >
+        探测求解器
+      </button>
+      <button
+        type="button"
+        :disabled="!connected || !selectedComputeNode || remoteStatus.running"
         @click="actions.startRemoteDemoRunAction()"
       >
         运行闭环样例
@@ -79,6 +90,17 @@ const emit = defineEmits<{
         @click="actions.cancelRemoteRunAction()"
       >
         取消当前任务
+      </button>
+    </div>
+    <div v-if="solvers.length > 0" class="button-row solver-actions">
+      <button
+        v-for="solver in solvers"
+        :key="solver.alias"
+        type="button"
+        :disabled="!connected || !selectedComputeNode || remoteStatus.running"
+        @click="actions.startSolverRunAction(solver.alias)"
+      >
+        运行 {{ solver.label }}
       </button>
     </div>
     <div class="connection-detail">

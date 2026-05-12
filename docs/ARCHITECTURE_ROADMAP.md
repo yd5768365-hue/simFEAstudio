@@ -291,6 +291,169 @@ app/
 - 用什么命令验证。
 - 下一步最适合做什么。
 
+## 第二轮 sim-main 借鉴分析（2026-05-12）
+
+经过对 sim-main 源码的深入阅读（composable、API client、Zustand stores、SSE 协议、testing、logger、CI），对比 SimFEA Studio 当前状态，以下是 ARCHITECTURE_ROADMAP 中未覆盖的新发现：
+
+### 已具备（无需改动）
+
+| 项 | sim-main 做法 | SimFEA Studio |
+|---|---|---|
+| 格式化/检查 | Biome | Biome ✓ |
+| pre-commit | Husky + lint-staged | Husky + lint-staged ✓ |
+| 测试框架 | Vitest | Vitest ✓（仅 1 个用例） |
+| 实时日志 | SSE | SSE（sse-starlette + EventSource） ✓ |
+
+### 已在路线图中
+
+前端 composable 拆分、API contract 集中建模、Runner 统一接口、Zustand/Pinia stores。
+
+### 新发现：优先级 1（当次可做，风险极低）
+
+**a) `.gitattributes` LF 行尾强制**
+
+sim-main 有，SimFEA Studio 没有。Windows 下 CRLF/LF 混合是常见的坑。
+
+**b) Python 结构化日志 — 替换 `print()`**
+
+当前 `main.py` 所有输出都是 `print("[sidecar] ...", flush=True)`。sim-main 的 `@sim/logger` 提供了 `createLogger(name)` + 彩色开发输出 + JSON 生产输出 + `withMetadata()` 子 logger。
+
+Python 端用标准库 `logging` + `rich` 实现等价效果。改动面小——只替换 `print()` 调用点。
+
+**c) SSE 事件类型契约**
+
+sim-main 把 SSE 事件定义为 discriminated union（`ExecutionEvent = { type: 'execution:started' } | { type: 'block:started' } | ...`）。SimFEA Studio 的事件是自由形态 dict（`type` 字段任意字符串，`payload` 任意 kwarg）。
+
+用 Pydantic 定义事件模型，前端 TypeScript 类型镜像。一个字段改名不会被遗漏。
+
+### 新发现：优先级 2（接下来几轮）
+
+**d) SSE 断线重连 + 事件指针**
+
+sim-main 每 5 个事件持久化 `(workflowId, executionId, lastEventId)`，断开后 `GET /stream?from=<lastEventId>` 续传。SimFEA Studio 的 `useRunEvents` 在 `onerror` 时直接 `close()`，无重连。
+
+**e) 测试工厂函数**
+
+sim-main 的 `@sim/testing` 包提供 `createBlock(options)` 模式——带合理默认值 + 可选覆盖。SimFEA Studio 零后端测试，可以用 `create_run()`、`create_node()` 工厂起步。
+
+**f) CI 边界检查**
+
+sim-main 的 `check-monorepo-boundaries.ts` 扫描 `packages/*` 确保不导入 `@/`。SimFEA Studio 可以加脚本：确保 `runners/` 不导入 `main.py`，`services/` 不导入 FastAPI 路由层。
+
+### 新发现：优先级 3（规模增长后）
+
+**g) 后台清理任务** — sim-main 的 `background/cleanup-logs.ts`。SimFEA Studio 可加 `.simfea/runs` 过期清理。
+
+**h) Dev container** — sim-main 的 `.devcontainer/`。多人协作时有用。
+
+**i) 前端响应校验** — sim-main 的 `requestJson()` 在接收端也跑 Zod 校验。SimFEA Studio 可以给 `simfeaClient.ts` 加同样逻辑。
+
+### 本次执行计划（优先级 1）
+
+1. 新增 `.gitattributes` — LF 行尾强制
+2. 新增 `src/backends/simfea_api/logger.py` — 结构化日志模块
+3. 新增 `src/backends/simfea_api/schemas.py` — SSE 事件 Pydantic 模型
+4. 更新 `app/types.ts` — 前端事件类型镜像
+
+## OpenCAEHub 借鉴分析（2026-05-12）
+
+### 项目概况
+
+OpenCAEHub（炎核）是 C++ 桌面 CAE 集成平台，采用"微核心 + 插件"架构。与 sim-main 完全不同——它是原生桌面应用，不是 Web 应用。
+
+**核心架构**：
+- 多进程微服务（MessageCenter、ResourcePool、Logic、Scheduler、UI 各自独立 EXE）
+- 通过 TCP/WebSocket 通信
+- pybind11 桥接 C++ ↔ Python
+- 文件式求解器集成（求解器作为外部 EXE 启动）
+
+### 对 SimFEA Studio 可借鉴的关键模式
+
+#### 1. 求解器插件配置格式
+
+OpenCAEHub 用 `PluginConfig.xml` 定义每个求解器：
+
+```xml
+<ApiInfo
+    ModuleFullName="Simulator.Solver"
+    APIName="SimulatorRunSolverCommand"
+    ImplementModule="PluginWrapperPlugin.PluginWrapper"
+    AppType="EXE"
+    AppPath="Solver/ccx_dynamic.exe"
+    APIParameterTemlate="../temp/%projectId%/%taskId%/input.inp"
+    APIOutParameterTemlate="filepath=vtk_output/*.vtu|*.pvd"
+    PreCommand="copy %filepath% temp/%projectId%/%taskId%/input.inp"
+    PostCommand="copy vtk_output/*.vtu %MainDir%/results/"
+    WorkingDir="%AppRoot%Solver/"
+/>
+```
+
+**SimFEA Studio 对应**：`.simfea/config.json` 的 `toolchain` 已经定义了求解器名称和状态，但缺少执行模板。可以扩展为：
+
+```json
+{
+  "toolchain": [{
+    "name": "calculix",
+    "role": "solver",
+    "status": "ready",
+    "exe": "ccx",
+    "input_template": "{workdir}/{case}.inp",
+    "output_patterns": ["*.frd", "*.dat"],
+    "pre_commands": [],
+    "post_commands": []
+  }]
+}
+```
+
+#### 2. 文件式求解器执行 + 前后命令链
+
+每个求解器 API 定义 `PreCommand`（求解前）和 `PostCommand`（求解后），支持链式调用。
+
+SimFEA Studio 的 `RemoteRun.command` 目前是自由文本。可以标准化为：
+- `input_copy` — 把输入文件复制到工作目录
+- `solver_run` — 执行求解器
+- `result_collect` — 收集输出文件
+
+#### 3. 输出文件通配符收集
+
+`APIOutParameterTemlate="filepath=vtk_output/*.vtu|*.pvd"` 用通配符定义收集哪些结果文件。
+
+SimFEA Studio 目前用 `download_remote_result()` 下载固定路径。可以改为通配符模式，一次下载所有匹配的结果文件。
+
+#### 4. 工作目录隔离
+
+每个任务独立目录 `temp/%projectId%/%taskId%/`。SimFEA Studio 已有 `.simfea/runs/<run_id>/`，但 solver 工作目录在远程端是手动拼接的。可以标准化这个路径模板。
+
+#### 5. 三种执行模式
+
+| 模式 | OpenCAEHub | SimFEA Studio 对应 |
+|------|-----------|-------------------|
+| `HasUI="true"` | 打开原生 GUI | Tauri 桌面壳 |
+| `HasUI="false"` | 无头脚本执行 | SSH/Slurm 远程执行 |
+| `HttpClient="true"` | HTTP 服务通信 | FastAPI sidecar |
+
+SimFEA Studio 的核心是"无头模式"（远程 SSH/Slurm），但未来本地模式可以参考 OpenCAEHub 的 `HasUI` + `HasUI=false` 切换思路。
+
+#### 6. 数据流图模型（长期参考）
+
+OpenCAEHub 的 `CfDxFlow`（任务节点 + 数据链接边）是可视化工作流编排的数据模型。SimFEA Studio 当前是单次运行，不需要这个。但如果未来支持"前处理 → 求解 → 后处理"多步工作流，这个模型值得参考。
+
+### 不适用或不应借鉴的部分
+
+| OpenCAEHub 模式 | 原因 |
+|-----------------|------|
+| C++ 多进程桌面微服务 | SimFEA Studio 是 Vue+Python+Tauri，技术栈完全不同 |
+| Drogon/WebSocket/TCP 通信 | SimFEA Studio 的 FastAPI SSE 已足够 |
+| pybind11 C++↔Python 桥接 | SimFEA Studio 纯 Python 后端 |
+| Minio 对象存储 | SimFEA Studio 的 `.simfea/runs/` 本地文件归档更轻量 |
+| Qt/WinForms UI 插件 | SimFEA Studio 用 Vue/Tauri |
+| 30+ 任务类型注册 | SimFEA Studio 目前只有 demo-shell，不需要 |
+| XML 配置格式 | JSON/YAML 更适合 SimFEA Studio |
+
+### 一句话判断
+
+OpenCAEHub 值得借鉴的是**求解器集成的工程化思维**——用声明式配置定义求解器、用前后命令链标准化执行流程、用通配符收集输出文件。这些可以在不改变 SimFEA Studio 技术栈的前提下，让 `toolchain` 配置和 `RemoteRun` 执行模型更规范。
+
 ## 一句话判断
 
 `sim-main` 值得学习的是工程组织能力。SimFEA Studio 应该吸收它的边界感、契约感和实时状态思维，但仍然坚持自己的核心：把仿真命令变成可复盘、可归档、可学习的工程证据。
