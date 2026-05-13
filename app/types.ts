@@ -3,6 +3,8 @@ export type {
   ArtifactEvent,
   ComputeNodeConfig,
   FinishedEvent,
+  GuidedQuestion,
+  GuidedQuestionsResponse,
   LearningExportRecord,
   ResultSummary,
   RunArchive,

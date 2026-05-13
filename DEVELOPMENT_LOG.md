@@ -203,3 +203,73 @@ pnpm build          # Vite build
 - [ ] App.vue 进一步拆分（ControlPanel 独立组件）
 - [ ] 参考 OpenCAEHub 设计声明式求解器注册
 - [ ] 参考 ITask<T,U> 抽象泛型任务执行
+
+---
+
+## 2026-05-12 — 第二轮 sim-main 分析 + 计算基础设施
+
+### 总览
+深入借鉴 sim-main 源码级别模式，执行优先级 1/2/3 工程改进，并正式接入 CalculiX 真实求解器。
+
+### 提交记录
+
+**Commit 5: `bf0f463` — feat: ship local solver evidence workflow**
+（~800 行改动）
+
+#### 优先级 1 改进（sim-main 第二轮分析）
+- `.gitattributes` — 强制 LF 行尾
+- `src/backends/simfea_api/logger.py` — 结构化日志（createLogger + ANSI 彩色 + JSON 生产模式）
+- `src/backends/simfea_api/schemas.py` — SSE 事件 Pydantic 模型（discriminated union）
+- 测试工厂函数：`create_run()` / `create_node()` / `create_slurm_run()` / `create_finished_run()`
+
+#### 优先级 2/3
+- SSE 断线重连 + `from_seq` 事件回放
+- CI 边界检查脚本（`check_backend_boundaries.py`）
+- 后台运行清理（`cleanup.py`，按保留天数 + 最大数量）
+- API client 结构化错误（`ApiClientError` + `extractValidationIssues`）
+- 测试覆盖：68 → 75 后端用例
+
+#### CalculiX 真实求解器接入
+- FRD → VTK 转换器（`frd_to_vtk.py`）——完整状态机解析 1PSTEP 格式
+- 本地执行引擎（`execute_local_run`）
+- `local` 默认计算节点
+- 求解器配置按 alias 合并（用户配置覆盖默认字段，不丢失 openfoam/elmer 定义）
+
+#### 踩坑全记录（本地 CalculiX 端到端实测 3 轮迭代）
+1. `start_solver_run` 对本地节点也调用 `build_solver_run_script()`（bash 包装），修复分发逻辑
+2. `_run_local_command` 用 `_find_local_shell()` 检测 bash → Windows 路径被转义破坏，改为 `create_subprocess_shell`（cmd.exe）
+3. 真实 CalculiX FRD 输出使用 `1PSTEP` 结构而非文档描述的 `2D`/`2S` 区段，解析器完全重写
+
+### 结果
+- 75/75 后端测试通过，20/20 前端测试通过
+- CalculiX 悬臂梁端到端闭环：`post → ccx → FRD→VTK → 前端渲染`
+- `max_displacement_mm=8.933`，`max_von_mises_mpa=37.502`，误差 < 0.1%
+
+---
+
+## 2026-05-13 — 学习沉淀系统重构
+
+### 总览
+修复学习报告 5 个问题，将笔记从自由文本改为结构化引导问答，重新排定三层学习架构的时序。
+
+### 学习报告 5 项修复
+1. `command` 字段为空 → 写回 `run.command`
+2. 下一步问题硬编码 → 根据状态/求解器自适应
+3. 工具链列出未使用求解器 → 仅显示实际使用项
+4. 输入文件未展示 → ≤80 行文件内嵌
+5. 笔记提示弱 → 结构化引导问题
+
+### 结构化笔记系统
+- 三层顺序修正：日志 → 用户笔记 → AI 报告（原为日志 → 报告 → 笔记）
+- `learning.py` 新增引导问题引擎：`guided_questions()` / `compose_note_md()` / `parse_note_answers()`
+- 前端 textarea → 动态问题列表
+- API 新增 `GET /v1/runs/{run_id}/guided-questions`
+- 向后兼容旧格式自由文本
+
+### asyncio 死锁修复
+- `asyncio.create_subprocess_shell` → `subprocess.run` + `loop.run_in_executor`
+- 根因：Windows 孙进程继承管道句柄导致 `communicate()` 永久阻塞
+
+### 端到端验证
+- 本地 CalculiX 运行 → 引导问题加载 → 结构化答案保存 → learning_report.md 生成
+- 全部通过

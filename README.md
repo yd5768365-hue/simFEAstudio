@@ -47,7 +47,7 @@ SimFEA Studio 的目标不是“替你理解物理”，而是把每一次亲手
 - 输入：算例脚本、求解器参数、输入文件、工作目录。
 - 过程：stdout/stderr 实时日志、调度器状态、JobID、SSE 事件流。
 - 结果：求解器原始产物、`result_summary.json`、`solver_result.vtk`。
-- 复盘：`note.md`、`learning_report.md`、可导出的学习记录。
+- 复盘：结构化的 `note.md`（引导式问答）、`learning_report.md`、可导出的学习记录。
 
 ## 核心特性
 
@@ -62,6 +62,17 @@ SimFEA Studio 本身不求解任何物理方程。它的职责是在图形界面
 | 手动复制粘贴运行日志 | SSE 流式回传，界面实时显示 |
 | 运行记录散落在各处终端 | 每一次运行都归档为学习物证 |
 | 求解器输出格式不统一 | artifact glob 收集 + 后处理摘要 |
+| 每次跑完不知道记什么 | 引导式问题列表，自动生成结构化笔记 |
+
+### 三层学习沉淀
+
+SimFEA Studio 的学习系统按照"日志 → 笔记 → 报告"的顺序逐层沉淀：
+
+1. **日志流式回传**：运行期间 stdout/stderr 实时 SSE 推送，记录完整的求解过程。
+2. **结构化引导笔记**：运行结束后，前端根据求解器类型和运行状态动态生成引导问题（目的、预期对比、疑问、下次改进），用户按问题填写，不再面对空白文本框无从下手。
+3. **学习报告自动生成**：笔记保存后，后台将日志摘要、结果指标、用户回答合成为 `learning_report.md`。
+
+三层之间不是并列关系，而是时序依赖：日志跑完才有结果，结果出来才能写笔记，笔记写完才生成报告。
 
 ### 声明式求解器接入
 
@@ -77,7 +88,7 @@ SimFEA Studio 本身不求解任何物理方程。它的职责是在图形界面
 
 | Runner | 适用场景 | 实现 |
 | --- | --- | --- |
-| LocalRunner | 本地 Windows / Linux | `asyncio.create_subprocess_shell` |
+| LocalRunner | 本地 Windows / Linux | `subprocess.run`（线程池，避免 Windows 孙进程死锁） |
 | SSHRunner | SSH 远程节点 | `ssh` + `scp` 文件操作 |
 | SlurmRunner | HPC 集群 | `sbatch` 提交 + `squeue` 轮询 |
 | SolverRunner | 求解器编排 | 写输入、跑 solver、收集 artifacts、触发后处理 |
@@ -120,15 +131,15 @@ artifacts=cantilever.frd, cantilever.dat, cantilever.sta, result.txt, result_sum
 
 ```text
 .simfea/runs/<run_id>/
-├── meta.json
-├── command.sh
-├── stdout.log
-├── stderr.log
-├── events.jsonl
-├── note.md
-├── learning_report.md
-├── inputs/
-└── artifacts/
+├── meta.json                  # 运行元数据（求解器、节点、状态、时间）
+├── run.command                # 实际执行的命令
+├── stdout.log                 # 标准输出日志
+├── stderr.log                 # 标准错误日志
+├── events.jsonl               # SSE 事件流回放
+├── note.md                    # 结构化引导笔记（Q&A 格式）
+├── learning_report.md         # AI 合成的学习报告
+├── inputs/                    # 输入文件（.inp 等）
+└── artifacts/                 # 求解器输出产物
     ├── cantilever.frd
     ├── cantilever.dat
     ├── cantilever.sta
@@ -237,7 +248,8 @@ curl http://localhost:8008/v1/runs
 | `/v1/runs/{run_id}/result-summary` | GET | 读取结果摘要 |
 | `/v1/runs/{run_id}/report` | GET | 生成或读取学习报告 |
 | `/v1/runs/{run_id}/learning-export` | POST | 导出 md/json/txt 学习记录 |
-| `/v1/runs/{run_id}/note` | POST | 保存运行笔记 |
+| `/v1/runs/{run_id}/guided-questions` | GET | 返回该运行的引导问题列表 |
+| `/v1/runs/{run_id}/note` | POST | 保存结构化笔记（支持 `answers` 和旧版 `note`） |
 | `/v1/runs/{run_id}/cancel` | POST | 请求取消运行 |
 
 ## 验证
@@ -260,6 +272,7 @@ git diff --check
 
 ## 文档
 
+- `docs/DEV_LOG_2026-05-13.md`：结构化引导笔记、学习报告修复、asyncio 死锁修复。
 - `docs/DEV_LOG_2026-05-12.md`：开发日志和验证记录。
 - `docs/ARCHITECTURE_ROADMAP.md`：架构路线图，以及 sim-main / OpenCAEHub 借鉴分析。
 - `docs/RUNNER_DESIGN.md`：Runner 边界和执行模型。
@@ -277,6 +290,7 @@ git diff --check
 - [x] VTK.js 结果视图。
 - [x] CalculiX 本地端到端链路。
 - [x] CalculiX FRD → VTK 转换。
+- [x] 结构化引导笔记 + 学习报告自动生成。
 - [ ] OpenFOAM 真实 case 接入。
 - [ ] Elmer 真实 case 接入。
 - [ ] FreeCAD / Salome 前处理入口。

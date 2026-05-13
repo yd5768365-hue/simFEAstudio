@@ -1,5 +1,6 @@
 ﻿import asyncio
 import json
+import subprocess
 import os
 import signal
 import sys
@@ -33,9 +34,13 @@ try:
         run_metadata,
         save_run_metadata,
     )
+    from .simfea_api.analytics import analyze_run as service_analyze_run
     from .simfea_api.learning import (
+        compose_note_md as service_compose_note_md,
         export_learning_record as service_export_learning_record,
         generate_learning_report as service_generate_learning_report,
+        guided_questions as service_guided_questions,
+        parse_note_answers as service_parse_note_answers,
     )
     from .simfea_api.results import (
         generate_result_summary as service_generate_result_summary,
@@ -91,9 +96,13 @@ except ImportError:
         run_metadata,
         save_run_metadata,
     )
+    from simfea_api.analytics import analyze_run as service_analyze_run
     from simfea_api.learning import (
+        compose_note_md as service_compose_note_md,
         export_learning_record as service_export_learning_record,
         generate_learning_report as service_generate_learning_report,
+        guided_questions as service_guided_questions,
+        parse_note_answers as service_parse_note_answers,
     )
     from simfea_api.results import (
         generate_result_summary as service_generate_result_summary,
@@ -159,6 +168,7 @@ class T_Query(TypedDict):
 
 class T_Note(TypedDict, total=False):
     note: str
+    answers: dict
     export: bool
     format: str
     target_dir: str
@@ -248,8 +258,8 @@ def parse_key_value_stdout(stdout: str):
 def persist_run_outputs(run: RemoteRun):
     save_run_metadata(run)
     generate_result_summary(run.local_dir)
-    generate_learning_report(run.local_dir)
     save_run_metadata(run)
+    # learning_report is deferred until the user writes their note (save_run_note)
 
 
 async def emit_finished_event(
@@ -354,16 +364,20 @@ def _find_local_shell() -> str | None:
 async def _run_local_command(cmd: str, cwd: Path):
     """Run a command locally via the platform shell (cmd.exe on Windows).
 
-    We intentionally use the platform shell (not bash) because solver commands
-    often contain Windows paths (C:\\..., backslashes) and .bat wrappers that
-    only work with cmd.exe.  bash -lc would mangle the backslashes.
+    Uses a thread-pool executor to avoid event-loop deadlocks that can occur
+    with asyncio.create_subprocess_shell on Windows when the child process
+    spawns grandchildren that inherit pipe handles.
     """
-    proc = await asyncio.create_subprocess_shell(
-        cmd, cwd=str(cwd),
-        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, _run_local_sync, cmd, cwd)
+
+
+def _run_local_sync(cmd: str, cwd: Path):
+    proc = subprocess.run(
+        cmd, cwd=str(cwd), shell=True,
+        capture_output=True, timeout=120,
     )
-    stdout, stderr = await proc.communicate()
-    return proc.returncode, stdout, stderr
+    return proc.returncode, proc.stdout, proc.stderr
 
 
 async def execute_local_run(run: RemoteRun, solver_definition=None):
@@ -402,11 +416,11 @@ async def execute_local_run(run: RemoteRun, solver_definition=None):
             await emit_remote_event(run, "stderr", line=line)
 
     # Solver command
-    command = run.command or (
+    run.command = run.command or (
         render_command_template(solver.command_template, run, solver) if solver else ""
     )
-    await emit_remote_event(run, "stdout", line=f"command={command}")
-    exit_code, stdout, stderr = await _run_local_command(command, workdir)
+    await emit_remote_event(run, "stdout", line=f"command={run.command}")
+    exit_code, stdout, stderr = await _run_local_command(run.command, workdir)
     for line in stdout.decode("utf-8", errors="replace").splitlines():
         append_text(run.local_dir / "stdout.log", line)
         await emit_remote_event(run, "stdout", line=line)
@@ -1165,9 +1179,17 @@ def save_run_note(run_id: str, payload: T_Note = Body(...)):
             },
         }
 
-    note = payload.get("note", "")
+    answers = payload.get("answers")
     note_path = run_dir / "note.md"
-    note_path.write_text(note, encoding="utf-8")
+
+    if answers and isinstance(answers, dict):
+        meta_path = run_dir / "meta.json"
+        meta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
+        note_path.write_text(service_compose_note_md(answers, meta), encoding="utf-8")
+    else:
+        note = payload.get("note", "")
+        note_path.write_text(note, encoding="utf-8")
+
     summary = generate_result_summary(run_dir)
     report_path = generate_learning_report(run_dir)
     export_result = None
@@ -1186,6 +1208,40 @@ def save_run_note(run_id: str, payload: T_Note = Body(...)):
             "report_path": str(report_path),
             "summary_path": str(run_dir / "artifacts" / "result_summary.json") if summary else "",
             "learning_export": export_result,
+        },
+    }
+
+
+@app.get("/v1/runs/{run_id}/guided-questions")
+def get_guided_questions(run_id: str):
+    run_dir = settings().runs_root / run_id
+    meta_path = run_dir / "meta.json"
+    if not meta_path.exists():
+        return {
+            "message": "SimFEA Studio run not found.",
+            "data": None,
+        }
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    analysis = service_analyze_run(run_dir)
+    questions = service_guided_questions(meta, analysis)
+
+    # Fill in existing answers from note.md
+    note_path = run_dir / "note.md"
+    if note_path.exists():
+        existing = service_parse_note_answers(read_optional_text(note_path, "").strip())
+        if existing:
+            for q in questions:
+                if q["id"] in existing:
+                    q["answer"] = existing[q["id"]]
+                elif "note" in existing and q["id"] == "purpose":
+                    # Legacy free-text note: use as the "purpose" answer
+                    q["answer"] = existing["note"]
+
+    return {
+        "message": "Guided note questions for this run.",
+        "data": {
+            "run_id": run_id,
+            "questions": questions,
         },
     }
 

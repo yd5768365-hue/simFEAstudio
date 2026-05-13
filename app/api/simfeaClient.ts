@@ -6,6 +6,7 @@ import {
   exportLearningResponseSchema,
   generateReportResponseSchema,
   getRunResponseSchema,
+  guidedQuestionsResponseSchema,
   listRunsResponseSchema,
   listSolversResponseSchema,
   probeNodeResponseSchema,
@@ -115,6 +116,13 @@ const cancelRunContract = contract({
   response: cancelRunResponseSchema,
 })
 
+const guidedQuestionsContract = contract({
+  method: 'GET',
+  path: '/v1/runs/:runId/guided-questions',
+  params: ['runId'] as const,
+  response: guidedQuestionsResponseSchema,
+})
+
 export function createSimfeaClient(baseUrl: string, appendLog: (line: string) => void) {
   const { request } = createClient(baseUrl, appendLog)
 
@@ -122,8 +130,12 @@ export function createSimfeaClient(baseUrl: string, appendLog: (line: string) =>
     connect: () => request(connectContract),
     listRuns: () => request(listRunsContract),
     getRun: (runId: string) => request(getRunContract, { params: { runId } }),
-    saveRunNote: (runId: string, note: string) =>
-      request(saveNoteContract, { params: { runId }, body: { note } }),
+    saveRunNote: (runId: string, note: string, answers?: Record<string, string>) =>
+      request(saveNoteContract, {
+        params: { runId },
+        body: answers ? { answers } : { note },
+      }),
+    getGuidedQuestions: (runId: string) => request(guidedQuestionsContract, { params: { runId } }),
     generateRunReport: (runId: string) => request(generateReportContract, { params: { runId } }),
     exportLearningRecord: (runId: string, format: string, targetDir?: string) =>
       request(exportLearningContract, {

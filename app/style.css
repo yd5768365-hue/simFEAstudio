@@ -356,6 +356,25 @@ h3 {
   grid-column: 1 / 2;
 }
 
+.filter-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.filter-select {
+  padding: 3px 8px;
+  font-size: 0.75rem;
+  border: 1px solid #c8d2dc;
+  background: #fff;
+  color: #243241;
+}
+.filter-count {
+  margin-left: auto;
+  font-size: 0.72rem;
+  color: #6b7f99;
+}
+
 .run-table {
   display: grid;
   gap: 8px;
@@ -572,12 +591,94 @@ textarea {
   line-height: 1.6;
 }
 
+.guided-question {
+  margin: 16px 0;
+}
+
+.guided-question label {
+  display: block;
+  margin-bottom: 6px;
+  color: #243241;
+  font-weight: 600;
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.guided-question textarea {
+  min-height: 52px;
+  margin: 0;
+}
+
+.note-placeholder {
+  padding: 24px 0;
+  color: #8b9aaf;
+  font-size: 0.92rem;
+  text-align: center;
+}
+
 .report-preview {
-  max-height: 360px;
+  max-height: 480px;
+  overflow-y: auto;
   border: 1px solid #d8dee6;
   background: #f7f9fb;
   color: #243241;
   font-size: 0.8rem;
+  padding: 16px 20px;
+  line-height: 1.6;
+}
+.report-preview h1 {
+  font-size: 1.2rem;
+  margin: 0 0 12px;
+  color: #111d2b;
+}
+.report-preview h2 {
+  font-size: 1rem;
+  margin: 20px 0 8px;
+  color: #1a2a3a;
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 4px;
+}
+.report-preview h3 {
+  font-size: 0.9rem;
+  margin: 16px 0 6px;
+  color: #2d3f55;
+}
+.report-preview table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0;
+  font-size: 0.78rem;
+}
+.report-preview th,
+.report-preview td {
+  border: 1px solid #d8dee6;
+  padding: 4px 8px;
+  text-align: left;
+}
+.report-preview th {
+  background: #eaf0f6;
+  font-weight: 600;
+}
+.report-preview pre {
+  background: #1e2a38;
+  color: #c8d6e5;
+  padding: 12px;
+  overflow-x: auto;
+  font-size: 0.72rem;
+  border: 0;
+}
+.report-preview code {
+  font-family: "Cascadia Code", "Fira Code", "Consolas", monospace;
+}
+.report-preview ul {
+  margin: 4px 0;
+  padding-left: 20px;
+}
+.report-preview li {
+  margin: 2px 0;
+}
+.report-preview p {
+  margin: 4px 0;
 }
 
 .log-panel {

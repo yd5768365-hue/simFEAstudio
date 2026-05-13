@@ -7,7 +7,8 @@ import ResultEvidenceView from '@/components/ResultEvidenceView.vue'
 import { useRemoteRuns } from '@/composables/useRemoteRuns'
 import { useRunEvents } from '@/composables/useRunEvents'
 import { useSidecarListeners } from '@/composables/useSidecarListeners'
-import type { RunArchive, ToolchainItem } from '@/types'
+import type { GuidedQuestion, RunArchive, ToolchainItem } from '@/types'
+import { renderMarkdown } from '@/utils/markdown'
 
 const configuredApiBaseUrl = import.meta.env.VITE_SIMFEA_API_BASE_URL as string | undefined
 const apiBaseUrl =
@@ -40,11 +41,11 @@ const status = ref<ConnectionStatus>({
 const archivedRuns = ref<RunArchive[]>([])
 const selectedRun = ref<RunArchive | null>(null)
 const toolchainItems = ref<ToolchainItem[]>([])
-const learningNote = ref('')
+const guidedQuestions = ref<GuidedQuestion[]>([])
 const reportPreview = ref('')
 const learningExportTarget = ref('')
 const selectedLearningFormat = ref('md')
-const noteMessage = ref('选择一次运行后，可以写下这次计算的判断、错误和下一步。')
+const noteMessage = ref('选择一次运行后，回答引导问题，保存后生成学习报告。')
 const reportMessage = ref('运行完成后，这里会显示自动生成的学习沉淀报告。')
 const exportMessage = ref('学习记录可以导出到配置目录，也可以临时指定一个目录。')
 const logs = ref('[界面] 正在监听侧车服务和网络日志...')
@@ -52,6 +53,7 @@ const logs = ref('[界面] 正在监听侧车服务和网络日志...')
 const evidenceArtifacts = computed(
   () => selectedRun.value?.artifacts?.filter((artifact) => artifact !== 'artifacts/result_summary.json') ?? []
 )
+const renderedReport = computed(() => (reportPreview.value ? renderMarkdown(reportPreview.value) : ''))
 
 const selectedArtifacts = computed(() =>
   evidenceArtifacts.value.length ? evidenceArtifacts.value.join('、') : '暂无结果文件'
@@ -64,6 +66,19 @@ const selectedToolchain = computed<ToolchainItem[]>(
 const availableLearningFormats = computed(() =>
   status.value.learningFormats.length > 0 ? status.value.learningFormats : ['md', 'json', 'txt']
 )
+
+const solverFilter = ref('')
+const statusFilter = ref('')
+const availableSolvers = computed(() => {
+  const solvers = new Set(archivedRuns.value.map((r) => r.solver).filter(Boolean))
+  return [...solvers].sort()
+})
+const filteredRuns = computed(() => {
+  let runs = archivedRuns.value
+  if (solverFilter.value) runs = runs.filter((r) => r.solver === solverFilter.value)
+  if (statusFilter.value) runs = runs.filter((r) => r.status === statusFilter.value)
+  return runs
+})
 
 const appendLog = (line: string) => {
   logs.value += `\n${line}`
@@ -105,15 +120,24 @@ const selectRunAction = async (runId: string) => {
   }
 
   selectedRun.value = result.data
-  learningNote.value = result.data.note ?? ''
   reportPreview.value = result.data.report ?? ''
-  noteMessage.value = `当前笔记：${result.data.local_archive}\\note.md`
   reportMessage.value = result.data.learning_report
     ? `学习报告：${result.data.local_archive}\\${result.data.learning_report}`
-    : '这次运行还没有生成学习报告。'
+    : '运行完成，等待填写笔记后生成学习报告。'
   exportMessage.value = result.data.learning_export
     ? `最近导出：${result.data.learning_export.path}`
     : '这次运行还没有导出到学习库。'
+
+  // Fetch guided questions (backend fills in existing answers from note.md)
+  try {
+    const qResult = await api.getGuidedQuestions(runId)
+    if (qResult.data?.questions) {
+      guidedQuestions.value = qResult.data.questions
+      noteMessage.value = `引导问题已加载（${guidedQuestions.value.length} 题）`
+    }
+  } catch {
+    noteMessage.value = '打不开引导问题。'
+  }
 }
 
 const saveNoteAction = async () => {
@@ -122,7 +146,19 @@ const saveNoteAction = async () => {
     return
   }
 
-  const result = await api.saveRunNote(selectedRun.value.run_id, learningNote.value)
+  const answers: Record<string, string> = {}
+  let hasContent = false
+  for (const q of guidedQuestions.value) {
+    const answer = q.answer.trim()
+    answers[q.id] = answer
+    if (answer) hasContent = true
+  }
+  if (!hasContent) {
+    noteMessage.value = '请至少填写一个问题的答案。'
+    return
+  }
+
+  const result = await api.saveRunNote(selectedRun.value.run_id, '', answers)
   noteMessage.value = result.data.saved ? `学习笔记已保存：${result.data.note_path}` : '学习笔记保存失败。'
   if (result.data.report_path) {
     reportMessage.value = `学习报告已刷新：${result.data.report_path}`
@@ -383,14 +419,30 @@ onUnmounted(() => {
           <p class="eyebrow">物证仓库</p>
           <h2 id="runs-title">运行记录</h2>
         </div>
+        <div class="filter-row">
+          <select v-model="solverFilter" class="filter-select">
+            <option value="">全部求解器</option>
+            <option v-for="s in availableSolvers" :key="s" :value="s">{{ s }}</option>
+          </select>
+          <select v-model="statusFilter" class="filter-select">
+            <option value="">全部状态</option>
+            <option value="finished">finished</option>
+            <option value="failed">failed</option>
+            <option value="running">running</option>
+            <option value="canceled">canceled</option>
+          </select>
+          <span class="filter-count">{{ filteredRuns.length }} / {{ archivedRuns.length }} 条</span>
+        </div>
         <div class="run-table" role="table" aria-label="运行记录">
           <div class="run-row run-head" role="row">
             <span role="columnheader">算例</span>
-            <span role="columnheader">节点</span>
+            <span role="columnheader">求解器</span>
             <span role="columnheader">状态</span>
+            <span role="columnheader">位移(mm)</span>
+            <span role="columnheader">应力(MPa)</span>
           </div>
           <button
-            v-for="run in archivedRuns"
+            v-for="run in filteredRuns"
             :key="run.run_id"
             type="button"
             class="run-row run-button"
@@ -398,12 +450,13 @@ onUnmounted(() => {
             @click="selectRunAction(run.run_id)"
           >
             <span>{{ run.case_name }}</span>
-            <span>{{ run.compute_node }}</span>
+            <span>{{ run.solver }}</span>
             <span>{{ run.status }}</span>
-            <p>{{ run.run_id }} / {{ run.local_archive }}</p>
+            <span>{{ run.summary?.metrics?.max_displacement_mm?.toFixed(2) ?? '—' }}</span>
+            <span>{{ run.summary?.metrics?.max_von_mises_mpa?.toFixed(2) ?? '—' }}</span>
           </button>
-          <p v-if="archivedRuns.length === 0" class="empty-state">
-            暂无运行记录。先点击“运行闭环样例”，生成第一份物证。
+          <p v-if="filteredRuns.length === 0" class="empty-state">
+            暂无匹配的运行记录。
           </p>
         </div>
       </section>
@@ -425,11 +478,19 @@ onUnmounted(() => {
           <span>退出码：{{ selectedRun.exit_code ?? '未结束' }}</span>
           <span>结果：{{ selectedArtifacts }}</span>
         </div>
-        <textarea
-          v-model="learningNote"
-          :disabled="!selectedRun"
-          placeholder="例如：这次远程运行验证了什么？日志里有没有异常？结果文件说明了什么？下一步准备接哪个求解器？"
-        />
+        <div v-if="!selectedRun" class="note-placeholder">
+          选择一次运行记录后，这里会显示引导问题。
+        </div>
+        <div v-for="q in guidedQuestions" :key="q.id" class="guided-question">
+          <label :for="`q-${q.id}`">{{ q.question }}</label>
+          <textarea
+            :id="`q-${q.id}`"
+            v-model="q.answer"
+            :disabled="!selectedRun"
+            :placeholder="`回答：${q.question.slice(0, 20)}...`"
+            rows="2"
+          />
+        </div>
         <div class="button-row">
           <button type="button" class="primary-action" @click="saveNoteAction" :disabled="!selectedRun">
             保存学习笔记
@@ -481,7 +542,7 @@ onUnmounted(() => {
           </button>
         </div>
         <p class="note-message">{{ reportMessage }}</p>
-        <pre v-if="reportPreview" class="report-preview"><code>{{ reportPreview }}</code></pre>
+        <div v-if="renderedReport" class="report-preview" v-html="renderedReport" />
         <p v-else class="empty-state">
           选择一次运行记录后，这里会显示自动生成的学习沉淀报告。
         </p>

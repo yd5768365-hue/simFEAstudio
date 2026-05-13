@@ -26,7 +26,7 @@ export const computeNodeSchema = z.object({
   label: z.string(),
   host: z.string(),
   user: z.string(),
-  port: z.number().optional(),
+  port: z.number().nullable().optional(),
   remote_runs_root: z.string(),
   configured: z.boolean(),
 })
@@ -86,27 +86,27 @@ export const runArchiveSchema = z.object({
   compute_node: z.string(),
   status: z.string(),
   created_at: z.string(),
-  started_at: z.string().optional(),
-  finished_at: z.string().optional(),
-  exit_code: z.number().optional(),
+  started_at: z.string().nullable().optional(),
+  finished_at: z.string().nullable().optional(),
+  exit_code: z.number().nullable().optional(),
   remote_workdir: z.string(),
   local_archive: z.string(),
-  input_files: z.array(z.string()).optional(),
+  input_files: z.array(z.string()).nullable().optional(),
   artifacts: z.array(z.string()),
-  learning_report: z.string().optional(),
-  result_summary: z.string().optional(),
-  note: z.string().optional(),
-  report: z.string().optional(),
-  learning_export: learningExportRecordSchema.optional(),
-  learning_exports: z.array(learningExportRecordSchema).optional(),
+  learning_report: z.string().nullable().optional(),
+  result_summary: z.string().nullable().optional(),
+  note: z.string().nullable().optional(),
+  report: z.string().nullable().optional(),
+  learning_export: learningExportRecordSchema.nullable().optional(),
+  learning_exports: z.array(learningExportRecordSchema).nullable().optional(),
   summary: resultSummarySchema.nullable().optional(),
-  toolchain: z.array(toolchainItemSchema).optional(),
-  scheduler: z.string().optional(),
-  job_id: z.string().optional(),
-  partition: z.string().optional(),
-  allocated_node: z.string().optional(),
-  requested_cpus: z.number().optional(),
-  requested_memory: z.string().optional(),
+  toolchain: z.array(toolchainItemSchema).nullable().optional(),
+  scheduler: z.string().nullable().optional(),
+  job_id: z.string().nullable().optional(),
+  partition: z.string().nullable().optional(),
+  allocated_node: z.string().nullable().optional(),
+  requested_cpus: z.number().nullable().optional(),
+  requested_memory: z.string().nullable().optional(),
 })
 
 export type RunArchive = z.output<typeof runArchiveSchema>
@@ -156,7 +156,11 @@ export const getRunResponseSchema = z.object({
 export type GetRunResponse = z.output<typeof getRunResponseSchema>
 
 export const saveNoteBodySchema = z.object({
-  note: z.string(),
+  note: z.string().optional(),
+  answers: z.record(z.string()).optional(),
+  export: z.boolean().optional(),
+  format: z.string().optional(),
+  target_dir: z.string().optional(),
 })
 
 export const saveNoteResponseSchema = z.object({
@@ -169,6 +173,26 @@ export const saveNoteResponseSchema = z.object({
 })
 
 export type SaveNoteResponse = z.output<typeof saveNoteResponseSchema>
+
+export const guidedQuestionSchema = z.object({
+  id: z.string(),
+  question: z.string(),
+  answer: z.string(),
+})
+
+export type GuidedQuestion = z.output<typeof guidedQuestionSchema>
+
+export const guidedQuestionsResponseSchema = z.object({
+  message: z.string(),
+  data: z
+    .object({
+      run_id: z.string(),
+      questions: z.array(guidedQuestionSchema),
+    })
+    .nullable(),
+})
+
+export type GuidedQuestionsResponse = z.output<typeof guidedQuestionsResponseSchema>
 
 export const generateReportResponseSchema = z.object({
   message: z.string(),
