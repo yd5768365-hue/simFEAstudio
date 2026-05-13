@@ -13,6 +13,11 @@
   ![License](https://img.shields.io/badge/License-Apache_2.0-8162C3)
 </div>
 
+<div align="center">
+  <img src="docs/项目桌面版本-开发版本.png" alt="SimFEA Studio 桌面版本" width="960">
+  <p><em>SimFEA Studio 桌面版本 — Tauri 桌面壳 + Vue 前端 + 本地 CalculiX 运行</em></p>
+</div>
+
 ---
 
 ## 项目定位
