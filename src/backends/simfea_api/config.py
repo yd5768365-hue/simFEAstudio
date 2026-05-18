@@ -86,6 +86,7 @@ class SolverDefinition:
     description: str = ""
     pre_commands: list[str] = field(default_factory=list)
     post_commands: list[str] = field(default_factory=list)
+    timeout_seconds: int = 120
 
 
 @dataclass
@@ -226,6 +227,58 @@ S
                 },
             },
             {
+                "alias": "freecad",
+                "label": "FreeCAD",
+                "kind": "preprocessor",
+                "executable": "python",
+                "description": "FreeCAD Python API adapter. Run with a Python environment that can import FreeCAD and Part.",
+                "command_template": "${solver_executable} freecad_smoke.py",
+                "artifact_patterns": ["*.FCStd", "*.step", "*.stp", "result.txt"],
+                "pre_commands": [],
+                "post_commands": [],
+                "input_files": {
+                    "freecad_smoke.py": """import FreeCAD as App
+import Part
+
+doc = App.newDocument("SimFEA_FreeCAD_Smoke")
+box = Part.makeBox(10, 10, 10)
+Part.show(box)
+doc.recompute()
+doc.saveAs("freecad_smoke.FCStd")
+Part.export([box], "freecad_smoke.step")
+print("freecad_artifact=freecad_smoke.step")
+""",
+                },
+            },
+            {
+                "alias": "prepomax",
+                "label": "PrePoMax",
+                "kind": "structural-prepost",
+                "executable": "PrePoMax",
+                "description": "PrePoMax command-line adapter placeholder. Use -f to import geometry or -r with -g No for regeneration workflows.",
+                "command_template": "\"${solver_executable}\" --help",
+                "artifact_patterns": ["*.pmx", "*.inp", "*.frd", "*.dat", "*.vtk", "*.vtu", "prepomax_adapter.txt", "result.txt"],
+                "pre_commands": [],
+                "post_commands": [],
+                "input_files": {
+                    "README.prepomax.txt": "PrePoMax CLI smoke run. For geometry import use: PrePoMax -f model.step -u MM_TON_S_C. For automation use: PrePoMax -r model.pmx -g No -w workdir.\n",
+                },
+            },
+            {
+                "alias": "prepomax-regenerate",
+                "label": "PrePoMax Regenerate",
+                "kind": "structural-prepost",
+                "executable": "PrePoMax",
+                "description": "Headless PrePoMax regeneration workflow. Provide model.pmx and related geometry files in the run workdir.",
+                "command_template": "\"${solver_executable}\" -r model.pmx -g No -w .",
+                "artifact_patterns": ["*.pmx", "*.STEP", "*.step", "*.inp", "*.frd", "*.dat", "*.sta", "*.cvg", "*.csv", "_output_*.txt", "_error_*.txt", "result.txt"],
+                "pre_commands": [],
+                "post_commands": [],
+                "input_files": {
+                    "README.prepomax-regenerate.txt": "PrePoMax regeneration template. Add model.pmx and required geometry files to this workdir, then run: PrePoMax -r model.pmx -g No -w .\n",
+                },
+            },
+            {
                 "alias": "openfoam",
                 "label": "OpenFOAM",
                 "kind": "fluid",
@@ -234,9 +287,7 @@ S
                 "command_template": "foamDictionary -help >/dev/null 2>&1 || true; echo 'OpenFOAM adapter ready: provide case files in solvers.openfoam.input_files'; touch result.txt",
                 "artifact_patterns": ["log.*", "postProcessing/**", "result.txt"],
                 "pre_commands": [],
-                "post_commands": [
-                    "printf 'solver=openfoam\n'",
-                ],
+                "post_commands": [],
                 "input_files": {
                     "README.simfea.txt": "OpenFOAM adapter placeholder. Replace input_files with a real OpenFOAM case in .simfea/config.json.\n",
                 },
@@ -250,9 +301,7 @@ S
                 "command_template": "ElmerSolver case.sif",
                 "artifact_patterns": ["case.result", "*.ep", "*.vtu", "result.txt"],
                 "pre_commands": [],
-                "post_commands": [
-                    "printf 'solver=elmer\n'",
-                ],
+                "post_commands": [],
                 "input_files": {
                     "case.sif": """Header
   CHECK KEYWORDS Warn

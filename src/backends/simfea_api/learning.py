@@ -200,12 +200,18 @@ def _render_note_for_report(note_text: str, meta: dict) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _next_step_questions(meta: dict) -> str:
+def _next_step_questions(meta: dict, answers: dict[str, str] | None = None) -> str:
     status = meta.get("status", "")
     exit_code = meta.get("exit_code")
     solver = meta.get("solver", "")
+    answers = answers or {}
+    recorded_next = answers.get("next", "").strip()
+    if recorded_next == "（未填写）":
+        recorded_next = ""
 
     questions: list[str] = []
+    if recorded_next:
+        questions.append(f"已记录的下次调整：{recorded_next}")
 
     if status == "failed" or (exit_code is not None and exit_code != 0):
         questions.append("stderr 中是否有错误线索能解释失败原因？")
@@ -302,6 +308,7 @@ def generate_learning_report(run_dir: Path) -> Path:
 
     meta = json.loads(meta_path.read_text(encoding="utf-8"))
     raw_note = read_optional_text(run_dir / "note.md", "").strip()
+    note_answers = parse_note_answers(raw_note)
     note = _render_note_for_report(raw_note, meta)
     stdout_tail = read_tail(run_dir / "stdout.log")
     stderr_tail = read_tail(run_dir / "stderr.log")
@@ -348,7 +355,7 @@ def generate_learning_report(run_dir: Path) -> Path:
     analysis_section = render_analysis_section(analysis)
     related = _find_related_runs(run_dir, meta)
     related_section = _render_related_runs(related, meta)
-    next_steps = _next_step_questions(meta)
+    next_steps = _next_step_questions(meta, note_answers)
 
     report = f"""# SimFEA Studio 学习沉淀报告
 
@@ -524,4 +531,3 @@ def export_learning_record(run_dir: Path, export_format: str | None, target_dir:
         "summary": summary,
         "record": export_record,
     }
-

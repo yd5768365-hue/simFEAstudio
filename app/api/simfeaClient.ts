@@ -17,6 +17,7 @@ import {
   startDemoRunResponseSchema,
   startSlurmDemoRunResponseSchema,
   startSolverRunResponseSchema,
+  startWorkflowRunResponseSchema,
 } from '@/api/contracts'
 
 const connectContract = contract({
@@ -109,6 +110,13 @@ const startSolverRunContract = contract({
   response: startSolverRunResponseSchema,
 })
 
+const startFreecadPrepomaxWorkflowContract = contract({
+  method: 'POST',
+  path: '/v1/runs/:alias/workflows/freecad-prepomax',
+  params: ['alias'] as const,
+  response: startWorkflowRunResponseSchema,
+})
+
 const cancelRunContract = contract({
   method: 'POST',
   path: '/v1/runs/:runId/cancel',
@@ -150,6 +158,8 @@ export function createSimfeaClient(baseUrl: string, appendLog: (line: string) =>
     startSlurmDemoRun: (alias: string) => request(startSlurmDemoRunContract, { params: { alias } }),
     startSolverRun: (alias: string, solverAlias: string) =>
       request(startSolverRunContract, { params: { alias, solverAlias } }),
+    startFreecadPrepomaxWorkflow: (alias: string) =>
+      request(startFreecadPrepomaxWorkflowContract, { params: { alias } }),
     cancelRun: (runId: string) => request(cancelRunContract, { params: { runId } }),
   }
 }

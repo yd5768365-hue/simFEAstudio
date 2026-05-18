@@ -1,3 +1,5 @@
+import shutil
+from pathlib import Path
 from string import Template
 
 from ..config import SolverDefinition
@@ -37,6 +39,16 @@ def build_solver_probe_command(solvers: list[SolverDefinition]) -> str:
         lines.append(f"printf '{solver.alias}='")
         lines.append(f"command -v {sh_quote(solver.executable)} 2>/dev/null || true")
     return "\n".join(lines)
+
+
+def probe_local_solvers(solvers: list[SolverDefinition]) -> dict[str, str]:
+    """Check which solvers are available on the local machine using Python."""
+    result: dict[str, str] = {}
+    for solver in solvers:
+        exe = solver.executable.strip('"')
+        found = shutil.which(exe) or (Path(exe).exists() if exe else False)
+        result[solver.alias] = str(found) if found else ""
+    return result
 
 
 def build_solver_run_script(run: RemoteRun, solver: SolverDefinition) -> str:

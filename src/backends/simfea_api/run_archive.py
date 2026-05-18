@@ -153,8 +153,13 @@ def load_archived_runs(limit: int = 20):
             meta = json.loads(meta_path.read_text(encoding="utf-8"))
             if (meta_path.parent / "learning_report.md").exists():
                 meta["learning_report"] = "learning_report.md"
-            if (meta_path.parent / "artifacts" / "result_summary.json").exists():
+            summary_path = meta_path.parent / "artifacts" / "result_summary.json"
+            if summary_path.exists():
                 meta["result_summary"] = "artifacts/result_summary.json"
+                try:
+                    meta["summary"] = json.loads(summary_path.read_text(encoding="utf-8"))
+                except (OSError, json.JSONDecodeError):
+                    pass
             meta.setdefault("toolchain", current.toolchain)
             runs.append(meta)
         except (OSError, json.JSONDecodeError):

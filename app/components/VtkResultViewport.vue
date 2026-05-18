@@ -5,6 +5,7 @@ import type { RunArchive } from '@/types'
 const props = defineProps<{
   run: RunArchive | null
   apiBaseUrl: string
+  selectedArtifact: string
 }>()
 
 const container = ref<HTMLDivElement | null>(null)
@@ -42,6 +43,9 @@ const loadVtkModules = () => {
 }
 
 const vtkArtifact = computed(() => {
+  if (props.selectedArtifact) {
+    return props.selectedArtifact
+  }
   const fromSummary = props.run?.summary?.visualization?.vtk_artifact
   if (fromSummary) {
     return fromSummary

@@ -43,7 +43,7 @@ Tauri 桌面壳
 → Vue / Vite 前端 + VTK.js 结果视图
 → FastAPI Python sidecar
 → Local / SSH / Slurm / SolverRunner
-→ CalculiX / OpenFOAM / Elmer
+→ CalculiX / FreeCAD / PrePoMax / OpenFOAM / Elmer
 → .simfea/runs/<run_id> 物证仓库
 ```
 
@@ -116,6 +116,8 @@ SimFEA Studio 的学习系统按照"日志 → 笔记 → 报告"的顺序逐层
 | 求解器 | 状态 | 说明 |
 | --- | --- | --- |
 | **CalculiX** | 已端到端验证 | 本地悬臂梁算例，FRD → VTK，指标摘要，物证归档。 |
+| FreeCAD | 适配器骨架就绪 | 通过 `FreeCADCmd` 执行无头 Python 宏，默认 smoke case 生成 `.FCStd/.step`。 |
+| PrePoMax | CLI 与 regeneration 已接入 | `prepomax` 用于 `--help` smoke；`prepomax-regenerate` 通过官方 `-r model.pmx -g No -w .` 跑无 GUI regeneration，本机配置已接入自带 Profile 样例。 |
 | OpenFOAM | 适配器骨架就绪 | 需要接入真实 case 文件。 |
 | Elmer | 适配器骨架就绪 | 需要接入真实 case 文件。 |
 
@@ -298,7 +300,9 @@ git diff --check
 - [x] 结构化引导笔记 + 学习报告自动生成。
 - [ ] OpenFOAM 真实 case 接入。
 - [ ] Elmer 真实 case 接入。
-- [ ] FreeCAD / Salome 前处理入口。
+- [x] FreeCAD 无头宏入口。
+- [x] PrePoMax 官方 CLI / regeneration 本机样例接入。
+- [ ] Salome 前处理入口。
 - [ ] AI 辅助工程证据评分和复盘建议。
 
 ## License

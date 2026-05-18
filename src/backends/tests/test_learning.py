@@ -8,6 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from simfea_api.learning import (
     build_plain_learning_record,
+    compose_note_md,
     generate_learning_report,
     sanitize_filename_part,
 )
@@ -162,6 +163,37 @@ class GenerateLearningReportTest(unittest.TestCase):
         self.assertIn("12345", content)
         self.assertIn("node01", content)
         self.assertIn("COMPLETED", content)
+
+    def test_next_steps_reuse_structured_next_answer(self):
+        meta = {
+            "run_id": "r3",
+            "case_name": "beam",
+            "solver": "calculix",
+            "runner": "SolverRunner",
+            "status": "finished",
+            "exit_code": 0,
+            "created_at": "2026-01-01T00:00:00Z",
+            "finished_at": "2026-01-01T00:01:00Z",
+            "compute_node": "local",
+            "compute_node_label": "Local",
+            "local_archive": str(self.run_dir),
+            "remote_workdir": "",
+            "command": "ccx cantilever",
+        }
+        (self.run_dir / "meta.json").write_text(json.dumps(meta), encoding="utf-8")
+        (self.run_dir / "note.md").write_text(
+            compose_note_md({"next": "mesh=2mm, load=-120N"}, meta),
+            encoding="utf-8",
+        )
+        (self.run_dir / "stdout.log").touch()
+        (self.run_dir / "stderr.log").touch()
+        (self.run_dir / "artifacts").mkdir(parents=True)
+        (self.run_dir / "artifacts" / "result.txt").touch()
+
+        report_path = generate_learning_report(self.run_dir)
+        content = report_path.read_text(encoding="utf-8")
+
+        self.assertIn("已记录的下次调整：mesh=2mm, load=-120N", content)
 
 
 if __name__ == "__main__":

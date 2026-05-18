@@ -14,7 +14,7 @@ Runner 是 SimFEA Studio 的求解执行抽象层。它将"在何处、以何种
 |--------|----------|--------|----------|
 | `SSHRunner` | 远程节点（SSH） | 无 | 单机远程命令、demo-shell |
 | `SlurmRunner` | HPC 集群（sbatch） | Slurm | 作业调度、队列管理 |
-| `SolverRunner` | 任意（SSH/Slurm/本地） | 可选 | 真实求解器（CalculiX/OpenFOAM/Elmer） |
+| `SolverRunner` | 任意（SSH/Slurm/本地） | 可选 | 真实求解器/工具适配器（CalculiX/FreeCAD/PrePoMax/OpenFOAM/Elmer） |
 | `LocalRunner` | 本地 sidecar 进程 | 无 | 未来本地轻量执行 |
 
 当前已实现：SSHRunner、SlurmRunner、SolverRunner。LocalRunner 待后续。
@@ -167,6 +167,9 @@ exit $exit_code
 - demo-shell: `solver="demo-shell"`
 - Slurm demo: `solver="demo-slurm-shell"`
 - CalculiX: `solver="calculix"`
+- FreeCAD: `solver="freecad"`
+- PrePoMax: `solver="prepomax"`（CLI smoke，默认执行 `--help`）
+- PrePoMax Regenerate: `solver="prepomax-regenerate"`（官方无 GUI regeneration：`-r model.pmx -g No -w .`）
 - OpenFOAM: `solver="openfoam"`
 - Elmer: `solver="elmer"`
 

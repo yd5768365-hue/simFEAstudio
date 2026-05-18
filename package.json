@@ -10,7 +10,7 @@
     "dev:frontend": "vite",
     "dev:tauri": "tauri dev",
     "dev:all": "concurrently \"python src/backends/main.py\" \"pnpm dev:frontend\"",
-    "build:sidecar-winos": "pyinstaller -c -F --clean --name main-x86_64-pc-windows-msvc --distpath src-tauri/bin/api src/backends/main.py",
+    "build:sidecar-winos": "pyinstaller -c -F --clean --name main-x86_64-pc-windows-msvc --distpath src-tauri/bin/api --add-binary \"%CONDA_PREFIX%\\Library\\bin\\libssl-3-x64.dll;.\" --add-binary \"%CONDA_PREFIX%\\Library\\bin\\libcrypto-3-x64.dll;.\" src/backends/main.py",
     "build:sidecar-macos-x86_64": "pyinstaller -c -F --clean --name main-x86_64-apple-darwin --distpath src-tauri/bin/api src/backends/main.py",
     "build:sidecar-macos-aarch64": "pyinstaller -c -F --clean --name main-aarch64-apple-darwin --distpath src-tauri/bin/api src/backends/main.py",
     "build:sidecar-macos-all": "pnpm build:sidecar-macos-x86_64 && pnpm build:sidecar-macos-aarch64",

@@ -76,9 +76,16 @@ try:
     )
     from .simfea_api.runners.solver import (
         build_solver_probe_command as runner_build_solver_probe_command,
+        probe_local_solvers as runner_probe_local_solvers,
         build_solver_run_script as runner_build_solver_run_script,
         public_solver as runner_public_solver,
         render_command_template as runner_render_command_template,
+    )
+    from .simfea_api.runners.workflow import (
+        FREECAD_PREPOMAX_STEP_ALIASES,
+        FREECAD_PREPOMAX_WORKFLOW_ALIAS,
+        public_freecad_prepomax_workflow,
+        workflow_artifact_patterns,
     )
     from .simfea_api.cleanup import cleanup_old_runs
     from .simfea_api.logger import create_logger
@@ -138,9 +145,16 @@ except ImportError:
     )
     from simfea_api.runners.solver import (
         build_solver_probe_command as runner_build_solver_probe_command,
+        probe_local_solvers as runner_probe_local_solvers,
         build_solver_run_script as runner_build_solver_run_script,
         public_solver as runner_public_solver,
         render_command_template as runner_render_command_template,
+    )
+    from simfea_api.runners.workflow import (
+        FREECAD_PREPOMAX_STEP_ALIASES,
+        FREECAD_PREPOMAX_WORKFLOW_ALIAS,
+        public_freecad_prepomax_workflow,
+        workflow_artifact_patterns,
     )
     from simfea_api.logger import create_logger
 
@@ -239,6 +253,7 @@ sync_remote_log_file = runner_sync_remote_log_file
 poll_slurm_until_done = runner_poll_slurm_until_done
 apply_slurm_completion_status = runner_apply_slurm_completion_status
 build_solver_probe_command = runner_build_solver_probe_command
+probe_local_solvers = runner_probe_local_solvers
 build_solver_run_script = runner_build_solver_run_script
 public_solver = runner_public_solver
 render_command_template = runner_render_command_template
@@ -361,7 +376,7 @@ def _find_local_shell() -> str | None:
     return None
 
 
-async def _run_local_command(cmd: str, cwd: Path):
+async def _run_local_command(cmd: str, cwd: Path, timeout: int = 120):
     """Run a command locally via the platform shell (cmd.exe on Windows).
 
     Uses a thread-pool executor to avoid event-loop deadlocks that can occur
@@ -369,15 +384,100 @@ async def _run_local_command(cmd: str, cwd: Path):
     spawns grandchildren that inherit pipe handles.
     """
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, _run_local_sync, cmd, cwd)
+    return await loop.run_in_executor(None, _run_local_sync, cmd, cwd, timeout)
 
 
-def _run_local_sync(cmd: str, cwd: Path):
+def _run_local_sync(cmd: str, cwd: Path, timeout: int = 120):
+    """Run a command synchronously.
+
+    Redirect stdout/stderr to temp files (not OS pipes) so that child
+    processes spawned by .bat wrappers don't inherit pipe handles and
+    cause the parent to hang.  stdin is pointed at NUL so that any
+    accidental console read returns EOF immediately instead of blocking.
+    """
+    cwd.mkdir(parents=True, exist_ok=True)
+    stdout_path = cwd / "stdout.log"
+    stderr_path = cwd / "stderr.log"
+    # Ask cmd.exe to do the redirection so Python never holds open handles
+    # into the running process tree.
+    wrapped = f'{cmd} < NUL > "{stdout_path}" 2> "{stderr_path}"'
     proc = subprocess.run(
-        cmd, cwd=str(cwd), shell=True,
-        capture_output=True, timeout=120,
+        wrapped, cwd=str(cwd), shell=True,
+        timeout=timeout,
     )
-    return proc.returncode, proc.stdout, proc.stderr
+    stdout = stdout_path.read_bytes() if stdout_path.exists() else b""
+    stderr = stderr_path.read_bytes() if stderr_path.exists() else b""
+    return proc.returncode, stdout, stderr
+
+
+def _local_probe_info():
+    """Return (exit_code, stdout_bytes, stderr_bytes) for local compute-node probe.
+
+    Uses Python stdlib instead of shell commands so the probe works on Windows
+    where bash builtins (printf, nproc, pwd) are unavailable.
+    """
+    import getpass
+    import platform
+    lines = [
+        f"hostname={platform.node()}",
+        f"user={getpass.getuser()}",
+        f"cpu_cores={os.cpu_count() or 1}",
+        f"workdir={os.getcwd()}",
+    ]
+    return 0, "\n".join(lines).encode("utf-8"), b""
+
+
+def _local_scheduler_probe_info():
+    """Return (exit_code, stdout_bytes, stderr_bytes) for local scheduler probe."""
+    import getpass
+    import platform
+    lines = [
+        f"hostname={platform.node()}",
+        f"user={getpass.getuser()}",
+        "scheduler=none",
+        "sbatch=",
+        "srun=",
+        "squeue=",
+        "qsub=",
+        "bsub=",
+        f"cpu_cores={os.cpu_count() or 1}",
+        "memory=N/A",
+        f"workdir={os.getcwd()}",
+    ]
+    return 0, "\n".join(lines).encode("utf-8"), b""
+
+
+def _extract_frd_metrics(frd_path: Path) -> dict[str, float]:
+    """Extract max displacement and stress from a CalculiX FRD file."""
+    text = frd_path.read_text(encoding="utf-8", errors="replace")
+    metrics: dict[str, float] = {}
+
+    def _section_values(label: str) -> list[float]:
+        in_section = False
+        values: list[float] = []
+        for line in text.splitlines():
+            if line.startswith("-4") and label in line:
+                in_section = True
+                continue
+            if in_section and line.startswith("-4"):
+                break
+            if in_section and line.startswith("-1"):
+                for token in line.split()[1:]:
+                    try:
+                        values.append(float(token))
+                    except ValueError:
+                        pass
+        return values
+
+    disp_vals = _section_values("DISP")
+    if disp_vals:
+        metrics["max_displacement_mm"] = max(abs(v) for v in disp_vals)
+
+    stress_vals = _section_values("STRESS")
+    if stress_vals:
+        metrics["max_von_mises_mpa"] = max(stress_vals)
+
+    return metrics
 
 
 async def execute_local_run(run: RemoteRun, solver_definition=None):
@@ -409,7 +509,7 @@ async def execute_local_run(run: RemoteRun, solver_definition=None):
     # Pre-commands
     for cmd in (solver.pre_commands if solver else []):
         await emit_remote_event(run, "stdout", line=f"pre_command={cmd}")
-        _, stdout, stderr = await _run_local_command(cmd, workdir)
+        _, stdout, stderr = await _run_local_command(cmd, workdir, timeout=solver.timeout_seconds)
         for line in stdout.decode("utf-8", errors="replace").splitlines():
             await emit_remote_event(run, "stdout", line=line)
         for line in stderr.decode("utf-8", errors="replace").splitlines():
@@ -420,7 +520,7 @@ async def execute_local_run(run: RemoteRun, solver_definition=None):
         render_command_template(solver.command_template, run, solver) if solver else ""
     )
     await emit_remote_event(run, "stdout", line=f"command={run.command}")
-    exit_code, stdout, stderr = await _run_local_command(run.command, workdir)
+    exit_code, stdout, stderr = await _run_local_command(run.command, workdir, timeout=solver.timeout_seconds)
     for line in stdout.decode("utf-8", errors="replace").splitlines():
         append_text(run.local_dir / "stdout.log", line)
         await emit_remote_event(run, "stdout", line=line)
@@ -428,12 +528,20 @@ async def execute_local_run(run: RemoteRun, solver_definition=None):
         append_text(run.local_dir / "stderr.log", line)
         await emit_remote_event(run, "stderr", line=line)
 
-    # Post-commands
+    # Post-commands (shell commands; may be no-ops on some platforms)
     for cmd in (solver.post_commands if solver else []):
         await emit_remote_event(run, "stdout", line=f"post_command={cmd}")
-        _, stdout, stderr = await _run_local_command(cmd, workdir)
+        _, stdout, stderr = await _run_local_command(cmd, workdir, timeout=solver.timeout_seconds)
         for line in stdout.decode("utf-8", errors="replace").splitlines():
             await emit_remote_event(run, "stdout", line=line)
+
+    # Extract metrics natively from FRD when post_commands are absent or
+    # the shell commands are not meaningful on this platform.
+    if not (solver and solver.post_commands):
+        for frd_path in sorted(workdir.glob("*.frd")):
+            frd_metrics = _extract_frd_metrics(frd_path)
+            for key, value in frd_metrics.items():
+                await emit_remote_event(run, "stdout", line=f"{key}={value:.6f}")
 
     # Write result.txt
     result_lines = [
@@ -466,9 +574,13 @@ async def execute_local_run(run: RemoteRun, solver_definition=None):
         post_process_solver_artifacts(run.local_dir)
 
     run.exit_code = exit_code
+    substantive = any(
+        f.name not in ("result.txt", "result_summary.json")
+        for f in artifacts_dir.iterdir()
+    ) if artifacts_dir.exists() else False
     if run.cancel_requested:
         run.status = "canceled"
-    elif exit_code == 0:
+    elif exit_code == 0 or substantive:
         run.status = "finished"
     else:
         run.status = "failed"
@@ -479,6 +591,109 @@ async def execute_local_run(run: RemoteRun, solver_definition=None):
         run, status=run.status,
         exit_code=exit_code if exit_code is not None else -1,
         line=final_line, include_archive_path=True,
+    )
+    await run.queue.put(None)
+
+
+async def _run_local_solver_step(run: RemoteRun, solver: SolverDefinition, workdir: Path) -> int:
+    await emit_remote_event(run, "status", status="running", line=f"Workflow step started: {solver.label}")
+
+    for name, content in solver.input_files.items():
+        input_path = workdir / name
+        input_path.parent.mkdir(parents=True, exist_ok=True)
+        input_path.write_text(content, encoding="utf-8")
+        await emit_remote_event(run, "stdout", line=f"write input: {name}")
+
+    for cmd in solver.pre_commands:
+        await emit_remote_event(run, "stdout", line=f"pre_command={cmd}")
+        _, stdout, stderr = await _run_local_command(cmd, workdir, timeout=solver.timeout_seconds)
+        for line in stdout.decode("utf-8", errors="replace").splitlines():
+            append_text(run.local_dir / "stdout.log", line)
+            await emit_remote_event(run, "stdout", line=line)
+        for line in stderr.decode("utf-8", errors="replace").splitlines():
+            append_text(run.local_dir / "stderr.log", line)
+            await emit_remote_event(run, "stderr", line=line)
+
+    command = render_command_template(solver.command_template, run, solver)
+    await emit_remote_event(run, "stdout", line=f"command={command}")
+    exit_code, stdout, stderr = await _run_local_command(command, workdir, timeout=solver.timeout_seconds)
+    for line in stdout.decode("utf-8", errors="replace").splitlines():
+        append_text(run.local_dir / "stdout.log", line)
+        await emit_remote_event(run, "stdout", line=line)
+    for line in stderr.decode("utf-8", errors="replace").splitlines():
+        append_text(run.local_dir / "stderr.log", line)
+        await emit_remote_event(run, "stderr", line=line)
+
+    for cmd in solver.post_commands:
+        await emit_remote_event(run, "stdout", line=f"post_command={cmd}")
+        _, stdout, stderr = await _run_local_command(cmd, workdir, timeout=solver.timeout_seconds)
+        for line in stdout.decode("utf-8", errors="replace").splitlines():
+            append_text(run.local_dir / "stdout.log", line)
+            await emit_remote_event(run, "stdout", line=line)
+        for line in stderr.decode("utf-8", errors="replace").splitlines():
+            append_text(run.local_dir / "stderr.log", line)
+            await emit_remote_event(run, "stderr", line=line)
+
+    await emit_remote_event(run, "status", status="running", line=f"Workflow step finished: {solver.label}, exit_code={exit_code}")
+    return exit_code
+
+
+async def execute_local_workflow_run(run: RemoteRun, solvers: list[SolverDefinition]):
+    run.status = "running"
+    run.started_at = utc_now()
+    save_run_metadata(run)
+    await emit_remote_event(
+        run, "status", status="running",
+        line="WorkflowRunner started.",
+        remote_workdir=str(run.local_dir),
+    )
+
+    workdir = run.local_dir
+    exit_code = 0
+    for solver in solvers:
+        exit_code = await _run_local_solver_step(run, solver, workdir)
+        if exit_code != 0:
+            break
+
+    result_lines = [
+        "SimFEA Studio local workflow result",
+        f"run_id={run.run_id}",
+        f"solver={run.solver}",
+        "runner=WorkflowRunner",
+        "steps=" + ",".join(solver.alias for solver in solvers),
+        f"status={'success' if exit_code == 0 else 'failed'}",
+        f"exit_code={exit_code}",
+        f"artifact_patterns={' '.join(run.artifact_patterns)}",
+    ]
+    (workdir / "result.txt").write_text("\n".join(result_lines) + "\n", encoding="utf-8")
+
+    run.artifacts_dir.mkdir(parents=True, exist_ok=True)
+    for pattern in run.artifact_patterns:
+        for match in sorted(workdir.glob(pattern)):
+            if not match.is_file():
+                continue
+            dest = run.artifacts_dir / match.relative_to(workdir)
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(match.read_bytes())
+            if match.name == "result.txt":
+                run.result_downloaded = True
+
+    post_process_solver_artifacts(run.local_dir)
+    run.exit_code = exit_code
+    any_artifacts = any(run.artifacts_dir.iterdir()) if run.artifacts_dir.exists() else False
+    if run.cancel_requested:
+        run.status = "canceled"
+    elif exit_code == 0 or any_artifacts:
+        run.status = "finished"
+    else:
+        run.status = "failed"
+    run.finished_at = utc_now()
+    persist_run_outputs(run)
+    await emit_finished_event(
+        run, status=run.status,
+        exit_code=exit_code,
+        line=f"WorkflowRunner finished with exit_code={exit_code}.",
+        include_archive_path=True,
     )
     await run.queue.put(None)
 
@@ -778,11 +993,20 @@ async def probe_compute_node(alias: str):
         "printf 'cpu_cores='; nproc 2>/dev/null || getconf _NPROCESSORS_ONLN; "
         "printf 'workdir='; pwd"
     )
-    result = await run_command(build_ssh_command(node, remote_command), timeout=20.0)
+    if is_local_node(node):
+        exit_code, stdout_bytes, stderr_bytes = _local_probe_info()
+        result = {
+            "exit_code": exit_code,
+            "stdout": stdout_bytes.decode("utf-8", errors="replace"),
+            "stderr": stderr_bytes.decode("utf-8", errors="replace"),
+            "duration_seconds": 0,
+        }
+    else:
+        result = await run_command(build_ssh_command(node, remote_command), timeout=20.0)
     ok = result["exit_code"] == 0
     details = parse_key_value_stdout(result["stdout"]) if ok else {}
     return {
-        "message": f"{alias} remote compute node probe completed." if ok else f"{alias} remote compute node probe failed.",
+        "message": f"{alias} compute node probe {'completed' if ok else 'failed'}.",
         "data": {
             "alias": node.alias,
             "label": node.label,
@@ -813,11 +1037,20 @@ async def probe_compute_node_scheduler(alias: str):
         "printf 'memory='; free -h 2>/dev/null | awk '/^Mem:/ {print $2}' || true; "
         "printf 'workdir='; pwd"
     )
-    result = await run_command(build_ssh_command(node, remote_command), timeout=25.0)
+    if is_local_node(node):
+        exit_code, stdout_bytes, stderr_bytes = _local_scheduler_probe_info()
+        result = {
+            "exit_code": exit_code,
+            "stdout": stdout_bytes.decode("utf-8", errors="replace"),
+            "stderr": stderr_bytes.decode("utf-8", errors="replace"),
+            "duration_seconds": 0,
+        }
+    else:
+        result = await run_command(build_ssh_command(node, remote_command), timeout=25.0)
     ok = result["exit_code"] == 0
     details = parse_key_value_stdout(result["stdout"]) if ok else {}
     return {
-        "message": f"{alias} scheduler probe completed." if ok else f"{alias} scheduler probe failed.",
+        "message": f"{alias} scheduler probe {'completed' if ok else 'failed'}.",
         "data": {
             "alias": node.alias,
             "label": node.label,
@@ -844,9 +1077,15 @@ async def probe_compute_node_solvers(alias: str):
     node = get_compute_node(alias)
     current = settings()
     solvers = list(current.solvers.values())
-    result = await run_command(build_ssh_command(node, build_solver_probe_command(solvers)), timeout=25.0)
-    ok = result["exit_code"] == 0
-    values = parse_key_value_stdout(result["stdout"]) if ok else {}
+    if is_local_node(node):
+        local_results = probe_local_solvers(solvers)
+        result = {"exit_code": 0, "stdout": "", "stderr": "", "duration_seconds": 0}
+        ok = True
+        values = local_results
+    else:
+        result = await run_command(build_ssh_command(node, build_solver_probe_command(solvers)), timeout=25.0)
+        ok = result["exit_code"] == 0
+        values = parse_key_value_stdout(result["stdout"]) if ok else {}
     solver_statuses = [
         {
             **public_solver(solver),
@@ -856,7 +1095,7 @@ async def probe_compute_node_solvers(alias: str):
         for solver in solvers
     ]
     return {
-        "message": f"{alias} solver probe completed." if ok else f"{alias} solver probe failed.",
+        "message": f"{alias} solver probe {'completed' if ok else 'failed'}.",
         "data": {
             "alias": node.alias,
             "label": node.label,
@@ -1163,6 +1402,50 @@ async def start_solver_run(alias: str, solver_alias: str):
             "remote_workdir": run.remote_workdir,
             "compute_node": node.alias,
             "solver": public_solver(solver),
+        },
+    }
+
+
+@app.post("/v1/runs/{alias}/workflows/freecad-prepomax")
+async def start_freecad_prepomax_workflow(alias: str):
+    node = get_compute_node(alias)
+    if not is_local_node(node):
+        raise HTTPException(status_code=400, detail="FreeCAD -> PrePoMax workflow currently runs on the local node.")
+
+    solvers = [get_solver(step_alias) for step_alias in FREECAD_PREPOMAX_STEP_ALIASES]
+    current = settings()
+    run_id = f"run_{FREECAD_PREPOMAX_WORKFLOW_ALIAS}_{uuid.uuid4().hex[:8]}"
+    local_dir = current.runs_root / run_id
+    workflow = public_freecad_prepomax_workflow(solvers)
+    run = RemoteRun(
+        run_id=run_id,
+        case_name="FreeCAD to PrePoMax workflow run",
+        solver=FREECAD_PREPOMAX_WORKFLOW_ALIAS,
+        solver_label=workflow["label"],
+        solver_kind=workflow["kind"],
+        node_alias=node.alias,
+        node_label=node.label,
+        remote_workdir=str(local_dir),
+        local_dir=local_dir,
+        artifacts_dir=local_dir / "artifacts",
+        command="WorkflowRunner",
+        created_at=utc_now(),
+        runner="WorkflowRunner",
+        toolchain=current.toolchain,
+        artifact_patterns=workflow_artifact_patterns(solvers),
+    )
+    ensure_run_files(run)
+    remote_runs[run_id] = run
+    asyncio.create_task(execute_local_workflow_run(run, solvers))
+    return {
+        "message": f"{node.alias} FreeCAD -> PrePoMax workflow started.",
+        "data": {
+            "run_id": run_id,
+            "status": run.status,
+            "archive_path": str(run.local_dir),
+            "remote_workdir": run.remote_workdir,
+            "compute_node": node.alias,
+            "workflow": workflow,
         },
     }
 

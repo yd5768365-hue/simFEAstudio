@@ -24,15 +24,18 @@ pnpm install                      # Install frontend deps
 python -m pip install -e .        # Install Python package
 python src/backends/main.py       # Start sidecar (port 8008)
 pnpm dev:frontend                 # Vite dev server (port 3000)
-pnpm dev:tauri                    # Full Tauri desktop app
+pnpm dev:all                      # Sidecar + frontend concurrently
+pnpm dev:tauri                    # Full Tauri desktop app (auto-starts Vite)
 
 # Testing
 python -m unittest discover -s src/backends/tests -v    # Python unit tests (75)
+python -m unittest src/backends/tests/test_learning.py -v  # Single Python test file
 pnpm test                        # Vitest unit tests (20)
+pnpm test:watch                  # Vitest in watch mode
 
 # Linting & formatting
-pnpm lint                        # Biome check
-pnpm format                      # Biome check --write
+pnpm lint                        # Biome check (app/ only)
+pnpm format                      # Biome check --write (app/ only)
 python scripts/check_backend_boundaries.py   # Python module boundary audit
 
 # Build
@@ -40,6 +43,8 @@ pnpm build                       # Vite production build
 pnpm build:sidecar-winos         # PyInstaller sidecar binary (Windows)
 git diff --check                 # Whitespace validation
 ```
+
+Note: `pnpm dev:tauri` automatically starts the Vite dev server via `beforeDevCommand` — you do not need to run `pnpm dev:frontend` separately.
 
 Line endings are enforced to LF via `.gitattributes` (`* text=auto eol=lf`).
 
@@ -49,7 +54,8 @@ Line endings are enforced to LF via `.gitattributes` (`* text=auto eol=lf`).
 Tauri desktop shell
   └─ spawns Python sidecar (src/backends/main.py)
        └─ FastAPI on port 8008
-            ├─ /v1/runs/* — run lifecycle
+            ├─ /v1/runs/* — run lifecycle (solver runs + workflow runs)
+            ├─ /v1/runs/{alias}/workflows/* — multi-step solver workflows
             ├─ /v1/compute-nodes/* — SSH/scheduler probes
             ├─ /v1/solvers — solver definitions
             └─ SSE /v1/runs/{id}/events — real-time log streaming
@@ -85,7 +91,8 @@ src/backends/
 │       ├── slurm.py             # sbatch submission
 │       ├── slurm_polling.py     # squeue/sacct polling + state machine
 │       ├── solver.py            # SolverRunner: input files → pre → solver → post → artifacts
-│       └── remote_files.py      # Remote file glob helpers
+│       ├── remote_files.py      # Remote file glob helpers
+│       └── workflow.py          # WorkflowRunner: chain solver steps into one run
 ├── inference/
 │   └── infer_text_api.py        # AI text inference (report generation)
 └── tests/                       # Python unit tests (unittest)
@@ -111,7 +118,13 @@ The original order (logs → report → notes) was wrong — users need to refle
 
 ### Typed API contracts
 
-Frontend uses Zod schemas (`app/api/contracts.ts`) that mirror the FastAPI response shapes. The `simfeaClient.ts` wraps raw fetch with contract validation — no `any` typed responses. When adding or changing an endpoint, update the Zod schema and the Python route together.
+Frontend uses a contract-based typed API client with three layers:
+
+1. **`app/api/contracts.ts`** — Zod schemas that mirror FastAPI response shapes (SSE events use `z.discriminatedUnion` on `type`)
+2. **`app/api/client.ts`** — Generic `contract()` + `createClient()` wrapper around `fetch`. URL params are type-checked via the contract's `params` tuple. Every response is validated through `c.response.parse(json)` before the caller sees it. Validation failures or HTTP errors throw `ApiClientError`.
+3. **`app/api/simfeaClient.ts`** — Instantiates the generic client with all endpoint contracts. Returns a typed `SimfeaClient` object.
+
+When adding or changing an endpoint, update the Zod schema, the contract definition, and the Python route together.
 
 ### Frontend import conventions
 
@@ -150,6 +163,23 @@ Use `create_logger(name)` from `simfea_api/logger.py` instead of `print()`. In d
 User `.simfea/config.json` overrides specific fields for a named solver (e.g., `calculix`) while preserving defaults for others. Merging is by `alias` — user config does not wipe the default solver list.
 
 Each solver definition: `executable`, `command_template`, `pre_commands`, `post_commands`, `artifact_patterns`, `input_files`.
+
+### WorkflowRunner (multi-step solver chains)
+
+`runners/workflow.py` defines workflows that chain multiple solver steps into a single run archive. The first built-in workflow is `freecad-prepomax`: FreeCAD generates a `.step` geometry → PrePoMax regeneration processes it for meshing/solving. Each step is a regular `SolverDefinition`; the workflow collects artifact patterns from all steps and runs sequentially in the same workdir.  Workflows are exposed at `POST /v1/runs/{alias}/workflows/freecad-prepomax`.
+
+### Tauri sidecar lifecycle
+
+Tauri (`src-tauri/src/main.rs`) spawns a PyInstaller-built sidecar binary at startup via `shell().sidecar("main")`. The sidecar is a `CommandChild` stored in `Arc<Mutex<Option<CommandChild>>>` app state. Stdout/stderr lines from the sidecar are emitted to the frontend as `sidecar-stdout` / `sidecar-stderr` events. Shutdown works by writing `"sidecar shutdown\n"` to the sidecar's stdin, then killing the process.
+
+The `useSidecarListeners.ts` composable listens for these Tauri events on the frontend side.
+
+### Frontend state management
+
+There is no Pinia or Vuex store. All reactive state lives in composables:
+- `useRemoteRuns.ts` — remote run state machine (runs list, start/cancel, polling)
+- `useRunEvents.ts` — SSE event stream with exponential-backoff reconnect (max 5 retries, 1s–30s), `lastSeq` tracking for `?from_seq=` replay
+- `useSidecarListeners.ts` — sidecar lifecycle events from Tauri
 
 ### Windows-specific gotchas
 

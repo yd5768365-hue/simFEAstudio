@@ -267,6 +267,22 @@ export const startSolverRunResponseSchema = z.object({
 
 export type StartSolverRunResponse = z.output<typeof startSolverRunResponseSchema>
 
+export const startWorkflowRunResponseSchema = z.object({
+  message: z.string(),
+  data: z.object({
+    run_id: z.string(),
+    status: z.string(),
+    archive_path: z.string(),
+    remote_workdir: z.string(),
+    compute_node: z.string(),
+    workflow: solverDefinitionSchema.extend({
+      steps: z.array(solverDefinitionSchema),
+    }),
+  }),
+})
+
+export type StartWorkflowRunResponse = z.output<typeof startWorkflowRunResponseSchema>
+
 export const cancelRunResponseSchema = z.object({
   message: z.string(),
   data: z.unknown(),

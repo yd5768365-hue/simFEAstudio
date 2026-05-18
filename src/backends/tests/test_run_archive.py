@@ -11,6 +11,7 @@ from simfea_api.run_archive import (
     RemoteRun,
     append_text,
     ensure_run_files,
+    load_archived_runs,
     remember_run_event,
     read_optional_text,
     read_tail,
@@ -64,6 +65,96 @@ class RunMetadataTest(unittest.TestCase):
             meta = run_metadata(run)
 
         self.assertEqual(meta["input_files"], ["inputs/cantilever.inp", "inputs/nested/case.txt"])
+
+
+class LoadArchivedRunsTest(unittest.TestCase):
+    def setUp(self):
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.config_path = Path(self.tmpdir.name) / "config.json"
+        self.previous_runs_root = os.environ.get("SIMFEA_RUNS_ROOT")
+        self.previous_config_path = os.environ.get("SIMFEA_CONFIG_PATH")
+        self.config_path.write_text("{}", encoding="utf-8")
+        os.environ["SIMFEA_RUNS_ROOT"] = self.tmpdir.name
+        os.environ["SIMFEA_CONFIG_PATH"] = str(self.config_path)
+
+    def tearDown(self):
+        if self.previous_runs_root is None:
+            os.environ.pop("SIMFEA_RUNS_ROOT", None)
+        else:
+            os.environ["SIMFEA_RUNS_ROOT"] = self.previous_runs_root
+        if self.previous_config_path is None:
+            os.environ.pop("SIMFEA_CONFIG_PATH", None)
+        else:
+            os.environ["SIMFEA_CONFIG_PATH"] = self.previous_config_path
+        self.tmpdir.cleanup()
+
+    def test_includes_result_summary_payload(self):
+        run_dir = Path(self.tmpdir.name) / "run-001"
+        artifacts_dir = run_dir / "artifacts"
+        artifacts_dir.mkdir(parents=True)
+        (run_dir / "meta.json").write_text(
+            json.dumps(
+                {
+                    "run_id": "run-001",
+                    "case_name": "beam",
+                    "solver": "calculix",
+                    "runner": "SolverRunner",
+                    "compute_node": "local",
+                    "status": "finished",
+                    "created_at": "2026-05-13T00:00:00Z",
+                    "remote_workdir": "",
+                    "local_archive": str(run_dir),
+                    "artifacts": ["artifacts/result_summary.json"],
+                }
+            ),
+            encoding="utf-8",
+        )
+        (artifacts_dir / "result_summary.json").write_text(
+            json.dumps(
+                {
+                    "run_id": "run-001",
+                    "metrics": {
+                        "max_displacement_mm": 8.933,
+                        "max_von_mises_mpa": 37.502,
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        runs = load_archived_runs()
+
+        self.assertEqual(runs[0]["result_summary"], "artifacts/result_summary.json")
+        self.assertEqual(runs[0]["summary"]["metrics"]["max_displacement_mm"], 8.933)
+
+    def test_keeps_run_when_result_summary_is_invalid(self):
+        run_dir = Path(self.tmpdir.name) / "run-002"
+        artifacts_dir = run_dir / "artifacts"
+        artifacts_dir.mkdir(parents=True)
+        (run_dir / "meta.json").write_text(
+            json.dumps(
+                {
+                    "run_id": "run-002",
+                    "case_name": "beam",
+                    "solver": "calculix",
+                    "runner": "SolverRunner",
+                    "compute_node": "local",
+                    "status": "finished",
+                    "created_at": "2026-05-13T00:00:00Z",
+                    "remote_workdir": "",
+                    "local_archive": str(run_dir),
+                    "artifacts": ["artifacts/result_summary.json"],
+                }
+            ),
+            encoding="utf-8",
+        )
+        (artifacts_dir / "result_summary.json").write_text("{", encoding="utf-8")
+
+        runs = load_archived_runs()
+
+        self.assertEqual(runs[0]["run_id"], "run-002")
+        self.assertEqual(runs[0]["result_summary"], "artifacts/result_summary.json")
+        self.assertNotIn("summary", runs[0])
 
 
 class AppendReadRoundtripTest(unittest.TestCase):

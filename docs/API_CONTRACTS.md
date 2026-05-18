@@ -163,7 +163,15 @@ Zod schema: `runArchiveSchema`（`app/api/contracts.ts:81`）。与 `run_metadat
 后端 dataclass + 前端 Zod schema (`solverDefinitionSchema`):
 `alias`, `label`, `kind`, `executable`, `command_template`, `input_files`, `artifact_patterns`, `description`, `pre_commands`, `post_commands`
 
+**`POST /v1/runs/:alias/workflows/freecad-prepomax`**
+
+- Purpose: start the local FreeCAD -> PrePoMax workflow.
+- Response: `StartWorkflowRunResponse`.
+- Notes: runs configured `freecad` then `prepomax-regenerate` in one archive; remote nodes are not supported yet.
+
 注意：`public_solver()` 返回公开字段时**不含** `input_files`（输入文件内容属于敏感/冗余信息，不在列表接口中暴露）。
+
+当前默认 solver aliases：`calculix`、`freecad`、`prepomax`、`prepomax-regenerate`、`openfoam`、`elmer`。其中 `prepomax` 是 CLI smoke 适配器，`prepomax-regenerate` 使用官方 `-r model.pmx -g No -w .` regeneration 入口；真实模型需要在 `.simfea/config.json` 中提供 `.pmx`、几何文件和本机 `command_template`。
 
 ## 错误处理
 

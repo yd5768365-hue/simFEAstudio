@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import VtkResultViewport from '@/components/VtkResultViewport.vue'
 import type { RunArchive } from '@/types'
 
@@ -25,6 +25,20 @@ const props = defineProps<{
 }>()
 
 const viewMode = ref<'evidence' | 'vtk'>('evidence')
+const selectedVtkArtifact = ref('')
+
+const vtkArtifacts = computed(
+  () => props.run?.artifacts?.filter((a) => a.endsWith('.vtk') || a.endsWith('.vtu')) ?? []
+)
+
+watch(
+  () => props.run?.run_id,
+  () => {
+    const fromSummary = props.run?.summary?.visualization?.vtk_artifact
+    selectedVtkArtifact.value = fromSummary || vtkArtifacts.value[0] || ''
+  },
+  { immediate: true }
+)
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max)
 
@@ -148,10 +162,21 @@ const stressSegments = computed(() =>
         <span>节点：{{ visualizationMetrics.runNode }}</span>
         <span>JobID：{{ visualizationMetrics.jobId }}</span>
       </div>
+      <div v-if="viewMode === 'vtk' && vtkArtifacts.length > 1" class="vtk-artifact-selector">
+        <label>
+          <span>选择结果文件</span>
+          <select v-model="selectedVtkArtifact">
+            <option v-for="artifact in vtkArtifacts" :key="artifact" :value="artifact">
+              {{ artifact }}
+            </option>
+          </select>
+        </label>
+      </div>
       <VtkResultViewport
         v-if="viewMode === 'vtk'"
         :run="run"
         :api-base-url="apiBaseUrl"
+        :selected-artifact="selectedVtkArtifact"
       />
       <div v-else class="beam-viewport" role="img" aria-label="悬臂梁变形和应力云图示意">
         <svg viewBox="0 0 720 300" class="beam-svg" aria-hidden="true">

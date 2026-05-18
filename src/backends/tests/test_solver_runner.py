@@ -12,6 +12,11 @@ from simfea_api.runners.solver import (
     render_command_template,
 )
 from simfea_api.runners.remote_files import build_remote_artifact_list_script
+from simfea_api.runners.workflow import (
+    FREECAD_PREPOMAX_WORKFLOW_ALIAS,
+    public_freecad_prepomax_workflow,
+    workflow_artifact_patterns,
+)
 from tests.factories import create_run
 
 
@@ -20,6 +25,9 @@ class SolverConfigTest(unittest.TestCase):
         solvers = settings().solvers
 
         self.assertIn("calculix", solvers)
+        self.assertIn("freecad", solvers)
+        self.assertIn("prepomax", solvers)
+        self.assertIn("prepomax-regenerate", solvers)
         self.assertIn("openfoam", solvers)
         self.assertIn("elmer", solvers)
 
@@ -49,8 +57,38 @@ class SolverRunnerTest(unittest.TestCase):
         command = build_solver_probe_command(list(settings().solvers.values()))
 
         self.assertIn("calculix=", command)
+        self.assertIn("freecad=", command)
+        self.assertIn("prepomax=", command)
+        self.assertIn("prepomax-regenerate=", command)
         self.assertIn("openfoam=", command)
         self.assertIn("elmer=", command)
+
+    def test_freecad_adapter_writes_macro(self):
+        run = create_run(run_id="run_freecad")
+        solver = settings().solvers["freecad"]
+
+        script = build_solver_run_script(run, solver)
+
+        self.assertIn("freecad_smoke.py", script)
+        self.assertIn("freecad_smoke.step", script)
+        self.assertIn("import FreeCAD as App", script)
+        self.assertIn(f"{solver.executable} freecad_smoke.py", script)
+
+    def test_prepomax_adapter_is_explicit_placeholder(self):
+        solver = settings().solvers["prepomax"]
+
+        self.assertIn("placeholder", solver.description.lower())
+        self.assertIn("-r", solver.description)
+        self.assertIn("--help", solver.command_template)
+        self.assertIn("README.prepomax.txt", solver.input_files)
+
+    def test_prepomax_regenerate_uses_official_cli(self):
+        solver = settings().solvers["prepomax-regenerate"]
+
+        self.assertIn("-r", solver.command_template)
+        self.assertIn("-g No", solver.command_template)
+        self.assertIn("-w .", solver.command_template)
+        self.assertIn("README.prepomax-regenerate.txt", solver.input_files)
 
     def test_render_command_template_supports_placeholders(self):
         run = create_run(run_id="run_abc")
@@ -106,6 +144,17 @@ class SolverRunnerTest(unittest.TestCase):
         self.assertIn("for f in '*.frd'; do", script)
         self.assertIn("for match in $f; do", script)
         self.assertIn("for f in 'postProcessing/**'; do", script)
+
+    def test_freecad_prepomax_workflow_merges_artifacts(self):
+        solvers = [settings().solvers["freecad"], settings().solvers["prepomax-regenerate"]]
+
+        workflow = public_freecad_prepomax_workflow(solvers)
+
+        self.assertEqual(workflow["alias"], FREECAD_PREPOMAX_WORKFLOW_ALIAS)
+        self.assertEqual([step["alias"] for step in workflow["steps"]], ["freecad", "prepomax-regenerate"])
+        self.assertIn("*.FCStd", workflow_artifact_patterns(solvers))
+        self.assertIn("*.frd", workflow_artifact_patterns(solvers))
+        self.assertIn("result.txt", workflow_artifact_patterns(solvers))
 
 
 if __name__ == "__main__":

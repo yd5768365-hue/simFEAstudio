@@ -12,6 +12,7 @@ export function renderMarkdown(md: string): string {
   let inCodeBlock = false
   let inTable = false
   let inList = false
+  let headingIndex = 0
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
@@ -38,19 +39,22 @@ export function renderMarkdown(md: string): string {
     if (line.startsWith('# ')) {
       closeTable()
       closeList()
-      out.push(`<h1>${inlineMarkup(line.slice(2))}</h1>`)
+      const text = line.slice(2)
+      out.push(`<h1 id="${headingId(text, headingIndex++)}">${inlineMarkup(text)}</h1>`)
       continue
     }
     if (line.startsWith('## ')) {
       closeTable()
       closeList()
-      out.push(`<h2>${inlineMarkup(line.slice(3))}</h2>`)
+      const text = line.slice(3)
+      out.push(`<h2 id="${headingId(text, headingIndex++)}">${inlineMarkup(text)}</h2>`)
       continue
     }
     if (line.startsWith('### ')) {
       closeTable()
       closeList()
-      out.push(`<h3>${inlineMarkup(line.slice(4))}</h3>`)
+      const text = line.slice(4)
+      out.push(`<h3 id="${headingId(text, headingIndex++)}">${inlineMarkup(text)}</h3>`)
       continue
     }
 
@@ -126,6 +130,38 @@ export function renderMarkdown(md: string): string {
       inList = false
     }
   }
+}
+
+export interface MarkdownHeading {
+  id: string
+  level: number
+  text: string
+}
+
+export function extractMarkdownHeadings(md: string): MarkdownHeading[] {
+  let headingIndex = 0
+  return md
+    .split('\n')
+    .map((line) => {
+      const match = /^(#{1,3})\s+(.+)$/.exec(line)
+      if (!match) return null
+      const text = match[2].trim()
+      return {
+        id: headingId(text, headingIndex++),
+        level: match[1].length,
+        text,
+      }
+    })
+    .filter((heading): heading is MarkdownHeading => heading !== null)
+}
+
+function headingId(text: string, index: number): string {
+  const ascii = text
+    .toLowerCase()
+    .replace(/`/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+  return ascii || `section-${index + 1}`
 }
 
 function inlineMarkup(text: string): string {

@@ -7,6 +7,7 @@ import {
   runArchiveSchema,
   sseEventSchema,
   startSolverRunResponseSchema,
+  startWorkflowRunResponseSchema,
 } from './contracts'
 
 describe('connectResponseSchema', () => {
@@ -269,6 +270,43 @@ describe('solver contracts', () => {
       },
     })
     expect(result.data.solver.alias).toBe('calculix')
+  })
+
+  it('parses a start workflow run response', () => {
+    const result = startWorkflowRunResponseSchema.parse({
+      message: 'local FreeCAD -> PrePoMax workflow started.',
+      data: {
+        run_id: 'run-freecad-prepomax-001',
+        status: 'created',
+        archive_path: '/tmp/run-freecad-prepomax-001',
+        remote_workdir: '/tmp/run-freecad-prepomax-001',
+        compute_node: 'local',
+        workflow: {
+          alias: 'freecad-prepomax',
+          label: 'FreeCAD -> PrePoMax',
+          kind: 'workflow',
+          executable: 'WorkflowRunner',
+          artifact_patterns: ['*.FCStd', '*.step', '*.frd', 'result.txt'],
+          steps: [
+            {
+              alias: 'freecad',
+              label: 'FreeCAD',
+              kind: 'preprocessor',
+              executable: 'python',
+              artifact_patterns: ['*.FCStd', '*.step', 'result.txt'],
+            },
+            {
+              alias: 'prepomax-regenerate',
+              label: 'PrePoMax Regenerate',
+              kind: 'structural-prepost',
+              executable: 'PrePoMax',
+              artifact_patterns: ['*.pmx', '*.frd', 'result.txt'],
+            },
+          ],
+        },
+      },
+    })
+    expect(result.data.workflow.steps).toHaveLength(2)
   })
 })
 
