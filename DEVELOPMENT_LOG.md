@@ -567,3 +567,78 @@ bf0f463 feat: ship local solver evidence workflow
 | `CLAUDE.md` | 项目指令更新 |
 | `README.md` | 截图 + 说明更新 |
 | `.simfea/config.json` | prepomax-regenerate 超时设为 600s，简化 command_template |
+
+---
+
+## 2026-05-19 — 续：sidecar 重启 + 全量验证 + 桌面二进制同步 + README 更新
+
+### 问题定位
+
+上一会话在 `execute_local_run` 添加了 `substantive` 产物检查，但 `prepomax-regenerate` 仍显示失败。
+原因：端口 8008 上的 sidecar 进程（PID 26940，5/18 22:13 启动）是**旧代码**，新的 sidecar 因端口冲突启动失败。
+
+```
+[winerror 10048] 端口 8008 被占用
+```
+
+### 操作记录
+
+1. **Kill 旧 sidecar** → 启动新 sidecar（含 `substantive` 检查）
+2. **重跑全部 solver + workflow** → 状态判定全部正确
+3. **PyInstaller 6.20.0 构建桌面二进制** → `src-tauri/bin/api/main-x86_64-pc-windows-msvc.exe`（15 MB）
+4. **启动 Tauri 桌面应用**（`pnpm dev:tauri`）→ 端口 3000 冲突 → kill 旧 vite → 重启成功
+5. **README 更新** → 提交并推送
+
+### 全量验证结果（修正后）
+
+| Solver/Workflow | Status | Wall | VTK Ready | Artifacts | Metrics |
+|-----------------|--------|------|-----------|-----------|---------|
+| calculix | finished | 0.1s | yes | 5 | D=8.93mm S=37.50MPa |
+| freecad | finished | 0.8s | no | 5 | — |
+| prepomax (--help) | **failed** | 0.2s | no | 1 | — |
+| prepomax-regenerate | **finished** | 10.0s | yes | 16 | D=0.061mm S=0.0001MPa |
+| openfoam | failed | 0.0s | no | 1 | — |
+| elmer | failed | 0.0s | no | 1 | — |
+| **freecad-prepomax** | finished | 10.4s | yes | 20 | D=0.061mm S=0.0001MPa |
+
+**状态判定全部符合预期**：
+- `prepomax` (--help)：只有 `result.txt` + `result_summary.json` → **failed** ✓
+- `prepomax-regenerate`：16 个实质性产物，尽管 exit_code=-1 → **finished** ✓
+
+### 桌面版本同步
+
+使用 PyInstaller 6.20.0（兼容 Python 3.13）构建 sidecar 二进制：
+
+```powershell
+pyinstaller -c -F --clean --name main-x86_64-pc-windows-msvc `
+  --distpath src-tauri/bin/api `
+  --add-binary "$env:CONDA_PREFIX\Library\bin\libssl-3-x64.dll;." `
+  --add-binary "$env:CONDA_PREFIX\Library\bin\libcrypto-3-x64.dll;." `
+  src/backends/main.py
+```
+
+Tauri 桌面应用通过 `pnpm dev:tauri` 成功启动，sidecar 二进制正常处理 API 请求。
+
+### 提交记录
+
+```
+304a1dc docs: update README with workflow results, test counts, and PrePoMax exit code note
+b842a3c feat: solver workflow runner + timeout config + substantive artifact check + PrePoMax fix
+```
+
+### 当前状态摘要
+
+| 项目 | 状态 |
+|------|------|
+| Python 单元测试 | 82 passed |
+| Vitest 单元测试 | 23 passed (3 files) |
+| Sidecar 二进制 | 已构建，15 MB，Python 3.13 |
+| Tauri 桌面应用 | 源码启动验证通过 |
+| GitHub | main 分支已推送至远程 |
+
+### 明日可继续
+
+- 桌面应用功能验证（通过 GUI 触发各 solver + workflow）
+- OpenFOAM / Elmer 真实 case 接入
+- Salome 前处理入口
+- AI 辅助工程证据评分
