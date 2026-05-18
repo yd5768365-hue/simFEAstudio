@@ -42,7 +42,7 @@ SimFEA Studio 不是新的仿真引擎，不是商业 CAE 的竞品，也不是�
 Tauri 桌面壳
 → Vue / Vite 前端 + VTK.js 结果视图
 → FastAPI Python sidecar
-→ Local / SSH / Slurm / SolverRunner
+→ Local / SSH / Slurm / SolverRunner / WorkflowRunner
 → CalculiX / FreeCAD / PrePoMax / OpenFOAM / Elmer
 → .simfea/runs/<run_id> 物证仓库
 ```
@@ -97,6 +97,7 @@ SimFEA Studio 的学习系统按照"日志 → 笔记 → 报告"的顺序逐层
 | SSHRunner | SSH 远程节点 | `ssh` + `scp` 文件操作 |
 | SlurmRunner | HPC 集群 | `sbatch` 提交 + `squeue` 轮询 |
 | SolverRunner | 求解器编排 | 写输入、跑 solver、收集 artifacts、触发后处理 |
+| WorkflowRunner | 多步求解器链 | 链式执行多步 solver，同一工作目录，统一归档 |
 
 ### 结果可视化
 
@@ -117,22 +118,21 @@ SimFEA Studio 的学习系统按照"日志 → 笔记 → 报告"的顺序逐层
 | --- | --- | --- |
 | **CalculiX** | 已端到端验证 | 本地悬臂梁算例，FRD → VTK，指标摘要，物证归档。 |
 | FreeCAD | 适配器骨架就绪 | 通过 `FreeCADCmd` 执行无头 Python 宏，默认 smoke case 生成 `.FCStd/.step`。 |
-| PrePoMax | CLI 与 regeneration 已接入 | `prepomax` 用于 `--help` smoke；`prepomax-regenerate` 通过官方 `-r model.pmx -g No -w .` 跑无 GUI regeneration，本机配置已接入自带 Profile 样例。 |
+| PrePoMax | regeneration 已验证 | `prepomax-regenerate`：STEP 导入 → Gmsh 网格 → CalculiX 求解 → 结果回读，VTK 热力图可用。 |
+| **freecad-prepomax** (workflow) | 已端到端验证 | FreeCAD 几何 → PrePoMax 再生求解，两步链式执行，统一归档 20 个产物。 |
 | OpenFOAM | 适配器骨架就绪 | 需要接入真实 case 文件。 |
 | Elmer | 适配器骨架就绪 | 需要接入真实 case 文件。 |
 
-### CalculiX 端到端实测
+### 实测结果（2026-05-19）
 
-本地 CalculiX v2.10 链路已经打通：
+| Solver/Workflow | Status | Wall | VTK | Artifacts | Metrics |
+| --- | --- | --- | --- | --- | --- |
+| calculix | finished | 0.1s | yes | 5 | D=8.93mm S=37.50MPa |
+| freecad | finished | 0.8s | no | 5 | — |
+| prepomax-regenerate | finished | 10.0s | yes | 16 | D=0.061mm S=0.0001MPa |
+| freecad-prepomax (workflow) | finished | 10.4s | yes | 20 | D=0.061mm S=0.0001MPa |
 
-```text
-status=finished
-exit_code=0
-solver=calculix
-max_displacement_mm=8.933
-max_von_mises_mpa=37.502
-artifacts=cantilever.frd, cantilever.dat, cantilever.sta, result.txt, result_summary.json, solver_result.vtk
-```
+> PrePoMax.com 在 Windows 上始终返回 exit code `0xFFFFFFFF`（-1），成功/失败无法通过退出码区分。SimFEA Studio 通过**实质性产物检查**（排除 `result.txt` 和 `result_summary.json` 两个框架自产文件）正确判定状态。
 
 ## 物证仓库
 
@@ -250,6 +250,7 @@ curl http://localhost:8008/v1/runs
 | `/v1/runs/{alias}/demo` | POST | 启动 SSH demo 运行 |
 | `/v1/runs/{alias}/slurm-demo` | POST | 启动 Slurm demo 运行 |
 | `/v1/runs/{alias}/solvers/{solver_alias}` | POST | 启动声明式求解器运行 |
+| `/v1/runs/{alias}/workflows/freecad-prepomax` | POST | 启动 FreeCAD → PrePoMax 工作流 |
 | `/v1/runs/{run_id}/events` | GET | SSE 运行事件，支持 `?from_seq=N` |
 | `/v1/runs/{run_id}/artifacts/{artifact_path}` | GET | 读取归档产物 |
 | `/v1/runs/{run_id}/result-summary` | GET | 读取结果摘要 |
@@ -273,8 +274,8 @@ git diff --check
 
 已知结果：
 
-- 后端：75 个单元测试通过。
-- 前端：20 个 Vitest 测试通过。
+- 后端：82 个单元测试通过。
+- 前端：23 个 Vitest 测试通过。
 - 生产构建通过，仅保留 VTK XML reader 按需 chunk 偏大的提示。
 
 ## 文档
@@ -302,6 +303,7 @@ git diff --check
 - [ ] Elmer 真实 case 接入。
 - [x] FreeCAD 无头宏入口。
 - [x] PrePoMax 官方 CLI / regeneration 本机样例接入。
+- [x] WorkflowRunner 多步求解器链（freecad-prepomax）。
 - [ ] Salome 前处理入口。
 - [ ] AI 辅助工程证据评分和复盘建议。
 
