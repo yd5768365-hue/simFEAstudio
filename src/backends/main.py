@@ -376,38 +376,112 @@ def _find_local_shell() -> str | None:
     return None
 
 
-async def _run_local_command(cmd: str, cwd: Path, timeout: int = 120):
+async def _run_local_command(cmd: str, cwd: Path, timeout: int = 120, on_output=None):
     """Run a command locally via the platform shell (cmd.exe on Windows).
 
     Uses a thread-pool executor to avoid event-loop deadlocks that can occur
     with asyncio.create_subprocess_shell on Windows when the child process
     spawns grandchildren that inherit pipe handles.
+
+    If *on_output(stream, line)* is provided it is called for every
+    stdout/stderr line as it is written (from the executor thread).
     """
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, _run_local_sync, cmd, cwd, timeout)
+    return await loop.run_in_executor(None, _run_local_sync, cmd, cwd, timeout, on_output)
 
 
-def _run_local_sync(cmd: str, cwd: Path, timeout: int = 120):
-    """Run a command synchronously.
+def _run_local_sync(cmd: str, cwd: Path, timeout: int = 120, on_output=None):
+    """Run a command synchronously with real-time log streaming.
 
-    Redirect stdout/stderr to temp files (not OS pipes) so that child
+    Redirect stdout/stderr to files (not OS pipes) so that child
     processes spawned by .bat wrappers don't inherit pipe handles and
-    cause the parent to hang.  stdin is pointed at NUL so that any
-    accidental console read returns EOF immediately instead of blocking.
+    cause the parent to hang.  stdin is pointed at NUL.
+
+    Uses Popen + polling so the sidecar terminal shows solver output
+    as it is written, while still collecting full output for SSE events.
+
+    If *on_output(stream, line)* is provided it is called (from the
+    executor thread) for every line as it arrives.
     """
+    import time as _time
+
     cwd.mkdir(parents=True, exist_ok=True)
     stdout_path = cwd / "stdout.log"
     stderr_path = cwd / "stderr.log"
-    # Ask cmd.exe to do the redirection so Python never holds open handles
-    # into the running process tree.
     wrapped = f'{cmd} < NUL > "{stdout_path}" 2> "{stderr_path}"'
-    proc = subprocess.run(
+
+    creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
+    proc = subprocess.Popen(
         wrapped, cwd=str(cwd), shell=True,
-        timeout=timeout,
+        creationflags=creationflags,
     )
+
+    stdout_offset = 0
+    stderr_offset = 0
+    deadline = _time.monotonic() + timeout
+
+    while True:
+        try:
+            proc.wait(timeout=0.4)
+            break
+        except subprocess.TimeoutExpired:
+            if _time.monotonic() > deadline:
+                _kill_process_tree(proc.pid)
+                proc.wait()
+                print(f"[solver] KILLED after {timeout}s timeout", flush=True)
+                break
+
+        _tail_log(stdout_path, stdout_offset, "[solver] ", on_output=on_output, stream="stdout")
+        stdout_offset = stdout_path.stat().st_size if stdout_path.exists() else 0
+
+        _tail_log(stderr_path, stderr_offset, "[solver:err] ", on_output=on_output, stream="stderr")
+        stderr_offset = stderr_path.stat().st_size if stderr_path.exists() else 0
+
+    # Drain remaining output
+    _tail_log(stdout_path, stdout_offset, "[solver] ", on_output=on_output, stream="stdout")
+    _tail_log(stderr_path, stderr_offset, "[solver:err] ", on_output=on_output, stream="stderr")
+
     stdout = stdout_path.read_bytes() if stdout_path.exists() else b""
     stderr = stderr_path.read_bytes() if stderr_path.exists() else b""
     return proc.returncode, stdout, stderr
+
+
+def _kill_process_tree(pid: int):
+    """Kill a process and all its children on Windows."""
+    if sys.platform != 'win32':
+        return
+    try:
+        subprocess.run(
+            ['taskkill', '/F', '/T', '/PID', str(pid)],
+            capture_output=True,
+            creationflags=subprocess.CREATE_NO_WINDOW,
+        )
+    except Exception:
+        pass
+
+
+def _tail_log(path: Path, offset: int, prefix: str, on_output=None, stream=None):
+    """Print new lines from a log file since the given byte offset.
+
+    If *on_output(stream, line)* is provided it is called for every line.
+    """
+    if not path.exists():
+        return
+    try:
+        size = path.stat().st_size
+        if size <= offset:
+            return
+        with open(path, 'rb') as fh:
+            fh.seek(offset)
+            chunk = fh.read(size - offset)
+        for raw_line in chunk.splitlines():
+            line = raw_line.decode('utf-8', errors='replace').strip()
+            if line:
+                print(f"{prefix}{line}", flush=True)
+                if on_output and stream:
+                    on_output(stream, line)
+    except Exception:
+        pass
 
 
 def _local_probe_info():
@@ -520,13 +594,18 @@ async def execute_local_run(run: RemoteRun, solver_definition=None):
         render_command_template(solver.command_template, run, solver) if solver else ""
     )
     await emit_remote_event(run, "stdout", line=f"command={run.command}")
-    exit_code, stdout, stderr = await _run_local_command(run.command, workdir, timeout=solver.timeout_seconds)
+    loop = asyncio.get_running_loop()
+    def _on_output(stream, line):
+        asyncio.run_coroutine_threadsafe(
+            emit_remote_event(run, stream, line=line), loop
+        )
+    exit_code, stdout, stderr = await _run_local_command(
+        run.command, workdir, timeout=solver.timeout_seconds, on_output=_on_output,
+    )
     for line in stdout.decode("utf-8", errors="replace").splitlines():
         append_text(run.local_dir / "stdout.log", line)
-        await emit_remote_event(run, "stdout", line=line)
     for line in stderr.decode("utf-8", errors="replace").splitlines():
         append_text(run.local_dir / "stderr.log", line)
-        await emit_remote_event(run, "stderr", line=line)
 
     # Post-commands (shell commands; may be no-ops on some platforms)
     for cmd in (solver.post_commands if solver else []):
@@ -616,13 +695,18 @@ async def _run_local_solver_step(run: RemoteRun, solver: SolverDefinition, workd
 
     command = render_command_template(solver.command_template, run, solver)
     await emit_remote_event(run, "stdout", line=f"command={command}")
-    exit_code, stdout, stderr = await _run_local_command(command, workdir, timeout=solver.timeout_seconds)
+    loop = asyncio.get_running_loop()
+    def _on_output(stream, line):
+        asyncio.run_coroutine_threadsafe(
+            emit_remote_event(run, stream, line=line), loop
+        )
+    exit_code, stdout, stderr = await _run_local_command(
+        command, workdir, timeout=solver.timeout_seconds, on_output=_on_output,
+    )
     for line in stdout.decode("utf-8", errors="replace").splitlines():
         append_text(run.local_dir / "stdout.log", line)
-        await emit_remote_event(run, "stdout", line=line)
     for line in stderr.decode("utf-8", errors="replace").splitlines():
         append_text(run.local_dir / "stderr.log", line)
-        await emit_remote_event(run, "stderr", line=line)
 
     for cmd in solver.post_commands:
         await emit_remote_event(run, "stdout", line=f"post_command={cmd}")

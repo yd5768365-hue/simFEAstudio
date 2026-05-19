@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { invoke } from '@tauri-apps/api/core'
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { createSimfeaClient } from '@/api/simfeaClient'
-import ResultEvidenceView from '@/components/ResultEvidenceView.vue'
-import RunConfigDialog from '@/components/RunConfigDialog.vue'
+import LearningLibrary from '@/components/LearningLibrary.vue'
+import RunDetailView from '@/components/RunDetailView.vue'
 import { useRemoteRuns } from '@/composables/useRemoteRuns'
 import { useRunEvents } from '@/composables/useRunEvents'
 import { useSidecarListeners } from '@/composables/useSidecarListeners'
@@ -23,6 +23,42 @@ interface ConnectionStatus {
   learningFormats: string[]
   learningDefaultFormat: string
   message: string
+}
+
+interface UploadedInputFile {
+  name: string
+  size: number
+}
+
+interface JobTemplate {
+  id: string
+  name: string
+  worker: string
+  computeNode: string
+  nodeMode: string
+  files: UploadedInputFile[]
+  savedAt: string
+}
+
+type JobMode = 'single' | 'pipeline'
+type UploadMode = 'single-file' | 'folder'
+
+interface PipelineStep {
+  id: string
+  launcher: string
+  inputName: string
+}
+
+interface QueueItem {
+  id: string
+  title: string
+  mode: JobMode
+  progress: number
+  status: 'queued' | 'running' | 'finished' | 'failed'
+  stage: string
+  logOpen: boolean
+  logs: string[]
+  createdAt: string
 }
 
 const status = ref<ConnectionStatus>({
@@ -64,6 +100,85 @@ const remoteRuns = useRemoteRuns({
 const { remoteStatus, computeNodes, solvers, selectedComputeNode, activeComputeNodeLabel, remoteLabel } =
   remoteRuns
 
+const workerOptions = [
+  { alias: 'calculix', label: 'CalculiX', kind: '结构求解器' },
+  { alias: 'abaqus', label: 'Abaqus', kind: '商业求解器' },
+  { alias: 'elmer', label: 'Elmer', kind: '多物理场' },
+]
+
+const nodeModeOptions = [
+  { value: 'local', label: '本地工作站' },
+  { value: 'ssh', label: 'SSH 远程' },
+  { value: 'hpc', label: 'HPC 队列' },
+]
+
+const filteredComputeNodes = computed(() =>
+  nodeMode.value === 'local'
+    ? computeNodes.value.filter((n) => n.alias === 'local')
+    : computeNodes.value.filter((n) => n.alias !== 'local')
+)
+
+const solverInputHint = computed(() => {
+  const hints: Record<string, string> = {
+    calculix: '.inp (CalculiX 输入文件)',
+    freecad: '.FCStd 或 .step (FreeCAD 几何文件)',
+    prepomax: '.pmx (PrePoMax 项目文件)',
+    'prepomax-regenerate': '.pmx + .STEP (PrePoMax 再生文件对)',
+    openfoam: 'OpenFOAM case 目录',
+    elmer: '.sif (Elmer 求解器输入文件)',
+  }
+  return hints[selectedWorker.value] || '查看求解器文档确认输入格式'
+})
+
+const fileCheckHint = computed(() => {
+  if (uploadedInputFiles.value.length === 0) return null
+  const fileNames = uploadedInputFiles.value.map((f) => f.name.toLowerCase())
+  const checks: Record<string, { ext: string[]; label: string }> = {
+    calculix: { ext: ['.inp'], label: 'CalculiX' },
+    freecad: { ext: ['.fcstd', '.step', '.stp'], label: 'FreeCAD' },
+    prepomax: { ext: ['.pmx'], label: 'PrePoMax' },
+    'prepomax-regenerate': { ext: ['.pmx', '.step', '.stp'], label: 'PrePoMax Regenerate' },
+    openfoam: { ext: [], label: 'OpenFOAM' },
+    elmer: { ext: ['.sif'], label: 'Elmer' },
+  }
+  const check = checks[selectedWorker.value]
+  if (!check) return null
+  if (check.ext.length === 0)
+    return `已检测到 ${uploadedInputFiles.value.length} 个文件，请确认 ${check.label} case 目录完整`
+  const matched = uploadedInputFiles.value.find((f) =>
+    check.ext.some((ext) => f.name.toLowerCase().endsWith(ext))
+  )
+  if (matched) return `已检测到 ${matched.name}，${check.label} 可直接提交`
+  return `缺少 ${check.ext.join(' 或 ')} 文件，请检查`
+})
+
+const selectedWorker = ref('calculix')
+const nodeMode = ref('local')
+
+watch(nodeMode, (mode) => {
+  if (mode === 'local') {
+    selectedComputeNode.value = 'local'
+  }
+})
+const jobName = ref(`结构验证_${new Date().toISOString().slice(0, 10)}`)
+const customArgs = ref('')
+const timeoutMinutes = ref('')
+const jobMode = ref<JobMode>('single')
+const uploadMode = ref<UploadMode>('single-file')
+const singleInputFormat = ref('.inp')
+const instanceFolderName = ref('')
+const uploadedInputFiles = ref<UploadedInputFile[]>([])
+const savedJobTemplates = ref<JobTemplate[]>([])
+const pipelineSteps = ref<PipelineStep[]>([
+  { id: 'step-freecad', launcher: 'FreeCAD', inputName: 'model.FCStd' },
+  { id: 'step-prepomax', launcher: 'PrePoMax', inputName: 'mesh_definition.pm' },
+  { id: 'step-calculix', launcher: 'CalculiX', inputName: 'job.inp' },
+  { id: 'step-archive', launcher: '归档', inputName: 'result bundle' },
+])
+const queueItems = ref<QueueItem[]>([])
+const isFileDragActive = ref(false)
+const showSolverConfig = ref(false)
+
 const finishedRunCount = computed(() => archivedRuns.value.filter((run) => run.status === 'finished').length)
 const failedRunCount = computed(() => archivedRuns.value.filter((run) => run.status === 'failed').length)
 const activeRunCount = computed(
@@ -72,11 +187,10 @@ const activeRunCount = computed(
       ['created', 'running', 'queued', 'submitting', 'canceling'].includes(run.status)
     ).length
 )
-
 const latestRun = computed(() => archivedRuns.value[0] ?? null)
 
 const remoteOutputLines = computed(() =>
-  remoteStatus.output
+  remoteStatus.value.output
     .split('\n')
     .map((line) => line.trim())
     .filter(Boolean)
@@ -87,51 +201,68 @@ const remoteOutputLastLine = computed(() => {
   return lines.length > 0 ? lines[lines.length - 1] : ''
 })
 
-const sidecarHealth = computed(() => ({
-  label: status.value.connected ? '侧车在线' : '侧车离线',
-  detail: status.value.connected ? `${status.value.host} / PID ${status.value.pid}` : status.value.message,
-  tone: status.value.connected ? 'online' : 'offline',
-}))
-
 const nodeHealth = computed(() => ({
   label: remoteStatus.value.running ? '节点运行中' : remoteStatus.value.connected ? '节点在线' : '节点待测试',
   detail: remoteStatus.value.message || remoteLabel.value,
   tone: remoteStatus.value.running ? 'pending' : remoteStatus.value.connected ? 'online' : 'offline',
 }))
 
-const evidenceArtifacts = computed(
-  () => selectedRun.value?.artifacts?.filter((artifact) => artifact !== 'artifacts/result_summary.json') ?? []
+const selectedSolverDefinition = computed(() =>
+  solvers.value.find((solver) => solver.alias === selectedWorker.value)
 )
+
+const selectedWorkerReady = computed(() => Boolean(selectedSolverDefinition.value))
+
+const selectedWorkerLabel = computed(() => {
+  const configured = selectedSolverDefinition.value
+  const fallback = workerOptions.find((worker) => worker.alias === selectedWorker.value)
+  return configured?.label || fallback?.label || selectedWorker.value
+})
+
+const workstationReady = computed(() => status.value.connected && selectedWorkerReady.value)
 
 const selectedInputs = computed(() => selectedRun.value?.input_files ?? [])
 
-const workflowReady = computed(
-  () => hasSolver('freecad') && (hasSolver('prepomax-regenerate') || hasSolver('prepomax'))
-)
+const recentRuns = computed(() => archivedRuns.value.slice(0, 6))
 
-const toolchainStatusCards = computed(() => {
-  const solverCards = solvers.value.map((solver) => ({
-    name: solver.label || solver.alias,
-    role: solver.description || solver.kind || '从配置文件加载的工具链入口',
-    status: solver.executable ? '已配置' : '未配置',
-    tone: solverTone(solver.alias),
-    meta: solver.alias,
-  }))
+const mainInputFile = computed(() => uploadedInputFiles.value[0]?.name || '尚未选择输入文件')
 
-  if (solverCards.length > 0) {
-    return solverCards
-  }
+const pipelineSummary = computed(() => pipelineSteps.value.map((step) => step.launcher).join(' -> '))
 
-  return toolchainItems.value.map((item) => ({
-    name: item.name,
-    role: item.role,
-    status: item.status,
-    tone: toolchainTone(item.name),
-    meta: item.name,
-  }))
+const latestRunStatus = computed(() => {
+  if (!latestRun.value) return '暂无运行记录'
+  return `${latestRun.value.status} / ${latestRun.value.solver}`
 })
 
-const recentRuns = computed(() => archivedRuns.value.slice(0, 6))
+const taskProgressCard = computed(() => {
+  const active = queueItems.value.find((item) => item.status === 'running' || item.status === 'queued')
+  if (active) {
+    return {
+      label: active.stage,
+      progress: active.progress,
+      detail: active.title,
+      tone: active.status === 'running' ? 'tone-amber' : 'tone-purple',
+    }
+  }
+  if (remoteStatus.value.running) {
+    return {
+      label: '求解器运行中',
+      progress: 50,
+      detail: remoteStatus.value.message || '等待输出…',
+      tone: 'tone-amber',
+    }
+  }
+  return {
+    label: '空闲',
+    progress: 0,
+    detail: '无活跃任务',
+    tone: 'tone-blue',
+  }
+})
+
+const canSubmitConfiguredJob = computed(
+  () => status.value.connected && selectedWorkerReady.value && !remoteStatus.value.running
+)
 
 const dashboardMetrics = computed(() => [
   {
@@ -141,9 +272,9 @@ const dashboardMetrics = computed(() => [
     tone: 'blue',
   },
   {
-    label: '工具链入口',
+    label: '工作器入口',
     value: solvers.value.length || toolchainItems.value.length,
-    detail: workflowReady.value ? 'FreeCAD / PrePoMax 链路已配置' : '等待工具链检测',
+    detail: selectedWorkerReady.value ? `${selectedWorkerLabel.value} 已配置` : '等待侧车配置',
     tone: 'purple',
   },
   {
@@ -153,141 +284,6 @@ const dashboardMetrics = computed(() => [
     tone: remoteStatus.value.running ? 'amber' : status.value.connected ? 'green' : 'red',
   },
 ])
-
-const recipes = computed(() => [
-  {
-    title: '几何到前处理证据链',
-    subtitle: 'FreeCAD -> PrePoMax -> 归档',
-    detail: '验证本地 CAD 与前处理入口，保存脚本、命令、stdout/stderr 和生成文件。',
-    steps: ['FreeCAD', 'PrePoMax', 'Archive'],
-    ready: status.value.connected && workflowReady.value && !remoteStatus.value.running,
-    tone: 'blue',
-    actionLabel: '运行链路配方',
-    run: () => remoteRuns.startFreecadPrepomaxWorkflowAction(),
-  },
-  {
-    title: '结构求解器验证',
-    subtitle: 'CalculiX -> 结果摘要',
-    detail: '运行结构求解器适配器，把输入文件、日志、结果和摘要写入同一个档案。',
-    steps: ['INP', 'CalculiX', 'Result'],
-    ready: status.value.connected && hasSolver('calculix') && !remoteStatus.value.running,
-    tone: 'green',
-    actionLabel: '运行 CalculiX',
-    run: () => remoteRuns.startSolverRunAction('calculix'),
-  },
-  {
-    title: '远程运行闭环',
-    subtitle: '节点探测 -> 运行 -> 复盘',
-    detail: '用于验证远程目录、实时事件流和本地归档，不先追求完整求解器。',
-    steps: ['Probe', 'Run', 'Evidence'],
-    ready: status.value.connected && Boolean(selectedComputeNode.value) && !remoteStatus.value.running,
-    tone: 'amber',
-    actionLabel: '运行闭环样例',
-    run: () => remoteRuns.startRemoteDemoRunAction(),
-  },
-])
-
-const selectedRecipeIndex = ref(0)
-const selectedRecipe = computed(() => recipes.value[selectedRecipeIndex.value] ?? recipes.value[0])
-const solverMode = ref<'single' | 'workflow'>('single')
-
-const configDialog = ref({
-  open: false,
-  title: '',
-  subtitle: '',
-  inputFiles: [] as string[],
-  workdir: '.simfea/runs',
-  onConfirm: null as (() => void) | null,
-})
-
-const openConfigDialog = (title: string, subtitle: string, inputFiles: string[], run: () => void) => {
-  configDialog.value = {
-    open: true,
-    title,
-    subtitle,
-    inputFiles,
-    workdir: '.simfea/runs',
-    onConfirm: run,
-  }
-}
-
-const closeConfigDialog = () => {
-  configDialog.value.open = false
-}
-
-const confirmConfigDialog = () => {
-  configDialog.value.onConfirm?.()
-  configDialog.value.open = false
-}
-
-const availableSingleSolvers = computed(() =>
-  solvers.value.filter((s) => !['prepomax', 'prepomax-regenerate'].includes(s.alias))
-)
-
-const singleSolverCards = computed(() =>
-  availableSingleSolvers.value.map((solver) => {
-    const alias = solver.alias.toLowerCase()
-    if (alias === 'freecad') {
-      return {
-        ...solver,
-        badge: 'CAD',
-        summary: '通过 FreeCAD Python API 生成几何模型，输出 FCStd 与 STEP。',
-        actionLabel: '生成几何',
-      }
-    }
-    if (alias === 'calculix') {
-      return {
-        ...solver,
-        badge: 'Solver',
-        summary: '运行 CalculiX 结构算例，归档求解日志和结果文件。',
-        actionLabel: '运行求解',
-      }
-    }
-    if (alias === 'elmer') {
-      return {
-        ...solver,
-        badge: 'Solver',
-        summary: solver.description || 'Elmer 多物理场求解器适配器。',
-        actionLabel: '运行 Elmer',
-      }
-    }
-    if (alias === 'openfoam') {
-      return {
-        ...solver,
-        badge: 'Solver',
-        summary: solver.description || 'OpenFOAM CFD 求解器适配器。',
-        actionLabel: '运行 OpenFOAM',
-      }
-    }
-    return {
-      ...solver,
-      badge: solver.kind || 'Solver',
-      summary: solver.description || '',
-      actionLabel: `运行 ${solver.label}`,
-    }
-  })
-)
-
-function hasSolver(alias: string) {
-  return solvers.value.some((solver) => solver.alias === alias)
-}
-
-function solverTone(alias: string) {
-  if (alias.includes('freecad')) return 'blue'
-  if (alias.includes('prepomax')) return 'purple'
-  if (alias.includes('calculix')) return 'green'
-  if (alias.includes('openfoam')) return 'cyan'
-  if (alias.includes('elmer')) return 'amber'
-  return 'neutral'
-}
-
-function toolchainTone(name: string) {
-  const normalized = name.toLowerCase()
-  if (normalized.includes('freecad')) return 'blue'
-  if (normalized.includes('prepomax') || normalized.includes('calculix')) return 'purple'
-  if (normalized.includes('ssh') || normalized.includes('docker')) return 'green'
-  return 'neutral'
-}
 
 function statusTone(statusText: string) {
   if (statusText === 'finished') return 'online'
@@ -318,6 +314,173 @@ function artifactSummary(run: RunArchive | null) {
   if (artifacts.length === 0) return '暂无产物'
   return artifacts.slice(0, 3).join(' / ')
 }
+
+function formatFileSize(size: number) {
+  if (size < 1024) return `${size} B`
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
+  return `${(size / 1024 / 1024).toFixed(1)} MB`
+}
+
+function mapQueueTone(statusText: QueueItem['status']) {
+  if (statusText === 'finished') return 'online'
+  if (statusText === 'running' || statusText === 'queued') return 'pending'
+  if (statusText === 'failed') return 'offline'
+  return 'neutral'
+}
+
+function queueStageByMode(mode: JobMode, message: string) {
+  if (message.includes('归档')) return '正在归档'
+  if (message.includes('后处理')) return '正在后处理'
+  if (mode === 'pipeline') return '正在工作流执行'
+  return '正在工作器运行'
+}
+
+function createQueueItem(mode: JobMode) {
+  const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+  const title =
+    mode === 'single'
+      ? `${jobName.value || '未命名作业'} / ${selectedWorkerLabel.value}`
+      : `${jobName.value || '未命名作业'} / ${pipelineSummary.value}`
+  const inputMode =
+    uploadMode.value === 'single-file' ? '单文件' : `文件夹 ${instanceFolderName.value || '未选择'}`
+  const item: QueueItem = {
+    id,
+    title,
+    mode,
+    progress: 8,
+    status: 'queued',
+    stage: '排队中',
+    logOpen: false,
+    logs: [`[queue] 已提交任务，输入模式：${inputMode}`],
+    createdAt: new Date().toISOString(),
+  }
+  queueItems.value = [item, ...queueItems.value].slice(0, 8)
+  return item.id
+}
+
+function updateQueueItem(id: string, patch: Partial<QueueItem>, logLine?: string) {
+  const index = queueItems.value.findIndex((item) => item.id === id)
+  if (index < 0) return
+  const current = queueItems.value[index]
+  queueItems.value[index] = {
+    ...current,
+    ...patch,
+    logs: logLine ? [...current.logs, logLine] : current.logs,
+  }
+}
+
+function toggleQueueLog(id: string) {
+  const index = queueItems.value.findIndex((item) => item.id === id)
+  if (index < 0) return
+  queueItems.value[index] = { ...queueItems.value[index], logOpen: !queueItems.value[index].logOpen }
+}
+
+function acceptInputFiles(files: FileList | null) {
+  if (!files || files.length === 0) return
+  uploadedInputFiles.value = Array.from(files).map((file) => ({
+    name: file.name,
+    size: file.size,
+  }))
+  appendLog(`[upload] 已选择 ${uploadedInputFiles.value.length} 个输入文件。`)
+}
+
+function handleFileDrop(event: DragEvent) {
+  isFileDragActive.value = false
+  acceptInputFiles(event.dataTransfer?.files ?? null)
+}
+
+function handleFileInputChange(event: Event) {
+  const input = event.target as HTMLInputElement
+  if (uploadMode.value === 'folder') {
+    const firstPath = (input.files?.[0] as File & { webkitRelativePath?: string })?.webkitRelativePath || ''
+    instanceFolderName.value = firstPath.split('/')[0] || ''
+  }
+  acceptInputFiles(input.files)
+}
+
+function saveCurrentTemplate() {
+  const template: JobTemplate = {
+    id: `${Date.now()}`,
+    name: jobName.value || `${selectedWorkerLabel.value} 模板`,
+    worker: selectedWorker.value,
+    computeNode: selectedComputeNode.value,
+    nodeMode: nodeMode.value,
+    files: [...uploadedInputFiles.value],
+    savedAt: new Date().toISOString(),
+  }
+  savedJobTemplates.value = [template, ...savedJobTemplates.value].slice(0, 6)
+  appendLog(`[template] 已保存模板：${template.name}`)
+}
+
+function applyTemplate(template: JobTemplate) {
+  jobName.value = template.name
+  selectedWorker.value = template.worker
+  selectedComputeNode.value = template.computeNode
+  nodeMode.value = template.nodeMode
+  uploadedInputFiles.value = [...template.files]
+  appendLog(`[template] 已载入模板：${template.name}`)
+}
+
+function submitConfiguredJob() {
+  if (!selectedWorkerReady.value) {
+    appendLog(`[solver] ${selectedWorkerLabel.value} 尚未在配置中可用。`)
+    return
+  }
+  if (!status.value.connected || remoteStatus.value.running) {
+    appendLog('[queue] 当前无法提交，请先确认侧车连通且没有正在运行的任务。')
+    return
+  }
+
+  const queueId = createQueueItem(jobMode.value)
+  updateQueueItem(
+    queueId,
+    { status: 'running', progress: 30, stage: '正在启动' },
+    '[queue] 正在初始化运行环境'
+  )
+  if (jobMode.value === 'single') {
+    remoteRuns.startSolverRunAction(selectedWorker.value)
+  } else {
+    remoteRuns.startFreecadPrepomaxWorkflowAction()
+  }
+}
+
+watch(solvers, (list) => {
+  if (list.length > 0 && !list.find((s) => s.alias === selectedWorker.value)) {
+    selectedWorker.value = list[0].alias
+  }
+})
+
+watch(
+  () => remoteStatus.value.message,
+  (message) => {
+    const active = queueItems.value.find((item) => item.status === 'running')
+    if (!active || !message) return
+    const progress = Math.min(88, active.progress + 6)
+    updateQueueItem(
+      active.id,
+      { progress, stage: queueStageByMode(active.mode, message) },
+      `[runtime] ${message}`
+    )
+  }
+)
+
+watch(
+  () => remoteStatus.value.running,
+  (running) => {
+    const active = queueItems.value.find((item) => item.status === 'running')
+    if (!active || running) return
+    const failed = remoteStatus.value.message.includes('失败')
+    updateQueueItem(
+      active.id,
+      {
+        status: failed ? 'failed' : 'finished',
+        progress: 100,
+        stage: failed ? '已失败' : '已完成',
+      },
+      failed ? '[queue] 任务结束：失败' : '[queue] 任务结束：完成'
+    )
+  }
+)
 
 const loadRunsAction = async () => {
   const result = await api.listRuns()
@@ -434,50 +597,119 @@ onUnmounted(() => {
   closeRunEventStream()
   window.removeEventListener('keydown', handleKeydown)
 })
+
+type AppView = 'composer' | 'run-detail' | 'learning-library'
+const currentView = ref<AppView>('composer')
+const detailRunId = ref<string | null>(null)
+
+function navigateTo(view: AppView) {
+  currentView.value = view
+}
+
+function openRunDetail(runId: string) {
+  detailRunId.value = runId
+  currentView.value = 'run-detail'
+  selectRunAction(runId)
+}
+
+function backToComposer() {
+  currentView.value = 'composer'
+}
 </script>
 
 <template>
   <main class="studio-shell">
-    <header class="hero-panel">
+    <nav class="side-nav" aria-label="主导航">
+      <button
+        type="button"
+        class="nav-item"
+        :class="{ active: currentView === 'composer' }"
+        @click="navigateTo('composer')"
+      >
+        <span class="nav-icon" aria-hidden="true">▦</span>
+        <span class="nav-label">作业区</span>
+      </button>
+      <button
+        type="button"
+        class="nav-item"
+        :class="{ active: currentView === 'learning-library' }"
+        @click="navigateTo('learning-library')"
+      >
+        <span class="nav-icon" aria-hidden="true">▤</span>
+        <span class="nav-label">学习库</span>
+      </button>
+    </nav>
+
+    <div v-if="currentView === 'composer'" class="view-container">
+      <header class="hero-panel">
       <div class="hero-copy">
-        <p class="eyebrow">SimFEA Studio / OpenHPC-style Evidence Workbench</p>
-        <h1>把工具链状态、工作流配方和运行证据放进一个桌面流程里</h1>
+        <p class="eyebrow">SimFEA Studio / Job Composer</p>
+        <h1>把求解器、计算节点、输入文件和运行证据收进同一个桌面作业流</h1>
         <p class="hero-text">
-          首页不再只是按钮集合，而是像工程软件栈一样显示每个组件是否可用、下一条配方能否执行、最近一次运行留下了哪些可复盘证据。
+          左侧完成作业参数，右侧即时确认节点、工作站和最近运行结果。常用配置可以存为模板，同类算例不用反复填写。
         </p>
         <div class="hero-actions">
           <button type="button" class="primary-action" @click="refreshAllAction">刷新工作台</button>
           <button type="button" @click="startSidecarAction" :disabled="status.connected">启动侧车</button>
           <button type="button" @click="shutdownSidecarAction" :disabled="!status.connected">关闭侧车</button>
         </div>
-      </div>
 
-      <section class="health-board" aria-label="系统健康状态">
-        <article class="health-card" :class="sidecarHealth.tone">
-          <span class="health-dot" />
-          <div>
-            <strong>{{ sidecarHealth.label }}</strong>
-            <p>{{ sidecarHealth.detail }}</p>
+        <article v-if="latestRun" class="latest-run-card latest-run-card-left">
+          <button type="button" class="primary-action latest-run-action" @click="openRunDetail(latestRun.run_id)">
+            查看证据
+          </button>
+          <div class="latest-run-info">
+            <span>最近运行</span>
+            <strong>{{ latestRun.case_name }}</strong>
+            <p>{{ latestRun.solver }} / {{ formatDate(latestRun.created_at) }}</p>
           </div>
         </article>
-        <article class="health-card" :class="nodeHealth.tone">
-          <span class="health-dot" />
-          <div>
-            <strong>{{ nodeHealth.label }}</strong>
-            <p>{{ nodeHealth.detail }}</p>
+      </div>
+      <div class="hero-side">
+        <section class="panel status-panel status-panel-compact" aria-labelledby="status-title">
+          <div class="section-heading">
+            <p class="eyebrow">Status</p>
+            <h2 id="status-title">状态区</h2>
           </div>
-        </article>
-        <article
-          v-for="metric in dashboardMetrics"
-          :key="metric.label"
-          class="metric-card"
-          :class="`tone-${metric.tone}`"
-        >
-          <span>{{ metric.label }}</span>
-          <strong>{{ metric.value }}</strong>
-          <p>{{ metric.detail }}</p>
-        </article>
-      </section>
+
+          <div class="status-stack">
+            <article class="status-tile" :class="status.connected ? 'online' : 'offline'">
+              <span>系统状态</span>
+              <strong>{{ status.connected ? '侧车已连接' : '侧车离线' }}</strong>
+              <p>{{ status.connected ? `${status.host} / pid ${status.pid}` : status.message }}</p>
+            </article>
+            <article class="status-tile" :class="workstationReady ? 'online' : 'offline'">
+              <span>工作器状态</span>
+              <strong>{{ workstationReady ? '已就绪' : '待配置' }}</strong>
+              <p>{{ selectedWorkerLabel }} / {{ selectedWorkerReady ? '已在侧车配置中' : '未发现可用配置' }}</p>
+            </article>
+          </div>
+        </section>
+
+        <section class="health-board" aria-label="系统健康状态">
+          <article
+            v-for="metric in dashboardMetrics"
+            :key="metric.label"
+            class="metric-card"
+            :class="[`tone-${metric.tone}`, metric.label === '工作器入口' ? 'metric-card-clickable' : '']"
+            @click="metric.label === '工作器入口' ? showSolverConfig = true : undefined"
+          >
+            <span>{{ metric.label }}</span>
+            <strong>{{ metric.value }}</strong>
+            <p>{{ metric.detail }}</p>
+          </article>
+
+          <article class="metric-card task-progress-card" :class="taskProgressCard.tone">
+            <span>实时任务</span>
+            <strong>{{ taskProgressCard.label }}</strong>
+            <div class="task-mini-progress">
+              <div class="task-mini-progress-fill" :style="{ width: `${taskProgressCard.progress}%` }" />
+            </div>
+            <p>{{ taskProgressCard.detail }}</p>
+          </article>
+        </section>
+
+      </div>
     </header>
 
     <div v-if="remoteStatus.running" class="run-progress-bar" aria-label="求解器运行进度">
@@ -488,149 +720,210 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <section class="workspace-grid" aria-label="首页工作台">
-      <section class="panel toolchain-section" aria-labelledby="toolchain-title">
+    <section class="job-shell-grid" aria-label="作业配置工作台">
+      <section class="panel job-config-panel" aria-labelledby="job-config-title">
         <div class="section-heading">
-          <p class="eyebrow">Toolchain Status</p>
-          <h2 id="toolchain-title">工具链状态区</h2>
-          <p>把 FreeCAD、PrePoMax、CalculiX 和远程节点当成可检测组件，而不是散落按钮。</p>
+          <p class="eyebrow">Job Setup</p>
+          <h2 id="job-config-title">作业配置区</h2>
+          <p>选择工作器、计算节点和输入文件，形成一次可以保存、复用、提交的仿真作业。</p>
         </div>
 
-        <div class="node-selector-card">
-          <label>
-            <span>当前计算节点</span>
-            <select
-              v-model="selectedComputeNode"
-              :disabled="computeNodes.length === 0 || remoteStatus.running"
-            >
-              <option v-for="node in computeNodes" :key="node.alias" :value="node.alias">
-                {{ node.label }} / {{ node.alias }}
-              </option>
-            </select>
+        <div class="config-card">
+          <div class="toggle-stack">
+            <div class="mode-toggle" role="tablist" aria-label="作业模式">
+              <button type="button" :class="{ active: jobMode === 'single' }" @click="jobMode = 'single'">单求解器模式</button>
+              <button type="button" :class="{ active: jobMode === 'pipeline' }" @click="jobMode = 'pipeline'">启动链模式</button>
+            </div>
+
+            <div class="mode-toggle" role="tablist" aria-label="上传模式">
+              <button type="button" :class="{ active: uploadMode === 'single-file' }" @click="uploadMode = 'single-file'">单个文件</button>
+              <button type="button" :class="{ active: uploadMode === 'folder' }" @click="uploadMode = 'folder'">实例文件夹</button>
+            </div>
+          </div>
+
+          <div v-if="jobMode === 'pipeline'" class="pipeline-steps-card">
+            <span class="pipeline-label">启动链步骤</span>
+            <div class="pipeline-chain">
+              <div v-for="(step, idx) in pipelineSteps" :key="step.id" class="pipeline-node">
+                <span class="pipeline-node-icon">{{ idx + 1 }}</span>
+                <strong>{{ step.launcher }}</strong>
+                <small>{{ step.inputName }}</small>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-grid">
+            <label class="field">
+              <span>
+                作业名称
+                <button type="button" class="save-template-inline" @click="saveCurrentTemplate">存为模板</button>
+              </span>
+              <input v-model="jobName" type="text" placeholder="例如：cantilever_modal_001" />
+            </label>
+
+            <label v-if="jobMode === 'single'" class="field">
+              <span>工作器</span>
+              <select v-model="selectedWorker">
+                <option v-if="solvers.length === 0" v-for="worker in workerOptions" :key="worker.alias" :value="worker.alias">
+                  {{ worker.label }} / {{ worker.kind }}
+                </option>
+                <option v-for="solver in solvers" :key="solver.alias" :value="solver.alias">
+                  {{ solver.label }} / {{ solver.kind }}
+                </option>
+              </select>
+              <small v-if="solvers.length === 0" class="field-hint">尚未探测 — 显示预设列表</small>
+            </label>
+
+            <label class="field">
+              <span>节点类型</span>
+              <select v-model="nodeMode">
+                <option v-for="mode in nodeModeOptions" :key="mode.value" :value="mode.value">
+                  {{ mode.label }}
+                </option>
+              </select>
+            </label>
+
+            <label v-if="nodeMode !== 'local'" class="field">
+              <span>计算节点</span>
+              <select
+                v-model="selectedComputeNode"
+                :disabled="computeNodes.length === 0 || remoteStatus.running"
+              >
+                <option v-for="node in filteredComputeNodes" :key="node.alias" :value="node.alias">
+                  {{ node.label }} / {{ node.alias }}
+                </option>
+              </select>
+            </label>
+          </div>
+
+          <label
+            class="drop-zone"
+            :class="{ active: isFileDragActive }"
+            @dragenter.prevent="isFileDragActive = true"
+            @dragover.prevent="isFileDragActive = true"
+            @dragleave.prevent="isFileDragActive = false"
+            @drop.prevent="handleFileDrop"
+          >
+            <input type="file" multiple :webkitdirectory="uploadMode === 'folder' ? 'true' : undefined" @change="handleFileInputChange" />
+            <span class="drop-icon">INP</span>
+            <strong>拖拽输入文件到这里</strong>
+            <p>支持主文件和子文件一起放入；当前选择：{{ mainInputFile }}</p>
           </label>
-          <div class="node-actions">
-            <button type="button" :disabled="!status.connected" @click="remoteRuns.probeRemoteNodeAction()">
+
+          <div v-if="uploadedInputFiles.length" class="uploaded-list" aria-label="已选择输入文件">
+            <div v-for="file in uploadedInputFiles" :key="`${file.name}-${file.size}`">
+              <span>{{ file.name }}</span>
+              <small>{{ formatFileSize(file.size) }}</small>
+            </div>
+          </div>
+
+          <p v-if="fileCheckHint" class="input-format-hint" :class="{ 'check-ok': fileCheckHint.includes('可直接提交') }">{{ fileCheckHint }}</p>
+          <p v-else class="input-format-hint">当前 {{ selectedWorkerLabel }} 需要：{{ solverInputHint }}</p>
+
+          <div class="form-grid compact">
+            <label class="field">
+              <span>自定义参数</span>
+              <input v-model="customArgs" type="text" placeholder="例如：--cpus 8 --memory 16G" />
+            </label>
+            <label class="field">
+              <span>超时时间</span>
+              <input v-model="timeoutMinutes" type="text" placeholder="分钟" />
+            </label>
+          </div>
+
+          <div class="job-actions">
+            <button type="button" @click="remoteRuns.probeRemoteNodeAction()" :disabled="!status.connected">
               测试节点
             </button>
-            <button type="button" :disabled="!status.connected" @click="remoteRuns.probeSolversAction()">
-              探测求解器
+            <button type="button" @click="remoteRuns.probeSolversAction()" :disabled="!status.connected">
+              探测工作器
             </button>
-          </div>
-        </div>
-
-        <div class="toolchain-grid">
-          <article
-            v-for="item in toolchainStatusCards"
-            :key="item.meta"
-            class="tool-card"
-            :class="`tone-${item.tone}`"
-          >
-            <span class="tool-icon" aria-hidden="true" />
-            <div>
-              <strong>{{ item.name }}</strong>
-              <p>{{ item.role }}</p>
-              <small>{{ item.status }}</small>
-            </div>
-          </article>
-          <p v-if="toolchainStatusCards.length === 0" class="empty-state">
-            尚未读取工具链配置，点击“刷新工作台”连接侧车服务。
-          </p>
-        </div>
-      </section>
-
-      <section class="panel recipe-section" aria-labelledby="recipe-title">
-        <div class="section-heading">
-          <p class="eyebrow">Solver Control</p>
-          <h2 id="recipe-title">仿真器选择入口</h2>
-          <p>选择单个求解器或活动链，配置后运行。</p>
-        </div>
-
-        <div class="mode-toggle">
-          <button
-            type="button"
-            :class="{ active: solverMode === 'single' }"
-            @click="solverMode = 'single'"
-          >
-            单个活动器
-          </button>
-          <button
-            type="button"
-            :class="{ active: solverMode === 'workflow' }"
-            @click="solverMode = 'workflow'"
-          >
-            活动链
-          </button>
-        </div>
-
-        <div v-if="solverMode === 'single'" class="solver-card-grid">
-          <article
-            v-for="solver in singleSolverCards"
-            :key="solver.alias"
-            class="solver-card"
-            :class="{ featured: ['freecad', 'calculix'].includes(solver.alias) }"
-          >
-            <div class="solver-card-head">
-              <span class="solver-badge">{{ solver.badge }}</span>
-              <strong>{{ solver.label }}</strong>
-            </div>
-            <p>{{ solver.summary }}</p>
+            <button type="button" @click="saveCurrentTemplate">存为模板</button>
             <button
               type="button"
               class="primary-action"
-              :disabled="!status.connected || remoteStatus.running"
-              @click="openConfigDialog(
-                solver.label,
-                solver.description || solver.kind || '',
-                Object.keys(solver.input_files ?? {}),
-                () => remoteRuns.startSolverRunAction(solver.alias)
-              )"
+              :disabled="!canSubmitConfiguredJob"
+              @click="submitConfiguredJob"
             >
-              {{ solver.actionLabel }}
+              提交作业
             </button>
+          </div>
+        </div>
+      </section>
+
+      <aside class="right-rail" aria-label="状态与模板">
+
+        <section class="panel log-panel" aria-labelledby="log-title">
+          <div class="section-heading">
+            <p class="eyebrow">Live Log</p>
+            <h2 id="log-title">实时日志</h2>
+          </div>
+          <pre class="logs-display logs-display--compact"><code>{{ logs }}</code></pre>
+        </section>
+
+        <section class="panel template-panel" aria-labelledby="template-title">
+          <div class="section-heading split-heading">
+            <div>
+              <p class="eyebrow">Templates</p>
+              <h2 id="template-title">模板列表</h2>
+            </div>
+            <span>{{ savedJobTemplates.length }} 个模板</span>
+          </div>
+
+          <div class="template-list">
+            <button
+              v-for="template in savedJobTemplates"
+              :key="template.id"
+              type="button"
+              class="template-card"
+              @click="applyTemplate(template)"
+            >
+              <strong>{{ template.name }}</strong>
+              <span>{{ template.worker }} / {{ template.nodeMode }} / {{ template.files.length }} 个文件</span>
+            </button>
+            <p v-if="savedJobTemplates.length === 0" class="empty-state">
+              点击“存为模板”保存当前参数配置，后续同类算例可以直接调用。
+            </p>
+          </div>
+        </section>
+      </aside>
+
+      <section v-if="queueItems.length" class="panel queue-panel" aria-labelledby="queue-title">
+        <div class="section-heading">
+          <p class="eyebrow">Task Queue</p>
+          <h2 id="queue-title">任务队列</h2>
+        </div>
+        <div class="queue-grid">
+          <article
+            v-for="item in queueItems"
+            :key="item.id"
+            class="queue-card"
+            :class="`tone-${mapQueueTone(item.status)}`"
+          >
+            <div class="queue-head">
+              <strong>{{ item.title }}</strong>
+              <span class="status-pill" :class="mapQueueTone(item.status)">{{ item.status }}</span>
+            </div>
+            <div class="queue-progress">
+              <div class="queue-progress-fill" :style="{ width: `${item.progress}%` }" />
+            </div>
+            <div class="queue-meta">
+              <span>{{ item.stage }}</span>
+              <small>{{ formatDate(item.createdAt) }}</small>
+            </div>
+            <button type="button" class="queue-log-toggle" @click="toggleQueueLog(item.id)">
+              {{ item.logOpen ? '收起日志' : '展开日志' }}
+            </button>
+            <pre v-if="item.logOpen" class="queue-log"><code>{{ item.logs.join('\n') }}</code></pre>
           </article>
         </div>
-
-        <article
-          v-if="solverMode === 'workflow'"
-          class="recipe-card"
-          :class="`tone-blue`"
-        >
-          <div class="recipe-head">
-            <div>
-              <strong>几何到前处理证据链</strong>
-              <p>FreeCAD -> PrePoMax -> 归档</p>
-            </div>
-            <span :class="workflowReady && status.connected && !remoteStatus.running ? 'ready' : 'blocked'">
-              {{ workflowReady && status.connected && !remoteStatus.running ? '可运行' : '待配置' }}
-            </span>
-          </div>
-          <ol class="recipe-steps">
-            <li>FreeCAD</li>
-            <li>PrePoMax</li>
-            <li>Archive</li>
-          </ol>
-          <p class="recipe-detail">验证本地 CAD 与前处理入口，保存脚本、命令、stdout/stderr 和生成文件。</p>
-          <button
-            type="button"
-            class="primary-action"
-            :disabled="!status.connected || !workflowReady || remoteStatus.running"
-            @click="openConfigDialog(
-              'FreeCAD -> PrePoMax 活动链',
-              '多步求解器工作流',
-              [],
-              () => remoteRuns.startFreecadPrepomaxWorkflowAction()
-            )"
-          >
-            运行链路配方
-          </button>
-        </article>
       </section>
 
       <section class="panel evidence-section" aria-labelledby="evidence-title">
         <div class="section-heading">
           <p class="eyebrow">Run Evidence</p>
           <h2 id="evidence-title">最近运行证据区</h2>
-          <p>最近的命令、输入、日志和结果产物会集中显示，方便判断闭环是否真的跑起来。</p>
+          <p>命令、输入、日志、结果产物和本地归档集中展示，方便确认闭环是否真正跑通。</p>
         </div>
 
         <div class="evidence-layout">
@@ -712,23 +1005,78 @@ onUnmounted(() => {
         :remote-output="remoteStatus.output"
       />
 
-      <section class="panel log-section" aria-labelledby="log-title">
-        <div class="section-heading">
-          <p class="eyebrow">Live Log</p>
-          <h2 id="log-title">实时日志</h2>
-        </div>
-        <pre class="logs-display"><code>{{ logs }}</code></pre>
-      </section>
     </section>
 
-    <RunConfigDialog
-      :open="configDialog.open"
-      :title="configDialog.title"
-      :subtitle="configDialog.subtitle"
-      :input-files="configDialog.inputFiles"
-      :workdir="configDialog.workdir"
-      @confirm="confirmConfigDialog()"
-      @cancel="closeConfigDialog()"
+      <div v-if="showSolverConfig" class="dialog-backdrop" @click.self="showSolverConfig = false">
+        <div class="dialog-card solver-config-dialog">
+          <div class="dialog-header">
+            <strong>求解器配置详情</strong>
+            <p>配置文件：{{ status.configPath || '未获取' }}</p>
+          </div>
+          <div class="dialog-body solver-list">
+            <div v-if="solvers.length === 0 && toolchainItems.length === 0" class="empty-state">
+              暂无求解器配置。请先探测工作器或检查侧车配置。
+            </div>
+            <article v-for="solver in solvers" :key="solver.alias" class="solver-entry">
+              <div class="solver-entry-head">
+                <strong>{{ solver.label }}</strong>
+                <span class="tag tag-purple">{{ solver.kind }}</span>
+              </div>
+              <dl class="solver-entry-detail">
+                <div>
+                  <dt>别名</dt>
+                  <dd>{{ solver.alias }}</dd>
+                </div>
+                <div>
+                  <dt>可执行文件</dt>
+                  <dd>{{ solver.executable }}</dd>
+                </div>
+                <div v-if="solver.description">
+                  <dt>描述</dt>
+                  <dd>{{ solver.description }}</dd>
+                </div>
+                <div>
+                  <dt>产物匹配</dt>
+                  <dd>{{ solver.artifact_patterns.join(', ') || '无' }}</dd>
+                </div>
+              </dl>
+            </article>
+            <article v-for="item in toolchainItems" :key="item.name" class="solver-entry">
+              <div class="solver-entry-head">
+                <strong>{{ item.name }}</strong>
+                <span class="tag tag-neutral">{{ item.role }}</span>
+              </div>
+              <p class="solver-entry-status">状态：{{ item.status }}</p>
+            </article>
+          </div>
+          <div class="dialog-actions">
+            <button type="button" class="primary-action" @click="showSolverConfig = false">关闭</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <RunDetailView
+      v-else-if="currentView === 'run-detail'"
+      :run="selectedRun"
+      :api-base-url="apiBaseUrl"
+      :remote-output="remoteStatus.output"
+      @back="backToComposer"
+      @refresh="detailRunId ? selectRunAction(detailRunId) : undefined"
+    />
+
+    <LearningLibrary
+      v-else-if="currentView === 'learning-library'"
+      :runs="archivedRuns"
+      :api-base-url="apiBaseUrl"
+      @back="backToComposer"
+      @select-run="openRunDetail"
     />
   </main>
 </template>
+
+
+
+
+
+
