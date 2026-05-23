@@ -89,6 +89,7 @@ try:
         workflow_artifact_patterns,
     )
     from .simfea_api.cleanup import cleanup_old_runs
+    from .simfea_api.install import start_install, event_generator
     from .simfea_api.logger import create_logger
 except ImportError:
     from simfea_api.cleanup import cleanup_old_runs
@@ -157,6 +158,7 @@ except ImportError:
         public_freecad_prepomax_workflow,
         workflow_artifact_patterns,
     )
+    from simfea_api.install import start_install, event_generator
     from simfea_api.logger import create_logger
 
 log = create_logger("sidecar")
@@ -1909,6 +1911,24 @@ async def stream_run_events(run_id: str, from_seq: int | None = None):
             }
 
     return EventSourceResponse(event_generator())
+
+
+@app.post("/v1/toolchain/solvers/{alias}/install")
+async def install_solver_pack(alias: str):
+    if alias != "calculix":
+        raise HTTPException(status_code=400, detail="Solver pack currently only supports calculix.")
+    try:
+        result = await start_install(alias)
+        return result
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+
+
+@app.get("/v1/toolchain/solvers/{alias}/install/{install_id}/events")
+async def stream_install_events(alias: str, install_id: str):
+    return EventSourceResponse(event_generator(install_id))
 
 
 def kill_process():
