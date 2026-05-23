@@ -37,6 +37,14 @@ SimFEA Studio 不是新的仿真引擎，不是商业 CAE 的竞品，也不是�
 
 当前版本已经从模板验证推进到真实求解链路：本地 CalculiX 悬臂梁算例可以端到端运行，归档 `.frd/.dat/.sta`，转换 FRD 到 VTK，并生成位移、应力摘要。
 
+## 当前状态（2026-05-23）
+
+- **桌面主界面**：首页已经聚合为作业配置、状态区、运行档案、实时任务和日志面板，适合在一个工作台里完成提交、观察和复盘。
+- **学习库**：运行归档可以按状态检索，支持查看详情、导出 Markdown / JSON，并把“无笔记、无报告、有结果”的状态直接暴露出来。
+- **工具链管理**：FreeCAD、PrePoMax、CalculiX 进入独立配置页，支持自动搜索、选择路径、测试运行和安装引导。
+- **CalculiX Solver Pack**：CalculiX 可从“已发现/已验证”继续推进到“可安装包”管理，后端提供安装任务和 SSE 进度事件。
+- **桌面版本验证**：Tauri 桌面壳、Vue 前端、FastAPI sidecar 和本地 CalculiX 配置已在 Windows 开发环境中连通。
+
 ## 模板来源
 
 本项目最初基于 [AlanSynn/vue-tauri-fastapi-sidecar-template](https://github.com/AlanSynn/vue-tauri-fastapi-sidecar-template) 搭建 `Tauri + Vue + FastAPI sidecar` 技术骨架。
@@ -125,11 +133,20 @@ SimFEA Studio 的学习系统按照"日志 → 笔记 → 报告"的顺序逐层
 - **动态字段显隐**：选"本地"时计算节点下拉隐藏，选"远程"时才显示 SSH/HPC 节点；启动链模式下显示多步骤配置，工作器下拉隐藏。
 - **文件预检提示**：文件上传后自动匹配求解器期望格式，绿色提示"已检测到 X，可直接提交"或警告"缺少需要文件"。
 
+### 工具链管理
+
+工具链页把“装没装、在哪里、能不能跑”从配置文件里拉到界面上：
+
+- 商业软件只做环境探测和路径记录，不进入安装包管理。
+- FreeCAD / PrePoMax 提供路径选择、自动搜索和测试运行。
+- CalculiX 支持已有安装接入，也支持后续接入独立 Solver Pack。
+- Solver Pack 安装流程通过后台任务执行，前端用 SSE 展示下载、解压、扫描和校验进度。
+
 ## 求解器支持
 
 | 求解器 | 状态 | 说明 |
 | --- | --- | --- |
-| **CalculiX** | 已端到端验证 | 本地悬臂梁算例，FRD → VTK，指标摘要，物证归档。 |
+| **CalculiX** | 已端到端验证 / Solver Pack 接入中 | 本地悬臂梁算例，FRD → VTK，指标摘要，物证归档；工具链页支持路径发现、测试运行和安装任务。 |
 | FreeCAD | 适配器骨架就绪 | 通过 `FreeCADCmd` 执行无头 Python 宏，默认 smoke case 生成 `.FCStd/.step`。 |
 | PrePoMax | regeneration 已验证 | `prepomax-regenerate`：STEP 导入 → Gmsh 网格 → CalculiX 求解 → 结果回读，VTK 热力图可用。 |
 | **freecad-prepomax** (workflow) | 已端到端验证 | FreeCAD 几何 → PrePoMax 再生求解，两步链式执行，统一归档 20 个产物。 |
@@ -240,7 +257,13 @@ python src/backends/main.py
 corepack pnpm dev:frontend
 ```
 
-### 6. 触发本地 CalculiX 求解
+### 6. 启动桌面版本
+
+```powershell
+npm run dev:tauri
+```
+
+### 7. 触发本地 CalculiX 求解
 
 ```powershell
 curl -X POST http://localhost:8008/v1/runs/local/solvers/calculix
@@ -272,6 +295,8 @@ curl http://localhost:8008/v1/runs
 | `/v1/runs/{run_id}/guided-questions` | GET | 返回该运行的引导问题列表 |
 | `/v1/runs/{run_id}/note` | POST | 保存结构化笔记（支持 `answers` 和旧版 `note`） |
 | `/v1/runs/{run_id}/cancel` | POST | 请求取消运行 |
+| `/v1/toolchain/solvers/{alias}/install` | POST | 启动 Solver Pack 安装任务 |
+| `/v1/toolchain/solvers/{alias}/install/{id}/events` | GET | 读取安装任务 SSE 进度 |
 
 ## 验证
 
@@ -287,12 +312,15 @@ git diff --check
 
 已知结果：
 
-- 后端：82 个单元测试通过。
+- 后端：87 个单元测试通过。
 - 前端：23 个 Vitest 测试通过。
+- 模块边界检查：19 个模块，0 个违规。
 - 生产构建通过，仅保留 VTK XML reader 按需 chunk 偏大的提示。
 
 ## 文档
 
+- `docs/DEV_LOG_2026-05-23.md`：CalculiX Solver Pack、首页信息架构重构和工具链页面更新。
+- `docs/superpowers/plans/2026-05-23-calculix-solver-pack.md`：Solver Pack 实施计划。
 - `docs/DEV_LOG_2026-05-13.md`：结构化引导笔记、学习报告修复、asyncio 死锁修复。
 - `docs/DEV_LOG_2026-05-12.md`：开发日志和验证记录。
 - `docs/ARCHITECTURE_ROADMAP.md`：架构路线图，以及 sim-main / OpenCAEHub 借鉴分析。
@@ -312,6 +340,8 @@ git diff --check
 - [x] CalculiX 本地端到端链路。
 - [x] CalculiX FRD → VTK 转换。
 - [x] 结构化引导笔记 + 学习报告自动生成。
+- [x] 工具链管理页面（FreeCAD / PrePoMax / CalculiX 路径发现和验证）。
+- [x] CalculiX Solver Pack 安装任务和 SSE 进度流。
 - [ ] OpenFOAM 真实 case 接入。
 - [ ] Elmer 真实 case 接入。
 - [x] FreeCAD 无头宏入口。
