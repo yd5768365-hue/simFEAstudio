@@ -100,6 +100,8 @@ class SolverInstallSpec:
     install_hint: str = ""
     install_guide_url: str = ""
     input_extensions: list[str] = field(default_factory=list)
+    download_url: str = ""
+    managed_install_root: str = ""
 
 
 @dataclass
@@ -373,9 +375,11 @@ End
                     "%SIMFEA_SOLVERS_ROOT%\\calculix\\bin\\ccx.exe",
                 ],
                 "verify_command": "\"${executable}\"",
-                "install_hint": "可以使用已有 CalculiX，也可以后续接入 SimFEA-CalculiX-Pack。",
+                "install_hint": "可以使用已有 CalculiX，也可以点击「安装 Solver Pack」一键下载安装。",
                 "install_guide_url": "https://www.dhondt.de/",
                 "input_extensions": [".inp"],
+                "download_url": "http://www.dhondt.de/ccx_2.21_win64.zip",
+                "managed_install_root": "%LOCALAPPDATA%\\SimFEA\\solvers",
             },
         ],
         "toolchain": DEFAULT_TOOLCHAIN,
@@ -469,6 +473,8 @@ def load_settings() -> AppSettings:
             install_hint=item.get("install_hint", ""),
             install_guide_url=item.get("install_guide_url", ""),
             input_extensions=list(item.get("input_extensions", [])),
+            download_url=item.get("download_url", ""),
+            managed_install_root=item.get("managed_install_root", ""),
         )
         solver_install_specs[spec.alias] = spec
 
