@@ -111,6 +111,7 @@ fn main() {
     tauri::Builder::default()
         // Add any necessary plugins
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             // Store the initial sidecar process in the app state
             app.manage(Arc::new(Mutex::new(None::<CommandChild>)));
