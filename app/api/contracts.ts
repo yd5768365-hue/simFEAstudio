@@ -464,3 +464,40 @@ export const solverInstallationResponseSchema = z.object({
 })
 
 export type SolverInstallationResponse = z.output<typeof solverInstallationResponseSchema>
+
+// ── Solver Pack Install ───────────────────────────────────────
+
+export const installSolverResponseSchema = z.object({
+  install_id: z.string(),
+  message: z.string(),
+})
+
+export type InstallSolverResponse = z.output<typeof installSolverResponseSchema>
+
+export const installProgressEventSchema = z.object({
+  type: z.literal('install_progress'),
+  step: z.enum(['download', 'extract', 'scan', 'verify']),
+  progress_pct: z.number(),
+  message: z.string(),
+})
+
+export const installCompleteEventSchema = z.object({
+  type: z.literal('install_complete'),
+  data: solverInstallationSchema,
+})
+
+export const installErrorEventSchema = z.object({
+  type: z.literal('install_error'),
+  message: z.string(),
+})
+
+export const installEventSchema = z.discriminatedUnion('type', [
+  installProgressEventSchema,
+  installCompleteEventSchema,
+  installErrorEventSchema,
+])
+
+export type InstallProgressEvent = z.output<typeof installProgressEventSchema>
+export type InstallCompleteEvent = z.output<typeof installCompleteEventSchema>
+export type InstallErrorEvent = z.output<typeof installErrorEventSchema>
+export type InstallEvent = z.output<typeof installEventSchema>

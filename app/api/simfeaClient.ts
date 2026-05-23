@@ -7,6 +7,7 @@ import {
   generateReportResponseSchema,
   getRunResponseSchema,
   guidedQuestionsResponseSchema,
+  installSolverResponseSchema,
   listRunsResponseSchema,
   listSolverInstallationsResponseSchema,
   listSolversResponseSchema,
@@ -163,10 +164,18 @@ const guidedQuestionsContract = contract({
   response: guidedQuestionsResponseSchema,
 })
 
+const installSolverContract = contract({
+  method: 'POST',
+  path: '/v1/toolchain/solvers/:alias/install',
+  params: ['alias'] as const,
+  response: installSolverResponseSchema,
+})
+
 export function createSimfeaClient(baseUrl: string, appendLog: (line: string) => void) {
   const { request } = createClient(baseUrl, appendLog)
 
   return {
+    baseUrl,
     connect: () => request(connectContract),
     listRuns: () => request(listRunsContract),
     getRun: (runId: string) => request(getRunContract, { params: { runId } }),
@@ -192,6 +201,7 @@ export function createSimfeaClient(baseUrl: string, appendLog: (line: string) =>
       request(configureSolverExecutableContract, { params: { alias }, body: { executable } }),
     verifySolverInstallation: (alias: string, executable?: string) =>
       request(verifySolverInstallationContract, { params: { alias }, body: { executable } }),
+    installSolver: (alias: string) => request(installSolverContract, { params: { alias } }),
     startDemoRun: (alias: string) => request(startDemoRunContract, { params: { alias } }),
     startSlurmDemoRun: (alias: string) => request(startSlurmDemoRunContract, { params: { alias } }),
     startSolverRun: (alias: string, solverAlias: string) =>
