@@ -9,6 +9,7 @@ import httpx
 
 from .config import settings
 from .logger import create_logger
+from .toolchain import update_solver_executable, verify_solver_install
 
 log = create_logger("install")
 
@@ -51,51 +52,57 @@ async def _run_install(install_id: str, alias: str, spec):
     async def emit(event_type: str, **payload):
         await queue.put({"type": event_type, **payload})
 
-    # Download (0% -> 40%)
+    # Download + Extract (wrapped in one finally for zip cleanup)
     await emit("install_progress", step="download", progress_pct=0, message="Downloading CalculiX...")
     tmp_dir = settings().config_path.parent / "_tmp"
     tmp_dir.mkdir(parents=True, exist_ok=True)
     zip_path = tmp_dir / f"calculix_{install_id}.zip"
 
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(600.0), follow_redirects=True) as client:
-            async with client.stream("GET", spec.download_url) as response:
-                if response.status_code != 200:
-                    await emit("install_error", message=f"Download failed: HTTP {response.status_code}")
-                    state["status"] = "error"
-                    return
-                total = int(response.headers.get("content-length", 0))
-                downloaded = 0
-                with open(zip_path, "wb") as f:
-                    async for chunk in response.aiter_bytes(chunk_size=65536):
-                        f.write(chunk)
-                        downloaded += len(chunk)
-                        if total > 0:
-                            pct = int(downloaded / total * 40)
-                            await emit("install_progress", step="download", progress_pct=pct, message=f"Downloading CalculiX... {downloaded // 1024}/{total // 1024} KB")
-    except Exception as exc:
-        await emit("install_error", message=f"Download failed: {exc}")
-        state["status"] = "error"
-        return
+        # Download (0% -> 40%)
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(600.0), follow_redirects=True) as client:
+                async with client.stream("GET", spec.download_url) as response:
+                    if response.status_code != 200:
+                        await emit("install_error", message=f"Download failed: HTTP {response.status_code}")
+                        state["status"] = "error"
+                        return
+                    total = int(response.headers.get("content-length", 0))
+                    downloaded = 0
+                    with open(zip_path, "wb") as f:
+                        async for chunk in response.aiter_bytes(chunk_size=65536):
+                            f.write(chunk)
+                            downloaded += len(chunk)
+                            if total > 0:
+                                pct = int(downloaded / total * 40)
+                                await emit("install_progress", step="download", progress_pct=pct, message=f"Downloading CalculiX... {downloaded // 1024}/{total // 1024} KB")
+        except Exception as exc:
+            await emit("install_error", message=f"Download failed: {exc}")
+            state["status"] = "error"
+            return
 
-    # Extract (40% -> 80%)
-    await emit("install_progress", step="extract", progress_pct=40, message="Extracting...")
-    install_root = _expand_path(spec.managed_install_root)
-    extract_dir = install_root / "calculix"
-    try:
-        extract_dir.mkdir(parents=True, exist_ok=True)
-        with zipfile.ZipFile(zip_path, "r") as zf:
-            names = zf.namelist()
-            total_files = len(names)
-            for i, name in enumerate(names):
-                zf.extract(name, extract_dir)
-                if total_files > 0:
-                    pct = 40 + int(i / total_files * 40)
-                    await emit("install_progress", step="extract", progress_pct=pct, message=f"Extracting... {i + 1}/{total_files}")
-    except Exception as exc:
-        await emit("install_error", message=f"Extract failed: {exc}")
-        state["status"] = "error"
-        return
+        # Extract (40% -> 80%)
+        await emit("install_progress", step="extract", progress_pct=40, message="Extracting...")
+        install_root = _expand_path(spec.managed_install_root)
+        extract_dir = install_root / "calculix"
+        try:
+            extract_dir.mkdir(parents=True, exist_ok=True)
+            with zipfile.ZipFile(zip_path, "r") as zf:
+                names = zf.namelist()
+                total_files = len(names)
+                for i, name in enumerate(names):
+                    # Validate path to prevent zip-slip / path-traversal attacks
+                    member_path = (extract_dir / name).resolve()
+                    if not str(member_path).startswith(str(extract_dir.resolve())):
+                        continue
+                    zf.extract(name, extract_dir)
+                    if total_files > 0:
+                        pct = 40 + int(i / total_files * 40)
+                        await emit("install_progress", step="extract", progress_pct=pct, message=f"Extracting... {i + 1}/{total_files}")
+        except Exception as exc:
+            await emit("install_error", message=f"Extract failed: {exc}")
+            state["status"] = "error"
+            return
     finally:
         if zip_path.exists():
             zip_path.unlink()
@@ -126,17 +133,16 @@ async def _run_install(install_id: str, alias: str, spec):
 
     await emit("install_progress", step="scan", progress_pct=90, message=f"Found executable: {found_exe}")
 
-    # Verify (90% -> 100%) - reuse _verify_solver_install from main
+    # Verify (90% -> 100%)
     await emit("install_progress", step="verify", progress_pct=90, message="Verifying...")
     try:
-        from main import _verify_solver_install, _update_solver_executable
-        result = await _verify_solver_install(alias, found_exe)
+        result = await verify_solver_install(alias, found_exe)
         if not result.get("verified"):
             await emit("install_error", message=f"Verification failed: {result.get('stderr', 'unknown error')}")
             state["status"] = "error"
             return
 
-        _update_solver_executable(alias, found_exe)
+        update_solver_executable(alias, found_exe)
         await emit("install_progress", step="verify", progress_pct=100, message="Install complete")
         await emit("install_complete", data=result)
         state["status"] = "done"
