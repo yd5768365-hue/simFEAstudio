@@ -112,8 +112,9 @@ async function pickFile(alias: string) {
     return
   }
   busy.value = { ...busy.value, [alias]: 'pick' }
+  let selected: string | null = null
   try {
-    const selected = await open({
+    const result = await open({
       multiple: false,
       directory: false,
       filters: [
@@ -123,15 +124,18 @@ async function pickFile(alias: string) {
         },
       ],
     })
-    if (selected && typeof selected === 'string') {
-      pathInputs[alias] = selected
-      busy.value = { ...busy.value, [alias]: '' }
-      await savePath(alias)
+    if (result && typeof result === 'string') {
+      selected = result
     }
   } catch {
     message.value = '无法打开文件选择器。'
+    return
   } finally {
     busy.value = { ...busy.value, [alias]: '' }
+  }
+  if (selected) {
+    pathInputs[alias] = selected
+    await savePath(alias)
   }
 }
 
