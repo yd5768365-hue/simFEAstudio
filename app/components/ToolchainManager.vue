@@ -160,7 +160,7 @@ async function installSolver(alias: string) {
     const es = new EventSource(url)
     activeEventSources.set(alias, es)
     es.onmessage = (event) => {
-      let data: unknown
+      let data: any
       try {
         data = JSON.parse(event.data)
       } catch {
