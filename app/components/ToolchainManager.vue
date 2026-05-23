@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { open } from '@tauri-apps/plugin-dialog'
 import { onMounted, reactive, ref } from 'vue'
 import type { SimfeaClient } from '@/api/simfeaClient'
 import type { SolverInstallation } from '@/types'
@@ -15,6 +16,7 @@ const emit = defineEmits<{
 const installations = ref<SolverInstallation[]>([])
 const pathInputs = reactive<Record<string, string>>({})
 const busy = ref<Record<string, string>>({})
+const isTauri = typeof window !== 'undefined' && '__TAURI__' in window
 const message = ref('')
 
 function setInstallation(next: SolverInstallation) {
@@ -94,6 +96,31 @@ async function verify(alias: string) {
       : `${result.data.label} 测试未通过，请检查路径或安装。`
   } finally {
     busy.value = { ...busy.value, [alias]: '' }
+  }
+}
+
+async function pickFile(alias: string) {
+  if (!isTauri) {
+    message.value = '文件选择器仅在桌面应用中可用，请手动粘贴路径。'
+    return
+  }
+  try {
+    const selected = await open({
+      multiple: false,
+      directory: false,
+      filters: [
+        {
+          name: '可执行文件',
+          extensions: ['exe', 'bat', 'com', 'cmd'],
+        },
+      ],
+    })
+    if (selected && typeof selected === 'string') {
+      pathInputs[alias] = selected
+      await savePath(alias)
+    }
+  } catch {
+    message.value = '无法打开文件选择器，请检查应用权限或使用手动输入。'
   }
 }
 
@@ -185,7 +212,7 @@ onMounted(loadInstallations)
           <button type="button" @click="scan(item.alias)" :disabled="Boolean(busy[item.alias])">
             自动搜索
           </button>
-          <button type="button" @click="savePath(item.alias)" :disabled="Boolean(busy[item.alias])">
+          <button type="button" @click="pickFile(item.alias)" :disabled="Boolean(busy[item.alias])">
             选择路径
           </button>
           <button type="button" class="primary-action" @click="verify(item.alias)" :disabled="Boolean(busy[item.alias])">
