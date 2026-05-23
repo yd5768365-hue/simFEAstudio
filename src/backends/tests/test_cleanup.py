@@ -26,6 +26,7 @@ def _make_settings(runs_root: Path, retention_days: int = 90, max_runs: int = 10
         compute_nodes={},
         default_compute_node="",
         solvers={},
+        solver_install_specs={},
         toolchain=[],
         run_retention_days=retention_days,
         max_runs=max_runs,

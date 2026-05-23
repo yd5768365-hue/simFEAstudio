@@ -8,12 +8,15 @@ import {
   getRunResponseSchema,
   guidedQuestionsResponseSchema,
   listRunsResponseSchema,
+  listSolverInstallationsResponseSchema,
   listSolversResponseSchema,
   probeNodeResponseSchema,
   probeSchedulerResponseSchema,
   probeSolversResponseSchema,
   saveNoteBodySchema,
   saveNoteResponseSchema,
+  solverExecutableBodySchema,
+  solverInstallationResponseSchema,
   startDemoRunResponseSchema,
   startSlurmDemoRunResponseSchema,
   startSolverRunResponseSchema,
@@ -89,6 +92,35 @@ const listSolversContract = contract({
   response: listSolversResponseSchema,
 })
 
+const listSolverInstallationsContract = contract({
+  method: 'GET',
+  path: '/v1/toolchain/solvers',
+  response: listSolverInstallationsResponseSchema,
+})
+
+const scanSolverInstallationContract = contract({
+  method: 'POST',
+  path: '/v1/toolchain/solvers/:alias/scan',
+  params: ['alias'] as const,
+  response: solverInstallationResponseSchema,
+})
+
+const configureSolverExecutableContract = contract({
+  method: 'POST',
+  path: '/v1/toolchain/solvers/:alias/path',
+  params: ['alias'] as const,
+  body: solverExecutableBodySchema,
+  response: solverInstallationResponseSchema,
+})
+
+const verifySolverInstallationContract = contract({
+  method: 'POST',
+  path: '/v1/toolchain/solvers/:alias/verify',
+  params: ['alias'] as const,
+  body: solverExecutableBodySchema,
+  response: solverInstallationResponseSchema,
+})
+
 const startDemoRunContract = contract({
   method: 'POST',
   path: '/v1/runs/:alias/demo',
@@ -154,6 +186,12 @@ export function createSimfeaClient(baseUrl: string, appendLog: (line: string) =>
     probeScheduler: (alias: string) => request(probeSchedulerContract, { params: { alias } }),
     probeSolvers: (alias: string) => request(probeSolversContract, { params: { alias } }),
     listSolvers: () => request(listSolversContract),
+    listSolverInstallations: () => request(listSolverInstallationsContract),
+    scanSolverInstallation: (alias: string) => request(scanSolverInstallationContract, { params: { alias } }),
+    configureSolverExecutable: (alias: string, executable: string) =>
+      request(configureSolverExecutableContract, { params: { alias }, body: { executable } }),
+    verifySolverInstallation: (alias: string, executable?: string) =>
+      request(verifySolverInstallationContract, { params: { alias }, body: { executable } }),
     startDemoRun: (alias: string) => request(startDemoRunContract, { params: { alias } }),
     startSlurmDemoRun: (alias: string) => request(startSlurmDemoRunContract, { params: { alias } }),
     startSolverRun: (alias: string, solverAlias: string) =>

@@ -4,6 +4,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { createSimfeaClient } from '@/api/simfeaClient'
 import LearningLibrary from '@/components/LearningLibrary.vue'
 import RunDetailView from '@/components/RunDetailView.vue'
+import ToolchainManager from '@/components/ToolchainManager.vue'
 import { useRemoteRuns } from '@/composables/useRemoteRuns'
 import { useRunEvents } from '@/composables/useRunEvents'
 import { useSidecarListeners } from '@/composables/useSidecarListeners'
@@ -598,7 +599,7 @@ onUnmounted(() => {
   window.removeEventListener('keydown', handleKeydown)
 })
 
-type AppView = 'composer' | 'run-detail' | 'learning-library'
+type AppView = 'composer' | 'run-detail' | 'learning-library' | 'toolchain-manager'
 const currentView = ref<AppView>('composer')
 const detailRunId = ref<string | null>(null)
 
@@ -637,6 +638,15 @@ function backToComposer() {
       >
         <span class="nav-icon" aria-hidden="true">▤</span>
         <span class="nav-label">学习库</span>
+      </button>
+      <button
+        type="button"
+        class="nav-item"
+        :class="{ active: currentView === 'toolchain-manager' }"
+        @click="navigateTo('toolchain-manager')"
+      >
+        <span class="nav-icon" aria-hidden="true">TC</span>
+        <span class="nav-label">工具链</span>
       </button>
     </nav>
 
@@ -692,7 +702,7 @@ function backToComposer() {
             :key="metric.label"
             class="metric-card"
             :class="[`tone-${metric.tone}`, metric.label === '工作器入口' ? 'metric-card-clickable' : '']"
-            @click="metric.label === '工作器入口' ? showSolverConfig = true : undefined"
+            @click="metric.label === '工作器入口' ? navigateTo('toolchain-manager') : undefined"
           >
             <span>{{ metric.label }}</span>
             <strong>{{ metric.value }}</strong>
@@ -1072,11 +1082,13 @@ function backToComposer() {
       @back="backToComposer"
       @select-run="openRunDetail"
     />
+
+    <ToolchainManager
+      v-else-if="currentView === 'toolchain-manager'"
+      :api="api"
+      :config-path="status.configPath"
+      @back="backToComposer"
+    />
   </main>
 </template>
-
-
-
-
-
 

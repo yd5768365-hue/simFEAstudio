@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { ApiClientError, extractValidationIssues } from './client'
 import {
   connectResponseSchema,
+  listSolverInstallationsResponseSchema,
   probeNodeResponseSchema,
   probeSolversResponseSchema,
   runArchiveSchema,
@@ -224,6 +225,32 @@ describe('sseEventSchema', () => {
 })
 
 describe('solver contracts', () => {
+  it('parses a solver installation list response', () => {
+    const result = listSolverInstallationsResponseSchema.parse({
+      message: 'toolchain loaded',
+      data: {
+        solvers: [
+          {
+            alias: 'freecad',
+            label: 'FreeCAD',
+            install_mode: 'external',
+            status: 'found',
+            configured_executable: 'C:/FreeCAD/bin/FreeCADCmd.exe',
+            discovered_path: 'C:/FreeCAD/bin/FreeCADCmd.exe',
+            executable_candidates: ['FreeCADCmd.exe'],
+            common_paths: ['C:/FreeCAD/bin/FreeCADCmd.exe'],
+            searched_paths: ['C:/FreeCAD/bin/FreeCADCmd.exe'],
+            verify_command: '"${executable}" --version',
+            install_hint: 'Install FreeCAD first.',
+            install_guide_url: 'https://www.freecad.org/downloads.php',
+            input_extensions: ['.FCStd', '.step'],
+          },
+        ],
+      },
+    })
+    expect(result.data.solvers[0].status).toBe('found')
+  })
+
   it('parses a solver probe response', () => {
     const result = probeSolversResponseSchema.parse({
       message: 'node1 solver probe completed.',

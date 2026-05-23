@@ -31,6 +31,15 @@ class SolverConfigTest(unittest.TestCase):
         self.assertIn("openfoam", solvers)
         self.assertIn("elmer", solvers)
 
+    def test_default_solver_install_specs_are_loaded(self):
+        install_specs = settings().solver_install_specs
+
+        self.assertIn("calculix", install_specs)
+        self.assertIn("freecad", install_specs)
+        self.assertIn("prepomax", install_specs)
+        self.assertIn("FreeCADCmd.exe", install_specs["freecad"].executable_candidates)
+        self.assertEqual(install_specs["calculix"].install_mode, "managed_or_external")
+
 
 class SolverRunnerTest(unittest.TestCase):
     def test_public_solver_omits_input_templates(self):
@@ -72,7 +81,7 @@ class SolverRunnerTest(unittest.TestCase):
         self.assertIn("freecad_smoke.py", script)
         self.assertIn("freecad_smoke.step", script)
         self.assertIn("import FreeCAD as App", script)
-        self.assertIn(f"{solver.executable} freecad_smoke.py", script)
+        self.assertIn(solver.executable, script)
 
     def test_prepomax_adapter_is_explicit_placeholder(self):
         solver = settings().solvers["prepomax"]

@@ -9,6 +9,7 @@ export type {
   ResultSummary,
   RunArchive,
   SolverDefinition,
+  SolverInstallation,
   SseEvent,
   StatusEvent,
   StderrEvent,

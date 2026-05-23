@@ -90,6 +90,19 @@ class SolverDefinition:
 
 
 @dataclass
+class SolverInstallSpec:
+    alias: str
+    label: str
+    install_mode: str
+    executable_candidates: list[str]
+    common_paths: list[str]
+    verify_command: str
+    install_hint: str = ""
+    install_guide_url: str = ""
+    input_extensions: list[str] = field(default_factory=list)
+
+
+@dataclass
 class AppSettings:
     api_port: int
     api_public_host: str
@@ -103,6 +116,7 @@ class AppSettings:
     compute_nodes: dict[str, ComputeNode]
     default_compute_node: str
     solvers: dict[str, SolverDefinition]
+    solver_install_specs: dict[str, SolverInstallSpec]
     toolchain: list[dict[str, str]]
     run_retention_days: int = 90
     max_runs: int = 100
@@ -191,7 +205,7 @@ def default_config() -> dict:
                 "kind": "structural",
                 "executable": "ccx",
                 "description": "Structural finite element solver adapter.",
-                "command_template": "ccx cantilever",
+                "command_template": "\"${solver_executable}\" cantilever",
                 "artifact_patterns": ["*.frd", "*.dat", "*.sta", "result.txt"],
                 "pre_commands": [],
                 "post_commands": [
@@ -232,7 +246,7 @@ S
                 "kind": "preprocessor",
                 "executable": "python",
                 "description": "FreeCAD Python API adapter. Run with a Python environment that can import FreeCAD and Part.",
-                "command_template": "${solver_executable} freecad_smoke.py",
+                "command_template": "\"${solver_executable}\" freecad_smoke.py",
                 "artifact_patterns": ["*.FCStd", "*.step", "*.stp", "result.txt"],
                 "pre_commands": [],
                 "post_commands": [],
@@ -317,6 +331,53 @@ End
                 },
             },
         ],
+        "solver_install_specs": [
+            {
+                "alias": "freecad",
+                "label": "FreeCAD",
+                "install_mode": "external",
+                "executable_candidates": ["FreeCADCmd.exe", "FreeCADCmd"],
+                "common_paths": [
+                    "%PROGRAMFILES%\\FreeCAD 1.1\\bin\\FreeCADCmd.exe",
+                    "%PROGRAMFILES%\\FreeCAD 1.0\\bin\\FreeCADCmd.exe",
+                    "%LOCALAPPDATA%\\Programs\\FreeCAD\\bin\\FreeCADCmd.exe",
+                ],
+                "verify_command": "\"${executable}\" --version",
+                "install_hint": "安装 FreeCAD 后选择 bin\\FreeCADCmd.exe，用于 Python API 和几何建模脚本。",
+                "install_guide_url": "https://www.freecad.org/downloads.php",
+                "input_extensions": [".FCStd", ".step", ".stp"],
+            },
+            {
+                "alias": "prepomax",
+                "label": "PrePoMax",
+                "install_mode": "external",
+                "executable_candidates": ["PrePoMax.com", "PrePoMax.exe", "PrePoMax"],
+                "common_paths": [
+                    "%PROGRAMFILES%\\PrePoMax\\PrePoMax.com",
+                    "%PROGRAMFILES%\\PrePoMax\\PrePoMax.exe",
+                    "%LOCALAPPDATA%\\Programs\\PrePoMax\\PrePoMax.com",
+                ],
+                "verify_command": "\"${executable}\" --help",
+                "install_hint": "安装 PrePoMax 后选择 PrePoMax.com 或 PrePoMax.exe，用于前处理、网格和 CalculiX 作业生成。",
+                "install_guide_url": "https://prepomax.fs.um.si/",
+                "input_extensions": [".pmx", ".step", ".stp", ".inp"],
+            },
+            {
+                "alias": "calculix",
+                "label": "CalculiX",
+                "install_mode": "managed_or_external",
+                "executable_candidates": ["ccx.bat", "ccx.exe", "ccx"],
+                "common_paths": [
+                    "%LOCALAPPDATA%\\SimFEA\\solvers\\calculix\\bin\\ccx.exe",
+                    "%PROGRAMFILES%\\CalculiX\\bin\\ccx.exe",
+                    "%SIMFEA_SOLVERS_ROOT%\\calculix\\bin\\ccx.exe",
+                ],
+                "verify_command": "\"${executable}\"",
+                "install_hint": "可以使用已有 CalculiX，也可以后续接入 SimFEA-CalculiX-Pack。",
+                "install_guide_url": "https://www.dhondt.de/",
+                "input_extensions": [".inp"],
+            },
+        ],
         "toolchain": DEFAULT_TOOLCHAIN,
     }
 
@@ -396,6 +457,21 @@ def load_settings() -> AppSettings:
         )
         solvers[solver.alias] = solver
 
+    solver_install_specs = {}
+    for item in raw_config.get("solver_install_specs", []):
+        spec = SolverInstallSpec(
+            alias=item["alias"],
+            label=item.get("label") or item["alias"],
+            install_mode=item.get("install_mode", "external"),
+            executable_candidates=list(item.get("executable_candidates", [])),
+            common_paths=list(item.get("common_paths", [])),
+            verify_command=item.get("verify_command", ""),
+            install_hint=item.get("install_hint", ""),
+            install_guide_url=item.get("install_guide_url", ""),
+            input_extensions=list(item.get("input_extensions", [])),
+        )
+        solver_install_specs[spec.alias] = spec
+
     return AppSettings(
         api_port=int(raw_config["api"]["port"]),
         api_public_host=raw_config["api"].get("public_host", "localhost"),
@@ -412,6 +488,7 @@ def load_settings() -> AppSettings:
         compute_nodes=nodes,
         default_compute_node=default_node,
         solvers=solvers,
+        solver_install_specs=solver_install_specs,
         toolchain=raw_config.get("toolchain", DEFAULT_TOOLCHAIN),
         run_retention_days=int(raw_config.get("cleanup", {}).get("run_retention_days", 90)),
         max_runs=int(raw_config.get("cleanup", {}).get("max_runs", 100)),

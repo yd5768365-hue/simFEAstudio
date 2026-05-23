@@ -413,3 +413,6 @@ learning/
 
 uv.lock
 
+# RuVector database
+ruvector.db
+

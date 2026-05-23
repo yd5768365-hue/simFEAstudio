@@ -21,6 +21,33 @@ export const solverDefinitionSchema = z.object({
 
 export type SolverDefinition = z.output<typeof solverDefinitionSchema>
 
+export const solverInstallationSchema = z.object({
+  alias: z.string(),
+  label: z.string(),
+  install_mode: z.string(),
+  status: z.enum(['missing', 'found', 'verified']),
+  configured_executable: z.string(),
+  discovered_path: z.string(),
+  executable_candidates: z.array(z.string()),
+  common_paths: z.array(z.string()),
+  searched_paths: z.array(z.string()).optional(),
+  verify_command: z.string(),
+  install_hint: z.string(),
+  install_guide_url: z.string(),
+  input_extensions: z.array(z.string()),
+  verified: z.boolean().optional(),
+  exit_code: z.number().optional(),
+  stdout: z.string().optional(),
+  stderr: z.string().optional(),
+  duration_seconds: z.number().optional(),
+})
+
+export type SolverInstallation = z.output<typeof solverInstallationSchema>
+
+export const solverExecutableBodySchema = z.object({
+  executable: z.string().optional(),
+})
+
 export const computeNodeSchema = z.object({
   alias: z.string(),
   label: z.string(),
@@ -421,3 +448,19 @@ export const listSolversResponseSchema = z.object({
 })
 
 export type ListSolversResponse = z.output<typeof listSolversResponseSchema>
+
+export const listSolverInstallationsResponseSchema = z.object({
+  message: z.string(),
+  data: z.object({
+    solvers: z.array(solverInstallationSchema),
+  }),
+})
+
+export type ListSolverInstallationsResponse = z.output<typeof listSolverInstallationsResponseSchema>
+
+export const solverInstallationResponseSchema = z.object({
+  message: z.string(),
+  data: solverInstallationSchema,
+})
+
+export type SolverInstallationResponse = z.output<typeof solverInstallationResponseSchema>
