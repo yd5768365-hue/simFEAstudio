@@ -13,10 +13,17 @@
   ![License](https://img.shields.io/badge/License-Apache_2.0-8162C3)
 </div>
 
+## 界面预览
+
 <div align="center">
-  <img src="docs/项目桌面版本-开发版本.png" alt="SimFEA Studio 桌面版本" width="960">
-  <p><em>SimFEA Studio 桌面版本 — Tauri 桌面壳 + Vue 前端 + 本地 CalculiX 运行</em></p>
+  <img src="docs/项目桌面版本主界面.png" alt="SimFEA Studio 桌面主界面" width="960">
+  <p><em>桌面主界面：作业配置、运行状态、实时日志和证据入口集中在同一工作台。</em></p>
 </div>
+
+| 学习库 | 工具链管理 |
+| --- | --- |
+| <img src="docs/项目桌面版本知识库界面.png" alt="SimFEA Studio 学习库界面" width="460"> | <img src="docs/项目工具配置区域.png" alt="SimFEA Studio 工具链管理界面" width="460"> |
+| 运行归档、学习笔记、结果摘要和导出入口。 | FreeCAD、PrePoMax、CalculiX 等外部工具的发现、配置和验证入口。 |
 
 ---
 
