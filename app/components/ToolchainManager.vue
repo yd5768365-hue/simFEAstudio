@@ -16,7 +16,14 @@ const emit = defineEmits<{
 const installations = ref<SolverInstallation[]>([])
 const pathInputs = reactive<Record<string, string>>({})
 const busy = ref<Record<string, string>>({})
-const isTauri = typeof window !== 'undefined' && '__TAURI__' in window
+const isTauriRuntime = () => {
+  const internals = (
+    window as unknown as {
+      __TAURI_INTERNALS__?: { transformCallback?: unknown }
+    }
+  ).__TAURI_INTERNALS__
+  return typeof internals?.transformCallback === 'function'
+}
 const message = ref('')
 
 function setInstallation(next: SolverInstallation) {
@@ -100,10 +107,11 @@ async function verify(alias: string) {
 }
 
 async function pickFile(alias: string) {
-  if (!isTauri) {
+  if (!isTauriRuntime()) {
     message.value = '文件选择器仅在桌面应用中可用，请手动粘贴路径。'
     return
   }
+  busy.value = { ...busy.value, [alias]: 'pick' }
   try {
     const selected = await open({
       multiple: false,
@@ -117,10 +125,13 @@ async function pickFile(alias: string) {
     })
     if (selected && typeof selected === 'string') {
       pathInputs[alias] = selected
+      busy.value = { ...busy.value, [alias]: '' }
       await savePath(alias)
     }
   } catch {
-    message.value = '无法打开文件选择器，请检查应用权限或使用手动输入。'
+    message.value = '无法打开文件选择器。'
+  } finally {
+    busy.value = { ...busy.value, [alias]: '' }
   }
 }
 
