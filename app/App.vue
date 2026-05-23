@@ -270,7 +270,7 @@ const dashboardMetrics = computed(() => [
     label: '运行档案',
     value: archivedRuns.value.length,
     detail: `${finishedRunCount.value} 个完成，${failedRunCount.value} 个失败`,
-    tone: 'blue',
+    tone: 'cyan',
   },
   {
     label: '工作器入口',
@@ -653,18 +653,66 @@ function backToComposer() {
     <div v-if="currentView === 'composer'" class="view-container">
       <header class="hero-panel">
       <div class="hero-copy">
-        <p class="eyebrow">SimFEA Studio / Job Composer</p>
-        <h1>把求解器、计算节点、输入文件和运行证据收进同一个桌面作业流</h1>
+        <svg class="hero-logo" width="100%" viewBox="0 0 680 200" role="img" aria-label="SimFEA Studio">
+          <defs>
+            <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#3a4252" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </marker>
+          </defs>
+          <rect x="40" y="20" width="600" height="160" rx="4" fill="none" stroke="#3a4252" stroke-width="0.5"/>
+          <line x1="40" y1="60" x2="640" y2="60" stroke="#3a4252" stroke-width="0.5" stroke-dasharray="4,6"/>
+          <line x1="40" y1="100" x2="640" y2="100" stroke="#3a4252" stroke-width="0.5" stroke-dasharray="4,6"/>
+          <line x1="40" y1="140" x2="640" y2="140" stroke="#3a4252" stroke-width="0.5" stroke-dasharray="4,6"/>
+          <line x1="180" y1="20" x2="180" y2="180" stroke="#3a4252" stroke-width="0.5" stroke-dasharray="4,6"/>
+          <line x1="340" y1="20" x2="340" y2="180" stroke="#3a4252" stroke-width="0.5" stroke-dasharray="4,6"/>
+          <line x1="500" y1="20" x2="500" y2="180" stroke="#3a4252" stroke-width="0.5" stroke-dasharray="4,6"/>
+          <circle cx="40" cy="20" r="2.5" fill="#38a3ff"/>
+          <circle cx="640" cy="20" r="2.5" fill="#38a3ff"/>
+          <circle cx="40" cy="180" r="2.5" fill="#38a3ff"/>
+          <circle cx="640" cy="180" r="2.5" fill="#38a3ff"/>
+          <text x="60" y="36" font-family="Cascadia Code, Consolas, monospace" font-size="10" fill="#748295" font-weight="400">v2.0 · 2026</text>
+          <text x="620" y="36" font-family="Cascadia Code, Consolas, monospace" font-size="10" fill="#748295" font-weight="400" text-anchor="end">FEA · AI · SIM</text>
+          <text x="340" y="118" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="72" font-weight="500" fill="#edf3fb" text-anchor="middle" letter-spacing="2">SimFEA</text>
+          <rect x="200" y="130" width="280" height="2" rx="1" fill="#38a3ff" opacity="0.6"/>
+          <text x="340" y="162" font-family="Cascadia Code, Consolas, monospace" font-size="16" font-weight="400" fill="#38a3ff" text-anchor="middle" letter-spacing="8">STUDIO</text>
+          <text x="60" y="170" font-family="Cascadia Code, Consolas, monospace" font-size="9" fill="#748295" font-weight="400">SIM · FEA · ARCHIVE</text>
+          <text x="620" y="170" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="9" fill="#748295" font-weight="400" text-anchor="end">可沉淀的仿真工作台</text>
+        </svg>
+        <h1>仿真运行 · 证据归档 · 学习沉淀</h1>
         <p class="hero-text">
-          左侧完成作业参数，右侧即时确认节点、工作站和最近运行结果。常用配置可以存为模板，同类算例不用反复填写。
+          不造求解器，只管理求解器——把每一次仿真从"跑就散"变成可回放的工程证据。
         </p>
         <div class="hero-actions">
           <button type="button" class="primary-action" @click="refreshAllAction">刷新工作台</button>
           <button type="button" @click="startSidecarAction" :disabled="status.connected">启动侧车</button>
           <button type="button" @click="shutdownSidecarAction" :disabled="!status.connected">关闭侧车</button>
         </div>
+      </div>
+    </header>
 
-        <article v-if="latestRun" class="latest-run-card latest-run-card-left">
+    <section class="status-section" aria-label="系统状态与指标">
+      <div class="status-left">
+        <section class="panel status-panel status-panel-compact" aria-labelledby="status-title">
+        <div class="section-heading">
+          <p class="eyebrow">Status</p>
+          <h2 id="status-title">状态区</h2>
+        </div>
+
+        <div class="status-stack">
+          <article class="status-tile" :class="status.connected ? 'online' : 'offline'">
+            <span>系统状态</span>
+            <strong>{{ status.connected ? '侧车已连接' : '侧车离线' }}</strong>
+            <p>{{ status.connected ? `${status.host} / pid ${status.pid}` : status.message }}</p>
+          </article>
+          <article class="status-tile" :class="workstationReady ? 'online' : 'offline'">
+            <span>工作器状态</span>
+            <strong>{{ workstationReady ? '已就绪' : '待配置' }}</strong>
+            <p>{{ selectedWorkerLabel }} / {{ selectedWorkerReady ? '已在侧车配置中' : '未发现可用配置' }}</p>
+          </article>
+        </div>
+      </section>
+
+        <article v-if="latestRun" class="latest-run-card">
           <button type="button" class="primary-action latest-run-action" @click="openRunDetail(latestRun.run_id)">
             查看证据
           </button>
@@ -675,52 +723,30 @@ function backToComposer() {
           </div>
         </article>
       </div>
-      <div class="hero-side">
-        <section class="panel status-panel status-panel-compact" aria-labelledby="status-title">
-          <div class="section-heading">
-            <p class="eyebrow">Status</p>
-            <h2 id="status-title">状态区</h2>
+
+      <section class="health-board" aria-label="系统健康状态">
+        <article
+          v-for="metric in dashboardMetrics"
+          :key="metric.label"
+          class="metric-card"
+          :class="[`tone-${metric.tone}`, metric.label === '工作器入口' ? 'metric-card-clickable' : '']"
+          @click="metric.label === '工作器入口' ? navigateTo('toolchain-manager') : undefined"
+        >
+          <span>{{ metric.label }}</span>
+          <strong>{{ metric.value }}</strong>
+          <p>{{ metric.detail }}</p>
+        </article>
+
+        <article class="metric-card task-progress-card" :class="taskProgressCard.tone">
+          <span>实时任务</span>
+          <strong>{{ taskProgressCard.label }}</strong>
+          <div class="task-mini-progress">
+            <div class="task-mini-progress-fill" :style="{ width: `${taskProgressCard.progress}%` }" />
           </div>
-
-          <div class="status-stack">
-            <article class="status-tile" :class="status.connected ? 'online' : 'offline'">
-              <span>系统状态</span>
-              <strong>{{ status.connected ? '侧车已连接' : '侧车离线' }}</strong>
-              <p>{{ status.connected ? `${status.host} / pid ${status.pid}` : status.message }}</p>
-            </article>
-            <article class="status-tile" :class="workstationReady ? 'online' : 'offline'">
-              <span>工作器状态</span>
-              <strong>{{ workstationReady ? '已就绪' : '待配置' }}</strong>
-              <p>{{ selectedWorkerLabel }} / {{ selectedWorkerReady ? '已在侧车配置中' : '未发现可用配置' }}</p>
-            </article>
-          </div>
-        </section>
-
-        <section class="health-board" aria-label="系统健康状态">
-          <article
-            v-for="metric in dashboardMetrics"
-            :key="metric.label"
-            class="metric-card"
-            :class="[`tone-${metric.tone}`, metric.label === '工作器入口' ? 'metric-card-clickable' : '']"
-            @click="metric.label === '工作器入口' ? navigateTo('toolchain-manager') : undefined"
-          >
-            <span>{{ metric.label }}</span>
-            <strong>{{ metric.value }}</strong>
-            <p>{{ metric.detail }}</p>
-          </article>
-
-          <article class="metric-card task-progress-card" :class="taskProgressCard.tone">
-            <span>实时任务</span>
-            <strong>{{ taskProgressCard.label }}</strong>
-            <div class="task-mini-progress">
-              <div class="task-mini-progress-fill" :style="{ width: `${taskProgressCard.progress}%` }" />
-            </div>
-            <p>{{ taskProgressCard.detail }}</p>
-          </article>
-        </section>
-
-      </div>
-    </header>
+          <p>{{ taskProgressCard.detail }}</p>
+        </article>
+      </section>
+    </section>
 
     <div v-if="remoteStatus.running" class="run-progress-bar" aria-label="求解器运行进度">
       <div class="progress-bar-strip" />
