@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { open } from '@tauri-apps/plugin-dialog'
-import { onMounted, reactive, ref } from 'vue'
+import { onMounted, onUnmounted, reactive, ref } from 'vue'
 import type { SimfeaClient } from '@/api/simfeaClient'
 import type { SolverInstallation } from '@/types'
 
@@ -28,6 +28,15 @@ const message = ref('')
 
 const installProgress = reactive<Record<string, { pct: number; message: string; step: string }>>({})
 const installError = reactive<Record<string, string>>({})
+
+const activeEventSources = new Map<string, EventSource>()
+
+onUnmounted(() => {
+  for (const es of activeEventSources.values()) {
+    es.close()
+  }
+  activeEventSources.clear()
+})
 
 function setInstallation(next: SolverInstallation) {
   const index = installations.value.findIndex((item) => item.alias === next.alias)
@@ -149,23 +158,32 @@ async function installSolver(alias: string) {
     const result = await props.api.installSolver(alias)
     const url = `${props.api.baseUrl}/v1/toolchain/solvers/${alias}/install/${result.install_id}/events`
     const es = new EventSource(url)
+    activeEventSources.set(alias, es)
     es.onmessage = (event) => {
-      const data = JSON.parse(event.data)
+      let data: unknown
+      try {
+        data = JSON.parse(event.data)
+      } catch {
+        return
+      }
       if (data.type === 'install_progress') {
         installProgress[alias] = { pct: data.progress_pct, message: data.message, step: data.step }
       } else if (data.type === 'install_complete') {
         es.close()
+        activeEventSources.delete(alias)
         delete installProgress[alias]
         setInstallation(data.data)
         message.value = `${data.data.label} 安装完成，已通过测试运行。`
       } else if (data.type === 'install_error') {
         es.close()
+        activeEventSources.delete(alias)
         delete installProgress[alias]
         installError[alias] = data.message
       }
     }
     es.onerror = () => {
       es.close()
+      activeEventSources.delete(alias)
       delete installProgress[alias]
       installError[alias] = 'SSE 连接中断，安装可能仍在后台进行。请刷新状态查看结果。'
     }
