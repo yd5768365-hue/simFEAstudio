@@ -26,6 +26,9 @@ const isTauriRuntime = () => {
 }
 const message = ref('')
 
+const installProgress = reactive<Record<string, { pct: number; message: string; step: string }>>({})
+const installError = reactive<Record<string, string>>({})
+
 function setInstallation(next: SolverInstallation) {
   const index = installations.value.findIndex((item) => item.alias === next.alias)
   if (index >= 0) {
@@ -139,6 +142,39 @@ async function pickFile(alias: string) {
   }
 }
 
+async function installSolver(alias: string) {
+  installError[alias] = ''
+  installProgress[alias] = { pct: 0, message: '正在启动安装...', step: 'download' }
+  try {
+    const result = await props.api.installSolver(alias)
+    const url = `${props.api.baseUrl}/v1/toolchain/solvers/${alias}/install/${result.install_id}/events`
+    const es = new EventSource(url)
+    es.onmessage = (event) => {
+      const data = JSON.parse(event.data)
+      if (data.type === 'install_progress') {
+        installProgress[alias] = { pct: data.progress_pct, message: data.message, step: data.step }
+      } else if (data.type === 'install_complete') {
+        es.close()
+        delete installProgress[alias]
+        setInstallation(data.data)
+        message.value = `${data.data.label} 安装完成，已通过测试运行。`
+      } else if (data.type === 'install_error') {
+        es.close()
+        delete installProgress[alias]
+        installError[alias] = data.message
+      }
+    }
+    es.onerror = () => {
+      es.close()
+      delete installProgress[alias]
+      installError[alias] = 'SSE 连接中断，安装可能仍在后台进行。请刷新状态查看结果。'
+    }
+  } catch {
+    delete installProgress[alias]
+    installError[alias] = '无法启动安装，请检查后端连接。'
+  }
+}
+
 onMounted(loadInstallations)
 </script>
 
@@ -221,9 +257,28 @@ onMounted(loadInstallations)
           <p>先按安装向导完成安装，再回来自动搜索或粘贴路径。</p>
         </div>
 
+        <div v-if="installProgress[item.alias]" class="install-progress-bar">
+          <div class="install-progress-fill" :style="{ width: installProgress[item.alias].pct + '%' }"></div>
+          <span class="install-progress-text">{{ installProgress[item.alias].message }}</span>
+        </div>
+
+        <div v-if="installError[item.alias]" class="install-error-message">
+          <p>{{ installError[item.alias] }}</p>
+          <button type="button" @click="installSolver(item.alias)">重试</button>
+        </div>
+
         <pre v-if="item.stdout || item.stderr" class="tool-verify-output"><code>{{ item.stdout || item.stderr }}</code></pre>
 
         <div class="tool-install-actions">
+          <button
+            v-if="item.install_mode === 'managed_or_external' && item.status === 'missing' && !installProgress[item.alias]"
+            type="button"
+            class="primary-action"
+            @click="installSolver(item.alias)"
+            :disabled="Boolean(busy[item.alias])"
+          >
+            安装 Solver Pack
+          </button>
           <button type="button" @click="scan(item.alias)" :disabled="Boolean(busy[item.alias])">
             自动搜索
           </button>
@@ -248,3 +303,45 @@ onMounted(loadInstallations)
     <p class="toolchain-config-path">配置文件：{{ configPath || '尚未连接侧车' }}</p>
   </section>
 </template>
+
+<style scoped>
+.install-progress-bar {
+  position: relative;
+  height: 28px;
+  background: var(--color-bg-muted, #e5e7eb);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-top: 8px;
+}
+
+.install-progress-fill {
+  height: 100%;
+  background: var(--color-primary, #2563eb);
+  transition: width 0.3s ease;
+}
+
+.install-progress-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.install-error-message {
+  margin-top: 8px;
+  padding: 8px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  color: #991b1b;
+}
+
+.install-error-message button {
+  margin-top: 4px;
+}
+</style>
