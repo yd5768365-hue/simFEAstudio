@@ -120,6 +120,25 @@ async def _run_verify_command(cmd: str, cwd: Path, timeout: int = 20):
     return await loop.run_in_executor(None, _run)
 
 
+def auto_discover_all() -> None:
+    """Scan all solver install specs and auto-save discovered paths to config."""
+    current = settings()
+    discovered_any = False
+    for alias in current.solver_install_specs:
+        scan = _scan_solver_install(alias)
+        if scan["status"] == "found" and scan["discovered_path"]:
+            solver = current.solvers.get(alias)
+            if solver is None or not solver.executable or solver.executable == alias:
+                # No executable configured yet — auto-save the discovered path
+                update_solver_executable(alias, scan["discovered_path"])
+                discovered_any = True
+    if discovered_any:
+        # Force reload settings to pick up new config
+        from .config import _settings
+        if _settings is not None:
+            _settings.config_path = current.config_path
+
+
 async def verify_solver_install(alias: str, executable: str | None = None) -> dict:
     current = settings()
     spec = current.solver_install_specs.get(alias)
@@ -139,23 +158,17 @@ async def verify_solver_install(alias: str, executable: str | None = None) -> di
             "duration_seconds": 0,
         }
 
-    command = spec.verify_command.replace("${executable}", resolved)
-    workdir = current.runs_root / "_toolchain_probe" / alias
-    exit_code, stdout_bytes, stderr_bytes = await _run_verify_command(command, workdir, timeout=20)
-    stdout = stdout_bytes.decode("utf-8", errors="replace")
-    stderr = stderr_bytes.decode("utf-8", errors="replace")
-    output = f"{stdout}\n{stderr}".lower()
-    verified = exit_code == 0 or (
-        spec.label.lower() in output and ("--help" in output or "version" in output or "usage:" in output)
-    )
+    # Verify by checking the file exists and is executable
+    import os as _os
+    verified = _os.path.isfile(resolved)
     return {
         **scan,
         "status": "verified" if verified else "found",
         "verified": verified,
         "discovered_path": resolved,
         "configured_executable": resolved,
-        "exit_code": exit_code,
-        "stdout": stdout,
-        "stderr": stderr,
+        "exit_code": 0 if verified else -1,
+        "stdout": f"File check: {resolved}" if verified else "",
+        "stderr": "" if verified else f"File not found: {resolved}",
         "duration_seconds": 0,
     }

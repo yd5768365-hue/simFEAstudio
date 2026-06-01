@@ -2,12 +2,15 @@ import { contract, createClient } from '@/api/client'
 import {
   cancelRunResponseSchema,
   connectResponseSchema,
+  customWorkflowBodySchema,
   exportLearningBodySchema,
   exportLearningResponseSchema,
   generateReportResponseSchema,
+  getBenchmarkCaseResponseSchema,
   getRunResponseSchema,
   guidedQuestionsResponseSchema,
   installSolverResponseSchema,
+  listBenchmarksResponseSchema,
   listRunsResponseSchema,
   listSolverInstallationsResponseSchema,
   listSolversResponseSchema,
@@ -18,6 +21,7 @@ import {
   saveNoteResponseSchema,
   solverExecutableBodySchema,
   solverInstallationResponseSchema,
+  startCustomWorkflowRunResponseSchema,
   startDemoRunResponseSchema,
   startSlurmDemoRunResponseSchema,
   startSolverRunResponseSchema,
@@ -150,6 +154,14 @@ const startFreecadPrepomaxWorkflowContract = contract({
   response: startWorkflowRunResponseSchema,
 })
 
+const startCustomWorkflowContract = contract({
+  method: 'POST',
+  path: '/v1/runs/:alias/workflows/custom',
+  params: ['alias'] as const,
+  body: customWorkflowBodySchema,
+  response: startCustomWorkflowRunResponseSchema,
+})
+
 const cancelRunContract = contract({
   method: 'POST',
   path: '/v1/runs/:runId/cancel',
@@ -169,6 +181,19 @@ const installSolverContract = contract({
   path: '/v1/toolchain/solvers/:alias/install',
   params: ['alias'] as const,
   response: installSolverResponseSchema,
+})
+
+const listBenchmarksContract = contract({
+  method: 'GET',
+  path: '/v1/benchmarks',
+  response: listBenchmarksResponseSchema,
+})
+
+const getBenchmarkCaseContract = contract({
+  method: 'GET',
+  path: '/v1/benchmarks/:caseName',
+  params: ['caseName'] as const,
+  response: getBenchmarkCaseResponseSchema,
 })
 
 export function createSimfeaClient(baseUrl: string, appendLog: (line: string) => void) {
@@ -208,7 +233,11 @@ export function createSimfeaClient(baseUrl: string, appendLog: (line: string) =>
       request(startSolverRunContract, { params: { alias, solverAlias } }),
     startFreecadPrepomaxWorkflow: (alias: string) =>
       request(startFreecadPrepomaxWorkflowContract, { params: { alias } }),
+    startCustomWorkflow: (alias: string, steps: string[]) =>
+      request(startCustomWorkflowContract, { params: { alias }, body: { steps } }),
     cancelRun: (runId: string) => request(cancelRunContract, { params: { runId } }),
+    listBenchmarks: () => request(listBenchmarksContract),
+    getBenchmarkCase: (caseName: string) => request(getBenchmarkCaseContract, { params: { caseName } }),
   }
 }
 

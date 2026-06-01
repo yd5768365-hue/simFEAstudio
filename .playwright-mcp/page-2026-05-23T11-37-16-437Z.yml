@@ -1,0 +1,135 @@
+- main [ref=e3]:
+  - navigation "主导航" [ref=e4]:
+    - button "作业区" [ref=e5] [cursor=pointer]:
+      - generic [ref=e6]: ▦
+      - generic [ref=e7]: 作业区
+    - button "学习库" [ref=e8] [cursor=pointer]:
+      - generic [ref=e9]: ▤
+      - generic [ref=e10]: 学习库
+    - button "工具链" [ref=e11] [cursor=pointer]:
+      - generic [ref=e12]: TC
+      - generic [ref=e13]: 工具链
+  - generic [ref=e14]:
+    - generic [ref=e15]:
+      - generic [ref=e16]:
+        - img "SimFEA Studio" [ref=e17]:
+          - generic [ref=e24]: v2.0 · 2026
+          - generic [ref=e25]: FEA · AI · SIM
+          - generic [ref=e26]: SimFEA
+          - generic [ref=e28]: STUDIO
+          - generic [ref=e29]: SIM · FEA · ARCHIVE
+          - generic [ref=e30]: 可沉淀的仿真工作台
+        - heading "仿真运行 · 证据归档 · 学习沉淀" [level=1] [ref=e31]
+        - paragraph [ref=e32]: 不造求解器，只管理求解器——把每一次仿真从"跑就散"变成可回放的工程证据。
+        - generic [ref=e33]:
+          - button "刷新工作台" [ref=e34] [cursor=pointer]
+          - button "启动侧车" [ref=e35] [cursor=pointer]
+          - button "关闭侧车" [disabled] [ref=e36]
+      - figure "SimFEA Studio 品牌图" [ref=e37]:
+        - img "SimFEA Studio 工程仿真品牌图" [ref=e38]
+    - region "系统状态与指标" [ref=e39]:
+      - region "状态区" [ref=e41]:
+        - generic [ref=e42]:
+          - paragraph [ref=e43]: Status
+          - heading "状态区" [level=2] [ref=e44]
+        - generic [ref=e45]:
+          - article [ref=e46]:
+            - generic [ref=e47]: 系统状态
+            - strong [ref=e48]: 侧车离线
+            - paragraph [ref=e49]: 等待连接本地侧车服务。
+          - article [ref=e50]:
+            - generic [ref=e51]: 工作器状态
+            - strong [ref=e52]: 待配置
+            - paragraph [ref=e53]: CalculiX / 未发现可用配置
+      - region "系统健康状态" [ref=e54]:
+        - article [ref=e55]:
+          - text: 运行档案
+          - strong [ref=e56]: "0"
+          - paragraph [ref=e57]: 0 个完成，0 个失败
+        - article [ref=e58] [cursor=pointer]:
+          - text: 工作器入口
+          - strong [ref=e59]: "0"
+          - paragraph [ref=e60]: 等待侧车配置
+        - article [ref=e61]:
+          - text: 当前活动
+          - strong [ref=e62]: "0"
+          - paragraph [ref=e63]: 暂无运行记录
+        - article [ref=e64]:
+          - text: 实时任务
+          - strong [ref=e65]: 空闲
+          - paragraph [ref=e67]: 无活跃任务
+    - region "作业配置工作台" [ref=e68]:
+      - region "作业配置区" [ref=e69]:
+        - generic [ref=e70]:
+          - paragraph [ref=e71]: Job Setup
+          - heading "作业配置区" [level=2] [ref=e72]
+          - paragraph [ref=e73]: 选择工作器、计算节点和输入文件，形成一次可以保存、复用、提交的仿真作业。
+        - generic [ref=e74]:
+          - generic [ref=e75]:
+            - tablist "作业模式" [ref=e76]:
+              - button "单求解器模式" [ref=e77] [cursor=pointer]
+              - button "启动链模式" [ref=e78] [cursor=pointer]
+            - tablist "上传模式" [ref=e79]:
+              - button "单个文件" [ref=e80] [cursor=pointer]
+              - button "实例文件夹" [ref=e81] [cursor=pointer]
+          - generic [ref=e82]:
+            - generic [ref=e83]:
+              - generic [ref=e84]:
+                - text: 作业名称
+                - button "作业名称 结构验证_2026-05-23" [ref=e85] [cursor=pointer]: 存为模板
+              - textbox "例如：cantilever_modal_001" [ref=e86]: 结构验证_2026-05-23
+            - generic [ref=e87]:
+              - generic [ref=e88]: 工作器
+              - combobox "工作器 尚未探测 — 显示预设列表" [ref=e89]:
+                - option "CalculiX / 结构求解器" [selected]
+                - option "Abaqus / 商业求解器"
+                - option "Elmer / 多物理场"
+              - generic [ref=e90]: 尚未探测 — 显示预设列表
+            - generic [ref=e91]:
+              - generic [ref=e92]: 节点类型
+              - combobox "节点类型" [ref=e93]:
+                - option "本地工作站" [selected]
+                - option "SSH 远程"
+                - option "HPC 队列"
+          - generic [ref=e94] [cursor=pointer]:
+            - button "INP 拖拽输入文件到这里 支持主文件和子文件一起放入；当前选择：尚未选择输入文件" [ref=e95]
+            - generic [ref=e96]: INP
+            - strong [ref=e97]: 拖拽输入文件到这里
+            - paragraph [ref=e98]: 支持主文件和子文件一起放入；当前选择：尚未选择输入文件
+          - paragraph [ref=e99]: 当前 CalculiX 需要：.inp (CalculiX 输入文件)
+          - generic [ref=e100]:
+            - generic [ref=e101]:
+              - generic [ref=e102]: 自定义参数
+              - textbox "自定义参数" [ref=e103]:
+                - /placeholder: 例如：--cpus 8 --memory 16G
+            - generic [ref=e104]:
+              - generic [ref=e105]: 超时时间
+              - textbox "超时时间" [ref=e106]:
+                - /placeholder: 分钟
+          - generic [ref=e107]:
+            - button "测试节点" [disabled] [ref=e108]
+            - button "探测工作器" [disabled] [ref=e109]
+            - button "存为模板" [ref=e110] [cursor=pointer]
+            - button "提交作业" [disabled] [ref=e111]
+      - complementary "状态与模板" [ref=e112]:
+        - region "实时日志" [ref=e113]:
+          - generic [ref=e114]:
+            - paragraph [ref=e115]: Live Log
+            - heading "实时日志" [level=2] [ref=e116]
+          - code [ref=e118]: "[system] SimFEA Studio 桌面工作台已加载。"
+        - region "模板列表" [ref=e119]:
+          - generic [ref=e120]:
+            - generic [ref=e121]:
+              - paragraph [ref=e122]: Templates
+              - heading "模板列表" [level=2] [ref=e123]
+            - generic [ref=e124]: 0 个模板
+          - paragraph [ref=e126]: 点击“存为模板”保存当前参数配置，后续同类算例可以直接调用。
+      - region "最近运行证据区" [ref=e127]:
+        - generic [ref=e128]:
+          - paragraph [ref=e129]: Run Evidence
+          - heading "最近运行证据区" [level=2] [ref=e130]
+          - paragraph [ref=e131]: 命令、输入、日志、结果产物和本地归档集中展示，方便确认闭环是否真正跑通。
+        - generic [ref=e132]:
+          - paragraph [ref=e134]: 暂无运行档案。
+          - article [ref=e135]:
+            - paragraph [ref=e136]: 选择一条运行记录后，这里会显示可复盘证据。

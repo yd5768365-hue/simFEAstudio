@@ -25,10 +25,10 @@ const isTauriRuntime = () => {
   return typeof internals?.transformCallback === 'function'
 }
 const message = ref('')
+const selectedAlias = ref<string>('')
 
 const installProgress = reactive<Record<string, { pct: number; message: string; step: string }>>({})
 const installError = reactive<Record<string, string>>({})
-
 const activeEventSources = new Map<string, EventSource>()
 
 onUnmounted(() => {
@@ -55,19 +55,12 @@ function statusLabel(status: SolverInstallation['status']) {
 }
 
 function statusTone(status: SolverInstallation['status']) {
-  if (status === 'verified') return 'online'
-  if (status === 'found') return 'pending'
-  return 'offline'
+  if (status === 'verified') return 'ready'
+  if (status === 'found') return 'neutral'
+  return 'blocked'
 }
 
-function installModeLabel(mode: string) {
-  if (mode === 'managed_or_external') return '可外接 / 可安装包'
-  return '外部安装'
-}
-
-function openInstallGuide(url: string) {
-  window.open(url, '_blank', 'noopener,noreferrer')
-}
+const selectedSolver = () => installations.value.find((s) => s.alias === selectedAlias.value)
 
 async function loadInstallations() {
   message.value = ''
@@ -75,6 +68,9 @@ async function loadInstallations() {
   installations.value = result.data.solvers
   for (const item of installations.value) {
     pathInputs[item.alias] = item.discovered_path || item.configured_executable || ''
+  }
+  if (!selectedAlias.value && installations.value.length > 0) {
+    selectedAlias.value = installations.value[0].alias
   }
 }
 
@@ -120,7 +116,7 @@ async function verify(alias: string) {
 
 async function pickFile(alias: string) {
   if (!isTauriRuntime()) {
-    message.value = '文件选择器仅在桌面应用中可用，请手动粘贴路径。'
+    message.value = '文件选择器仅在桌面应用中可用。'
     return
   }
   busy.value = { ...busy.value, [alias]: 'pick' }
@@ -129,16 +125,9 @@ async function pickFile(alias: string) {
     const result = await open({
       multiple: false,
       directory: false,
-      filters: [
-        {
-          name: '可执行文件',
-          extensions: ['exe', 'bat', 'com', 'cmd'],
-        },
-      ],
+      filters: [{ name: '可执行文件', extensions: ['exe', 'bat', 'com', 'cmd'] }],
     })
-    if (result && typeof result === 'string') {
-      selected = result
-    }
+    if (result && typeof result === 'string') selected = result
   } catch {
     message.value = '无法打开文件选择器。'
     return
@@ -173,7 +162,7 @@ async function installSolver(alias: string) {
         activeEventSources.delete(alias)
         delete installProgress[alias]
         setInstallation(data.data)
-        message.value = `${data.data.label} 安装完成，已通过测试运行。`
+        message.value = `${data.data.label} 安装完成。`
       } else if (data.type === 'install_error') {
         es.close()
         activeEventSources.delete(alias)
@@ -185,11 +174,11 @@ async function installSolver(alias: string) {
       es.close()
       activeEventSources.delete(alias)
       delete installProgress[alias]
-      installError[alias] = 'SSE 连接中断，安装可能仍在后台进行。请刷新状态查看结果。'
+      installError[alias] = 'SSE 连接中断。'
     }
   } catch {
     delete installProgress[alias]
-    installError[alias] = '无法启动安装，请检查后端连接。'
+    installError[alias] = '无法启动安装。'
   }
 }
 
@@ -197,169 +186,128 @@ onMounted(loadInstallations)
 </script>
 
 <template>
-  <section class="toolchain-view">
-    <header class="toolchain-header">
-      <div class="toolchain-header-left">
-        <button type="button" @click="emit('back')">返回</button>
-        <div>
-          <p class="eyebrow">Toolchain Manager</p>
-          <h2>工具链管理</h2>
-          <p class="toolchain-subtitle">
-            把求解器从“有没有装”变成“已发现、已验证、可复用”的明确状态。
-          </p>
-        </div>
+  <div class="view-container workbench-view">
+    <header class="workbench-topbar">
+      <div class="workbench-titlebar">
+        <div class="app-mark" aria-hidden="true">TC</div>
+        <span>工具链管理</span>
+        <span class="topbar-status online">{{ installations.length }} 个求解器</span>
       </div>
-      <button type="button" class="primary-action" @click="loadInstallations">刷新状态</button>
+      <div class="workbench-commandbar">
+        <button type="button" @click="loadInstallations">刷新状态</button>
+        <button type="button" @click="emit('back')">← 返回作业区</button>
+      </div>
     </header>
 
-    <section class="panel toolchain-guide-panel">
-      <div class="section-heading">
-        <p class="eyebrow">Install Policy</p>
-        <h2>安装策略</h2>
-      </div>
-      <div class="install-policy-grid">
-        <article>
-          <strong>商业软件</strong>
-          <p>Abaqus、ANSYS 只做本机接入和许可证环境验证，不进入安装包。</p>
-        </article>
-        <article>
-          <strong>外部工具</strong>
-          <p>FreeCAD、PrePoMax 提供安装指引、路径选择和测试运行。</p>
-        </article>
-        <article>
-          <strong>开源求解器</strong>
-          <p>CalculiX 可使用已有安装，后续也可以接独立 Solver Pack。</p>
-        </article>
-      </div>
+    <section class="workbench-layout">
+      <!-- Left: solver list -->
+      <section class="schematic-pane">
+        <div class="pane-title">求解器</div>
+        <div class="schematic-canvas">
+          <div class="model-tree">
+            <button
+              v-for="item in installations"
+              :key="item.alias"
+              type="button"
+              class="tree-node"
+              :class="[statusTone(item.status), { selected: selectedAlias === item.alias }]"
+              @click="selectedAlias = item.alias"
+            >
+              <span class="tree-icon" :class="statusTone(item.status)"></span>
+              <div class="tree-body">
+                <div class="tree-head">
+                  <strong>{{ item.label }}</strong>
+                  <span class="tree-state" :class="statusTone(item.status)">{{ statusLabel(item.status) }}</span>
+                </div>
+                <small>{{ item.configured_executable || item.discovered_path || '未配置路径' }}</small>
+              </div>
+              <span class="tree-arrow">›</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Right: solver detail -->
+      <aside class="properties-pane">
+        <div class="pane-title">求解器配置</div>
+        <template v-if="selectedSolver()">
+          <div style="padding: 9px; overflow-y: auto; flex: 1">
+            <div class="property-block">
+              <span>安装模式</span>
+              <strong>{{ selectedSolver()!.label }}</strong>
+              <p>{{ selectedSolver()!.install_hint }}</p>
+            </div>
+
+            <div class="property-block">
+              <span>可执行文件路径</span>
+              <input
+                v-model="pathInputs[selectedSolver()!.alias]"
+                type="text"
+                class="prop-input"
+                placeholder="粘贴或输入 exe / bat / com 路径"
+              />
+            </div>
+
+            <div class="property-block">
+              <span>当前配置</span>
+              <p>{{ selectedSolver()!.configured_executable || '未配置' }}</p>
+            </div>
+            <div class="property-block">
+              <span>自动发现</span>
+              <p>{{ selectedSolver()!.discovered_path || '未发现' }}</p>
+            </div>
+            <div class="property-block">
+              <span>输入类型</span>
+              <p>{{ selectedSolver()!.input_extensions.join(' / ') || '无' }}</p>
+            </div>
+
+            <!-- Install progress -->
+            <div v-if="installProgress[selectedSolver()!.alias]" class="property-block">
+              <span>安装进度</span>
+              <div class="install-bar">
+                <div class="install-bar-fill" :style="{ width: installProgress[selectedSolver()!.alias].pct + '%' }"></div>
+              </div>
+              <p>{{ installProgress[selectedSolver()!.alias].message }}</p>
+            </div>
+
+            <!-- Install error -->
+            <div v-if="installError[selectedSolver()!.alias]" class="property-block">
+              <p style="color: #ef4444">{{ installError[selectedSolver()!.alias] }}</p>
+            </div>
+
+            <!-- Verify output -->
+            <pre v-if="selectedSolver()!.stdout || selectedSolver()!.stderr" class="tool-output"><code>{{ selectedSolver()!.stdout || selectedSolver()!.stderr }}</code></pre>
+
+            <!-- Actions -->
+            <div class="property-block" style="display: flex; flex-wrap: wrap; gap: 6px">
+              <button
+                v-if="selectedSolver()!.install_mode === 'managed_or_external' && selectedSolver()!.status === 'missing' && !installProgress[selectedSolver()!.alias]"
+                type="button" class="primary-action" @click="installSolver(selectedSolver()!.alias)" :disabled="Boolean(busy[selectedSolver()!.alias])"
+              >
+                安装 Solver Pack
+              </button>
+              <button type="button" @click="scan(selectedSolver()!.alias)" :disabled="Boolean(busy[selectedSolver()!.alias])">自动搜索</button>
+              <button type="button" @click="pickFile(selectedSolver()!.alias)" :disabled="Boolean(busy[selectedSolver()!.alias])">选择路径</button>
+              <button type="button" class="primary-action" @click="verify(selectedSolver()!.alias)" :disabled="Boolean(busy[selectedSolver()!.alias])">测试运行</button>
+              <button type="button" @click="savePath(selectedSolver()!.alias)" :disabled="Boolean(busy[selectedSolver()!.alias])">保存路径</button>
+            </div>
+          </div>
+        </template>
+        <div v-else style="padding: 48px 16px; text-align: center; color: #9ca6b8; font-size: 0.78rem">
+          ← 从左侧选择一个求解器
+        </div>
+      </aside>
     </section>
 
-    <section class="toolchain-manager-grid" aria-label="求解器安装状态">
-      <article v-for="item in installations" :key="item.alias" class="panel tool-install-card">
-        <div class="tool-install-head">
-          <div>
-            <span class="eyebrow">{{ installModeLabel(item.install_mode) }}</span>
-            <h2>{{ item.label }}</h2>
-          </div>
-          <span class="status-pill" :class="statusTone(item.status)">{{ statusLabel(item.status) }}</span>
-        </div>
-
-        <p class="tool-install-hint">{{ item.install_hint }}</p>
-
-        <div class="tool-path-field">
-          <label :for="`tool-path-${item.alias}`">可执行文件路径</label>
-          <input
-            :id="`tool-path-${item.alias}`"
-            v-model="pathInputs[item.alias]"
-            type="text"
-            placeholder="粘贴或输入 exe / bat / com 路径"
-          />
-        </div>
-
-        <dl class="tool-install-meta">
-          <div>
-            <dt>当前配置</dt>
-            <dd>{{ item.configured_executable || '未配置' }}</dd>
-          </div>
-          <div>
-            <dt>自动发现</dt>
-            <dd>{{ item.discovered_path || '未发现' }}</dd>
-          </div>
-          <div>
-            <dt>输入类型</dt>
-            <dd>{{ item.input_extensions.join(' / ') }}</dd>
-          </div>
-        </dl>
-
-        <div v-if="item.status === 'missing'" class="install-empty-state">
-          <strong>还没有发现这个工具</strong>
-          <p>先按安装向导完成安装，再回来自动搜索或粘贴路径。</p>
-        </div>
-
-        <div v-if="installProgress[item.alias]" class="install-progress-bar">
-          <div class="install-progress-fill" :style="{ width: installProgress[item.alias].pct + '%' }"></div>
-          <span class="install-progress-text">{{ installProgress[item.alias].message }}</span>
-        </div>
-
-        <div v-if="installError[item.alias]" class="install-error-message">
-          <p>{{ installError[item.alias] }}</p>
-          <button type="button" @click="installSolver(item.alias)">重试</button>
-        </div>
-
-        <pre v-if="item.stdout || item.stderr" class="tool-verify-output"><code>{{ item.stdout || item.stderr }}</code></pre>
-
-        <div class="tool-install-actions">
-          <button
-            v-if="item.install_mode === 'managed_or_external' && item.status === 'missing' && !installProgress[item.alias]"
-            type="button"
-            class="primary-action"
-            @click="installSolver(item.alias)"
-            :disabled="Boolean(busy[item.alias])"
-          >
-            安装 Solver Pack
-          </button>
-          <button type="button" @click="scan(item.alias)" :disabled="Boolean(busy[item.alias])">
-            自动搜索
-          </button>
-          <button type="button" @click="pickFile(item.alias)" :disabled="Boolean(busy[item.alias])">
-            选择路径
-          </button>
-          <button type="button" class="primary-action" @click="verify(item.alias)" :disabled="Boolean(busy[item.alias])">
-            测试运行
-          </button>
-          <button
-            v-if="item.install_guide_url"
-            type="button"
-            @click="openInstallGuide(item.install_guide_url)"
-          >
-            安装向导
-          </button>
-        </div>
-      </article>
-    </section>
-
-    <p v-if="message" class="toolchain-message">{{ message }}</p>
-    <p class="toolchain-config-path">配置文件：{{ configPath || '尚未连接侧车' }}</p>
-  </section>
+    <div class="action-bar">
+      <span class="action-status">{{ message || '准备就绪' }}</span>
+      <span class="action-worker">配置：{{ configPath || '未连接' }}</span>
+    </div>
+  </div>
 </template>
 
 <style scoped>
-.install-progress-bar {
-  position: relative;
-  height: 28px;
-  background: var(--color-bg-muted, #e5e7eb);
-  border-radius: 4px;
-  overflow: hidden;
-  margin-top: 8px;
-}
-
-.install-progress-fill {
-  height: 100%;
-  background: var(--color-primary, #2563eb);
-  transition: width 0.3s ease;
-}
-
-.install-progress-text {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.8rem;
-  color: #fff;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-}
-
-.install-error-message {
-  margin-top: 8px;
-  padding: 8px;
-  background: #fef2f2;
-  border: 1px solid #fecaca;
-  border-radius: 4px;
-  font-size: 0.85rem;
-  color: #991b1b;
-}
-
-.install-error-message button {
-  margin-top: 4px;
-}
+.install-bar { height: 8px; background: #1e2330; border-radius: 4px; overflow: hidden; margin: 6px 0; }
+.install-bar-fill { height: 100%; background: #8b5cf6; border-radius: 4px; transition: width 0.3s ease; }
+.tool-output { max-height: 160px; overflow-y: auto; padding: 8px; background: #0f1116; border-radius: 4px; font-size: 0.62rem; color: #9ca6b8; margin-top: 6px; white-space: pre-wrap; }
 </style>

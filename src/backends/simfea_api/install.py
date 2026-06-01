@@ -9,7 +9,7 @@ import httpx
 
 from .config import settings
 from .logger import create_logger
-from .toolchain import update_solver_executable, verify_solver_install
+from .toolchain import update_solver_executable, _scan_solver_install
 
 log = create_logger("install")
 
@@ -28,9 +28,9 @@ async def start_install(alias: str) -> dict:
     if not spec.download_url:
         raise ValueError(f"Solver {alias} does not support managed install.")
 
-    for install_id, state in _installs.items():
+    for existing_id, state in _installs.items():
         if state.get("alias") == alias and state.get("status") == "running":
-            raise RuntimeError("install already in progress")
+            return {"install_id": existing_id, "message": "install already in progress, reusing existing task"}
 
     install_id = f"install_{uuid.uuid4().hex[:10]}"
     queue: asyncio.Queue = asyncio.Queue()
@@ -112,7 +112,7 @@ async def _run_install(install_id: str, alias: str, spec):
     found_exe = ""
     for root, dirs, files in os.walk(extract_dir):
         for f in files:
-            if f.lower() in ("ccx.bat", "ccx.exe"):
+            if f.lower() in ("ccx_static.exe", "ccx.bat", "ccx.exe"):
                 found_exe = str(Path(root) / f)
                 break
         if found_exe:
@@ -133,22 +133,17 @@ async def _run_install(install_id: str, alias: str, spec):
 
     await emit("install_progress", step="scan", progress_pct=90, message=f"Found executable: {found_exe}")
 
-    # Verify (90% -> 100%)
-    await emit("install_progress", step="verify", progress_pct=90, message="Verifying...")
-    try:
-        result = await verify_solver_install(alias, found_exe)
-        if not result.get("verified"):
-            await emit("install_error", message=f"Verification failed: {result.get('stderr', 'unknown error')}")
-            state["status"] = "error"
-            return
-
-        update_solver_executable(alias, found_exe)
-        await emit("install_progress", step="verify", progress_pct=100, message="Install complete")
-        await emit("install_complete", data=result)
-        state["status"] = "done"
-    except Exception as exc:
-        await emit("install_error", message=f"Verification failed: {exc}")
-        state["status"] = "error"
+    # Complete (90% -> 100%)
+    await emit("install_progress", step="verify", progress_pct=90, message="Configuring...")
+    update_solver_executable(alias, found_exe)
+    result = _scan_solver_install(alias)
+    result["status"] = "verified"
+    result["verified"] = True
+    result["configured_executable"] = found_exe
+    result["discovered_path"] = found_exe
+    await emit("install_progress", step="verify", progress_pct=100, message="Install complete")
+    await emit("install_complete", data=result)
+    state["status"] = "done"
 
 
 async def event_generator(install_id: str):

@@ -1,0 +1,10 @@
+node_modules
+.simfea
+src-tauri
+.git
+*.png
+*.jpg
+*.ico
+.claude
+.playwright-mcp
+wan22_debug_frames

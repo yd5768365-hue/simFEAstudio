@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 SimFEA Studio is a desktop simulation learning workbench. It does **not** solve physics equations — it manages solvers, compute nodes, run archives, and learning records. Think "lab notebook for FEA," not another CAE tool.
 
+The project is evolving toward a **Benchmark Lab** — a solver-agnostic comparison platform that validates standard mechanics problems (analytic / FEM / AI solvers) side by side. See `docs/DIRECTION_2026.md` for the full vision.
+
 ## Tech stack
 
 | Layer | Technology |
@@ -28,10 +30,11 @@ pnpm dev:all                      # Sidecar + frontend concurrently
 pnpm dev:tauri                    # Full Tauri desktop app (auto-starts Vite)
 
 # Testing
-python -m unittest discover -s src/backends/tests -v    # Python unit tests (75)
+python -m unittest discover -s src/backends/tests -v    # Python unit tests (87)
 python -m unittest src/backends/tests/test_learning.py -v  # Single Python test file
-pnpm test                        # Vitest unit tests (20)
+pnpm test                        # Vitest unit tests (23)
 pnpm test:watch                  # Vitest in watch mode
+pnpm vitest run app/api/contracts.test.ts  # Single Vitest file
 
 # Linting & formatting
 pnpm lint                        # Biome check (app/ only)
@@ -58,17 +61,27 @@ Tauri desktop shell
             ├─ /v1/runs/{alias}/workflows/* — multi-step solver workflows
             ├─ /v1/compute-nodes/* — SSH/scheduler probes
             ├─ /v1/solvers — solver definitions
+            ├─ /v1/toolchain/* — solver discovery, path config, verification, install
+            ├─ /v1/benchmarks — list benchmark cases (learning/benchmarks/)
+            ├─ /v1/benchmarks/{case_name} — problem.md + comparison.csv
             └─ SSE /v1/runs/{id}/events — real-time log streaming
 
 Vue frontend (app/)
   └─ Vite dev server on port 3000
-       ├─ App.vue — top-level layout
+       ├─ App.vue — top-level layout with side-navigation (4 views)
+       │    ├─ Composer (作业区) — job config, run evidence, live logs
+       │    ├─ Benchmark Lab (基准) — benchmark case browser
+       │    ├─ Learning Library (学习库) — run archive browser
+       │    └─ Toolchain Manager (工具链) — solver discovery & config
+       ├─ components/BenchmarkLab.vue — benchmark case list + comparison tables
        ├─ components/RemotePanel.vue — remote run controls
        ├─ components/ResultEvidenceView.vue — artifact/evidence browser
        ├─ components/VtkResultViewport.vue — VTK.js 3D visualization
        ├─ composables/useRemoteRuns.ts — remote run state machine
        ├─ composables/useRunEvents.ts — SSE event stream (with reconnect)
        ├─ composables/useSidecarListeners.ts — sidecar lifecycle
+       ├─ types.ts — re-exports all type-only exports from contracts.ts
+       ├─ utils/markdown.ts — minimal markdown→HTML renderer (headings, code, tables, lists)
        └─ api/simfeaClient.ts — typed API client (Zod contracts)
 ```
 
@@ -130,11 +143,12 @@ When adding or changing an endpoint, update the Zod schema, the contract definit
 
 - `@/` absolute imports (maps to `app/` via `tsconfig.json` paths + `vite.config.js` alias)
 - Barrel exports at `app/api/index.ts` and `app/composables/index.ts`
-- Type-only imports use `import type { X }`
+- Type-only imports use `import type { X }` from `@/types` — `app/types.ts` re-exports all public types from `api/contracts.ts` so components don't need to know the source module
 
 ### Biome formatting
 
 - 2-space indent, single quotes, as-needed semicolons, ES5 trailing commas
+- Line width: 110 characters
 - Pre-commit hook runs `lint-staged` → Biome on staged files
 - Style: no comments in code unless explaining a non-obvious why. Delete dead code, don't comment it out.
 
@@ -168,11 +182,23 @@ Each solver definition: `executable`, `command_template`, `pre_commands`, `post_
 
 `runners/workflow.py` defines workflows that chain multiple solver steps into a single run archive. The first built-in workflow is `freecad-prepomax`: FreeCAD generates a `.step` geometry → PrePoMax regeneration processes it for meshing/solving. Each step is a regular `SolverDefinition`; the workflow collects artifact patterns from all steps and runs sequentially in the same workdir.  Workflows are exposed at `POST /v1/runs/{alias}/workflows/freecad-prepomax`.
 
+### Benchmark Lab (case comparison platform)
+
+`learning/benchmarks/` contains structured benchmark cases, each with a `problem.md` (physics description + analytic solution) and a `results/comparison.csv` (unified comparison table across methods — analytic, CalculiX, PINN, ANSYS, etc.).
+
+Backend endpoints (`GET /v1/benchmarks`, `GET /v1/benchmarks/{case_name}`) scan the directory and serve problem descriptions + CSV results. The frontend `BenchmarkLab.vue` renders problem.md via the custom `app/utils/markdown.ts` renderer and displays comparison tables.
+
+The `comparison.csv` format: `method, u_L_mm, sigma_MPa, error_u_L_mm, notes`. This is solver-agnostic — the UI doesn't need to understand each solver's internals.
+
+Current cases: `rod_tension`, `rod_distributed_load` (1D rod problems). See `docs/DIRECTION_2026.md` for the long-term vision.
+
 ### Tauri sidecar lifecycle
 
 Tauri (`src-tauri/src/main.rs`) spawns a PyInstaller-built sidecar binary at startup via `shell().sidecar("main")`. The sidecar is a `CommandChild` stored in `Arc<Mutex<Option<CommandChild>>>` app state. Stdout/stderr lines from the sidecar are emitted to the frontend as `sidecar-stdout` / `sidecar-stderr` events. Shutdown works by writing `"sidecar shutdown\n"` to the sidecar's stdin, then killing the process.
 
 The `useSidecarListeners.ts` composable listens for these Tauri events on the frontend side.
+
+Tauri plugins in use: `tauri-plugin-shell`, `tauri-plugin-http`, `tauri-plugin-dialog` (native file picker for solver executable selection in ToolchainManager).
 
 ### Frontend state management
 
@@ -186,54 +212,3 @@ There is no Pinia or Vuex store. All reactive state lives in composables:
 - `asyncio.create_subprocess_shell` can hang on Windows when child processes spawn grandchildren that inherit pipe handles. The fix is `subprocess.run` in `loop.run_in_executor` (see `_run_local_command` in `main.py`).
 - CalculiX on Windows requires `ccx.bat`, not `ccx.exe` — the `.bat` sets `OMP_NUM_THREADS` and DLL path.
 - FRD parser in `frd_to_vtk.py` handles CalculiX v2.10 `1PSTEP` format, not the `2D`/`2S` sections described in older documentation.
-
-1. 编码前先思考
-不要妄下断言。不要掩饰困惑。坦诚地权衡利弊。
-
-实施前：
-
-请明确陈述您的假设。如有疑问，请提出。
-如果存在多种解释，请将它们提出来——不要默默地做出选择。
-如果存在更简单的方法，请提出来。必要时要坚持己见。
-如果有什么不清楚的地方，停下来。说出让你困惑的地方。然后提问。
-2. 简单至上
-用最少的代码解决问题。不要进行任何推测。
-
-没有超出要求的功能。
-不为一次性代码进行抽象。
-没有提供任何未要求的“灵活性”或“可配置性”。
-对于不可能出现的情况，不进行错误处理。
-如果你写了 200 行，而 50 行就可以写完，那就重写。
-问问自己：“一位资深工程师会认为这过于复杂吗？” 如果答案是肯定的，那就简化它。
-
-3. 手术改变
-只碰你必须碰的东西。只收拾你自己的烂摊子。
-
-编辑现有代码时：
-
-不要“改进”相邻的代码、注释或格式。
-不要重构没有损坏的代码。
-即使你的做法不同，也要保持与现有风格一致。
-如果你发现无关的死代码，请指出来——不要删除它。
-当你的更改创建了孤立文件时：
-
-删除因您的修改而不再使用的导入项/变量/函数。
-除非被要求，否则不要删除已有的无效代码。
-测试要求：每一行修改后的代码都应该直接追溯到用户的请求。
-
-4. 目标驱动型执行
-定义成功标准。循环直至验证通过。
-
-将任务转化为可验证的目标：
-
-“添加验证”→“编写针对无效输入的测试，并确保它们都能通过”
-“修复漏洞”→“编写一个能够重现该漏洞的测试，然后使其通过”。
-“重构 X” → “确保重构前后测试均通过”
-对于多步骤任务，请简要说明计划：
-
-1. [Step] → verify: [check]
-2. [Step] → verify: [check]
-3. [Step] → verify: [check]
-明确的成功标准能让你独立循环迭代。而模糊的标准（“只要能行就行”）则需要不断澄清。
-
-如果以下情况发生，则这些指导原则是有效的：差异中不必要的更改减少，由于过于复杂而导致的重写减少，并且在实施之前而不是在出错之后提出澄清问题。

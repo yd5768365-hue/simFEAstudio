@@ -17,9 +17,9 @@ classifiers = [
 
 dependencies = [
     "fastapi==0.95.2",
+    "httpx",
     "uvicorn[standard]",
     "sse-starlette==1.6.5",
-    "pyinstaller==5.13.0",
     "setuptools<81",
 ]
 
@@ -27,5 +27,9 @@ dependencies = [
 dev = [
     # Add development specific dependencies here if needed
 ]
+build = [
+    "pyinstaller>=6.0",
+]
 
-# Configuration for tools like black, ruff, pytest can also go here
+[tool.setuptools.packages.find]
+where = ["src/backends"]

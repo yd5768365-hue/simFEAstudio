@@ -8,11 +8,21 @@ from typing import Optional
 
 
 def project_root() -> Path:
+    # Env override (SIMFEA_HOME)
+    if (env := os.getenv("SIMFEA_HOME")):
+        return Path(env)
+
     def looks_like_project_root(path: Path) -> bool:
         return (path / "package.json").exists() and (path / "src-tauri").exists()
 
     if getattr(sys, "frozen", False):
-        start = Path.cwd().resolve()
+        # PyInstaller onefile: use the directory containing the exe
+        exe_dir = Path(sys.executable).parent.resolve()
+        for candidate in [exe_dir, *exe_dir.parents]:
+            if looks_like_project_root(candidate):
+                return candidate
+        # Fallback: use exe directory as project root (config/.simfea goes here)
+        return exe_dir
     else:
         start = Path(__file__).resolve().parents[3]
 
@@ -72,6 +82,7 @@ class ComputeNode:
     connect_timeout_seconds: int = 8
     batch_mode: bool = True
     strict_host_key_checking: str = "accept-new"
+    node_type: str = ""  # "local", "ssh", "docker"
 
 
 @dataclass
@@ -197,6 +208,15 @@ def default_config() -> dict:
                     "host": "localhost",
                     "user": "",
                     "remote_runs_root": ".simfea/runs",
+                    "node_type": "local",
+                },
+                {
+                    "alias": "docker",
+                    "label": "Docker",
+                    "host": "simfea-solvers",
+                    "user": "",
+                    "remote_runs_root": ".simfea/runs",
+                    "node_type": "docker",
                 },
             ],
         },
@@ -368,9 +388,9 @@ End
                 "alias": "calculix",
                 "label": "CalculiX",
                 "install_mode": "managed_or_external",
-                "executable_candidates": ["ccx.bat", "ccx.exe", "ccx"],
+                "executable_candidates": ["ccx_static.exe", "ccx.bat", "ccx.exe", "ccx"],
                 "common_paths": [
-                    "%LOCALAPPDATA%\\SimFEA\\solvers\\calculix\\bin\\ccx.exe",
+                    "%LOCALAPPDATA%\\SimFEA\\solvers\\calculix\\ccx_static.exe",
                     "%PROGRAMFILES%\\CalculiX\\bin\\ccx.exe",
                     "%SIMFEA_SOLVERS_ROOT%\\calculix\\bin\\ccx.exe",
                 ],
@@ -378,7 +398,7 @@ End
                 "install_hint": "可以使用已有 CalculiX，也可以点击「安装 Solver Pack」一键下载安装。",
                 "install_guide_url": "https://www.dhondt.de/",
                 "input_extensions": [".inp"],
-                "download_url": "http://www.dhondt.de/ccx_2.21_win64.zip",
+                "download_url": "https://www.dhondt.de/calculix_2.23_4win.zip",
                 "managed_install_root": "%LOCALAPPDATA%\\SimFEA\\solvers",
             },
         ],
@@ -398,6 +418,11 @@ def load_settings() -> AppSettings:
         relative_to_project=True,
     )
     raw_config = deep_merge(default_config(), load_config_file(config_path))
+
+    # Auto-create config file on first launch
+    if not config_path.exists():
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        config_path.write_text(json.dumps(raw_config, indent=2, ensure_ascii=False), encoding="utf-8")
 
     # Merge solvers by alias: default solvers provide the base (including
     # input_files templates); user config solvers with the same alias override
@@ -429,6 +454,7 @@ def load_settings() -> AppSettings:
             connect_timeout_seconds=int(item.get("connect_timeout_seconds", 8)),
             batch_mode=bool(item.get("batch_mode", True)),
             strict_host_key_checking=item.get("strict_host_key_checking", "accept-new"),
+            node_type=item.get("node_type", ""),
         )
         nodes[node.alias] = node
 
@@ -461,8 +487,32 @@ def load_settings() -> AppSettings:
         )
         solvers[solver.alias] = solver
 
+    # Merge solver_install_specs by alias: defaults provide up-to-date download_url etc.
+    # System fields (download_url, verify_command, etc.) always come from defaults.
+    SYSTEM_SPEC_FIELDS = {"download_url", "verify_command", "executable_candidates", "common_paths", "managed_install_root", "install_guide_url", "install_hint", "install_mode", "input_extensions"}
+    default_spec_items = {s["alias"]: s for s in default_config().get("solver_install_specs", [])}
+    raw_config.setdefault("solver_install_specs", [])
+    merged_specs = []
+    seen_specs = set()
+    for item in raw_config["solver_install_specs"]:
+        alias = item["alias"]
+        if alias in default_spec_items:
+            # Start from default (has latest system fields), only let user override label
+            merged = dict(default_spec_items[alias])
+            for k, v in item.items():
+                if k not in SYSTEM_SPEC_FIELDS:
+                    merged[k] = v
+            merged_specs.append(merged)
+        else:
+            merged_specs.append(item)
+        seen_specs.add(alias)
+    for alias, spec in default_spec_items.items():
+        if alias not in seen_specs:
+            merged_specs.append(spec)
+    raw_config["solver_install_specs"] = merged_specs
+
     solver_install_specs = {}
-    for item in raw_config.get("solver_install_specs", []):
+    for item in raw_config["solver_install_specs"]:
         spec = SolverInstallSpec(
             alias=item["alias"],
             label=item.get("label") or item["alias"],

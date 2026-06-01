@@ -562,6 +562,91 @@ export function useRemoteRuns(options: UseRemoteRunsOptions) {
     }
   }
 
+  const startCustomWorkflowAction = async (steps: string[]) => {
+    if (!selectedComputeNode.value) {
+      remoteStatus.value = {
+        ...remoteStatus.value,
+        running: false,
+        message: '请先选择一个计算节点。',
+        output: '',
+      }
+      return
+    }
+
+    const label = activeComputeNodeLabel.value
+    try {
+      closeRunEventStream()
+      remoteStatus.value = {
+        ...remoteStatus.value,
+        checked: true,
+        running: true,
+        message: `正在启动自定义工作流 (${steps.length} 步)...`,
+        output: '',
+        archivePath: '',
+        remoteWorkdir: '',
+      }
+
+      const result = await api.startCustomWorkflow(selectedComputeNode.value, steps)
+      const runId = result.data.run_id
+      const skippedInfo = result.data.skipped_steps?.length
+        ? ` (跳过 ${result.data.skipped_steps.length} 个无配置步骤)`
+        : ''
+      remoteStatus.value = {
+        ...remoteStatus.value,
+        runId,
+        archivePath: result.data.archive_path,
+        remoteWorkdir: result.data.remote_workdir,
+        message: `${label} 上的 ${result.data.workflow.label} 工作流 ${runId} 已创建${skippedInfo}，正在接收实时日志。`,
+      }
+
+      openRunEventStream(runId, {
+        onEvent: async (payload) => {
+          if (payload.line) {
+            remoteStatus.value.output += `${payload.line}\n`
+            appendLog(`[WorkflowRunner] ${payload.line}`)
+          }
+          if (payload.archive_path) {
+            remoteStatus.value.archivePath = payload.archive_path
+          }
+          if (payload.remote_workdir) {
+            remoteStatus.value.remoteWorkdir = payload.remote_workdir
+          }
+          if (payload.type === 'finished') {
+            const finishedNormally = payload.status === 'finished' && payload.exit_code === 0
+            const canceled = payload.status === 'canceled'
+            remoteStatus.value = {
+              ...remoteStatus.value,
+              connected: canceled ? remoteStatus.value.connected : finishedNormally,
+              running: false,
+              message: canceled
+                ? '自定义工作流已取消。'
+                : finishedNormally
+                  ? '自定义工作流完成，输入、日志和结果已进入物证仓库。'
+                  : '自定义工作流失败，请查看 stderr 和归档日志。',
+            }
+            closeRunEventStream()
+            await onRunFinished(runId)
+          }
+        },
+        onError: () => {
+          remoteStatus.value = {
+            ...remoteStatus.value,
+            running: false,
+            message: '自定义工作流事件流中断。',
+          }
+          closeRunEventStream()
+        },
+      })
+    } catch (err) {
+      remoteStatus.value = {
+        ...remoteStatus.value,
+        running: false,
+        message: '自定义工作流启动失败。',
+        output: String(err),
+      }
+    }
+  }
+
   const cancelRemoteRunAction = async () => {
     if (!remoteStatus.value.runId) {
       remoteStatus.value = {
@@ -611,6 +696,7 @@ export function useRemoteRuns(options: UseRemoteRunsOptions) {
     startSlurmDemoRunAction,
     startSolverRunAction,
     startFreecadPrepomaxWorkflowAction,
+    startCustomWorkflowAction,
     cancelRemoteRunAction,
     clearRemoteOutputAction,
   }

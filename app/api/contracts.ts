@@ -310,6 +310,29 @@ export const startWorkflowRunResponseSchema = z.object({
 
 export type StartWorkflowRunResponse = z.output<typeof startWorkflowRunResponseSchema>
 
+export const customWorkflowBodySchema = z.object({
+  steps: z.array(z.string()),
+})
+
+export type CustomWorkflowBody = z.output<typeof customWorkflowBodySchema>
+
+export const startCustomWorkflowRunResponseSchema = z.object({
+  message: z.string(),
+  data: z.object({
+    run_id: z.string(),
+    status: z.string(),
+    archive_path: z.string(),
+    remote_workdir: z.string(),
+    compute_node: z.string(),
+    workflow: solverDefinitionSchema.extend({
+      steps: z.array(solverDefinitionSchema),
+    }),
+    skipped_steps: z.array(z.string()).optional(),
+  }),
+})
+
+export type StartCustomWorkflowRunResponse = z.output<typeof startCustomWorkflowRunResponseSchema>
+
 export const cancelRunResponseSchema = z.object({
   message: z.string(),
   data: z.unknown(),
@@ -501,3 +524,48 @@ export type InstallProgressEvent = z.output<typeof installProgressEventSchema>
 export type InstallCompleteEvent = z.output<typeof installCompleteEventSchema>
 export type InstallErrorEvent = z.output<typeof installErrorEventSchema>
 export type InstallEvent = z.output<typeof installEventSchema>
+
+// ── Benchmark Lab ───────────────────────────────────────────
+
+export const benchmarkCaseSchema = z.object({
+  name: z.string(),
+  has_problem: z.boolean(),
+  has_results: z.boolean(),
+})
+
+export type BenchmarkCase = z.output<typeof benchmarkCaseSchema>
+
+export const listBenchmarksResponseSchema = z.object({
+  message: z.string(),
+  data: z.object({
+    cases: z.array(benchmarkCaseSchema),
+  }),
+})
+
+export type ListBenchmarksResponse = z.output<typeof listBenchmarksResponseSchema>
+
+export const benchmarkResultSchema = z.object({
+  method: z.string(),
+  u_L_mm: z.string(),
+  sigma_MPa: z.string().optional(),
+  sigma_max_MPa: z.string().optional(),
+  error_u_L_mm: z.string(),
+  notes: z.string(),
+})
+
+export type BenchmarkResult = z.output<typeof benchmarkResultSchema>
+
+export const benchmarkCaseDetailSchema = z.object({
+  name: z.string(),
+  problem_md: z.string(),
+  results: z.array(benchmarkResultSchema),
+})
+
+export type BenchmarkCaseDetail = z.output<typeof benchmarkCaseDetailSchema>
+
+export const getBenchmarkCaseResponseSchema = z.object({
+  message: z.string(),
+  data: benchmarkCaseDetailSchema,
+})
+
+export type GetBenchmarkCaseResponse = z.output<typeof getBenchmarkCaseResponseSchema>

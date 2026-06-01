@@ -16,13 +16,17 @@ def workflow_artifact_patterns(solvers: list[SolverDefinition]) -> list[str]:
     return patterns
 
 
-def public_freecad_prepomax_workflow(solvers: list[SolverDefinition]) -> dict:
+def public_workflow(alias: str, label: str, solvers: list[SolverDefinition]) -> dict:
     return {
-        "alias": FREECAD_PREPOMAX_WORKFLOW_ALIAS,
-        "label": "FreeCAD -> PrePoMax",
+        "alias": alias,
+        "label": label,
         "kind": "workflow",
         "executable": "WorkflowRunner",
-        "description": "Run the FreeCAD smoke geometry step, then run the configured PrePoMax regeneration step in one archive.",
+        "description": f"Custom workflow with {len(solvers)} steps: {' -> '.join(s.label for s in solvers)}",
         "artifact_patterns": workflow_artifact_patterns(solvers),
         "steps": [public_solver(solver) for solver in solvers],
     }
+
+
+def public_freecad_prepomax_workflow(solvers: list[SolverDefinition]) -> dict:
+    return public_workflow(FREECAD_PREPOMAX_WORKFLOW_ALIAS, "FreeCAD -> PrePoMax", solvers)

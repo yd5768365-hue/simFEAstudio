@@ -1,0 +1,15 @@
+services:
+  simfea:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: simfea/studio:latest
+    container_name: simfea-studio
+    ports:
+      - "3000:3000"
+    volumes:
+      - simfea_data:/workspace
+    restart: unless-stopped
+
+volumes:
+  simfea_data:

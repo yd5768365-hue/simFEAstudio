@@ -1,4 +1,5 @@
 ﻿import asyncio
+import csv
 import json
 import subprocess
 import os
@@ -23,7 +24,7 @@ except ImportError:
     from inference import infer_text_api
 
 try:
-    from .simfea_api.config import ComputeNode, SolverDefinition, settings
+    from .simfea_api.config import ComputeNode, PROJECT_ROOT, SolverDefinition, settings
     from .simfea_api.run_archive import (
         RemoteRun,
         append_text,
@@ -86,6 +87,7 @@ try:
         FREECAD_PREPOMAX_STEP_ALIASES,
         FREECAD_PREPOMAX_WORKFLOW_ALIAS,
         public_freecad_prepomax_workflow,
+        public_workflow,
         workflow_artifact_patterns,
     )
     from .simfea_api.cleanup import cleanup_old_runs
@@ -94,7 +96,7 @@ try:
     from .simfea_api.logger import create_logger
 except ImportError:
     from simfea_api.cleanup import cleanup_old_runs
-    from simfea_api.config import ComputeNode, SolverDefinition, settings
+    from simfea_api.config import ComputeNode, PROJECT_ROOT, SolverDefinition, settings
     from simfea_api.run_archive import (
         RemoteRun,
         append_text,
@@ -157,6 +159,7 @@ except ImportError:
         FREECAD_PREPOMAX_STEP_ALIASES,
         FREECAD_PREPOMAX_WORKFLOW_ALIAS,
         public_freecad_prepomax_workflow,
+        public_workflow,
         workflow_artifact_patterns,
     )
     from simfea_api.install import start_install, event_generator
@@ -167,6 +170,16 @@ log = create_logger("sidecar")
 
 server_instance = None
 remote_runs = {}
+
+
+def docker_cli_executable() -> str:
+    docker = shutil.which("docker")
+    if docker:
+        return docker
+    windows_docker = Path("C:/Program Files/Docker/Docker/resources/bin/docker.exe")
+    if windows_docker.exists():
+        return str(windows_docker)
+    return "docker"
 
 app = FastAPI(
     title="SimFEA Studio API",
@@ -200,6 +213,10 @@ class T_LearningExport(TypedDict, total=False):
 
 class T_SolverExecutable(TypedDict, total=False):
     executable: str
+
+
+class T_CustomWorkflow(TypedDict):
+    steps: list[str]
 
 
 def utc_now() -> str:
@@ -404,7 +421,7 @@ def _run_local_sync(cmd: str, cwd: Path, timeout: int = 120, on_output=None):
 
     Redirect stdout/stderr to files (not OS pipes) so that child
     processes spawned by .bat wrappers don't inherit pipe handles and
-    cause the parent to hang.  stdin is pointed at NUL.
+    cause the parent to hang.  stdin is pointed at the platform null device.
 
     Uses Popen + polling so the sidecar terminal shows solver output
     as it is written, while still collecting full output for SSE events.
@@ -417,7 +434,8 @@ def _run_local_sync(cmd: str, cwd: Path, timeout: int = 120, on_output=None):
     cwd.mkdir(parents=True, exist_ok=True)
     stdout_path = cwd / "stdout.log"
     stderr_path = cwd / "stderr.log"
-    wrapped = f'{cmd} < NUL > "{stdout_path}" 2> "{stderr_path}"'
+    null_device = "NUL" if sys.platform == "win32" else "/dev/null"
+    wrapped = f'{cmd} < {null_device} > "{stdout_path}" 2> "{stderr_path}"'
 
     creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
     proc = subprocess.Popen(
@@ -456,17 +474,25 @@ def _run_local_sync(cmd: str, cwd: Path, timeout: int = 120, on_output=None):
 
 
 def _kill_process_tree(pid: int):
-    """Kill a process and all its children on Windows."""
-    if sys.platform != 'win32':
-        return
-    try:
-        subprocess.run(
-            ['taskkill', '/F', '/T', '/PID', str(pid)],
-            capture_output=True,
-            creationflags=subprocess.CREATE_NO_WINDOW,
-        )
-    except Exception:
-        pass
+    """Kill a process and all its children."""
+    if sys.platform == 'win32':
+        try:
+            subprocess.run(
+                ['taskkill', '/F', '/T', '/PID', str(pid)],
+                capture_output=True,
+                creationflags=subprocess.CREATE_NO_WINDOW,
+            )
+        except Exception:
+            pass
+    else:
+        try:
+            import signal
+            os.killpg(os.getpgid(pid), signal.SIGKILL)
+        except Exception:
+            try:
+                subprocess.run(['pkill', '-P', str(pid)], capture_output=True)
+            except Exception:
+                pass
 
 
 def _tail_log(path: Path, offset: int, prefix: str, on_output=None, stream=None):
@@ -729,6 +755,82 @@ async def _run_local_solver_step(run: RemoteRun, solver: SolverDefinition, workd
 
     await emit_remote_event(run, "status", status="running", line=f"Workflow step finished: {solver.label}, exit_code={exit_code}")
     return exit_code
+
+
+async def _execute_docker_run(run: RemoteRun, solver: SolverDefinition):
+    import subprocess as _sp
+    CONTAINER_NAME = "simfea-solvers"
+
+    def _docker(args: list[str], timeout: int = 120) -> tuple[int, bytes, bytes]:
+        r = _sp.run([docker_cli_executable(), *args], capture_output=True, timeout=timeout, shell=False)
+        return r.returncode, r.stdout, r.stderr
+
+    async def _docker_exec(cmd: str, timeout: int = 120) -> tuple[int, bytes, bytes]:
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            None, _docker, ["exec", "-w", "/workspace", CONTAINER_NAME, "bash", "-lc", cmd], timeout)
+
+    run.status = "running"
+    run.runner = "DockerRunner"
+    run.started_at = utc_now()
+    save_run_metadata(run)
+    await emit_remote_event(run, "status", status="running", line=f"Docker run: {solver.label}", remote_workdir=run.remote_workdir)
+
+    workdir = run.local_dir
+    workdir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        # Write input files
+        for filename, content in solver.input_files.items():
+            path = workdir / filename
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding="utf-8")
+
+        # Copy input files to container
+        _docker(["exec", CONTAINER_NAME, "mkdir", "-p", "/workspace"], timeout=10)
+        for filename in solver.input_files:
+            src = str(workdir / filename)
+            _docker(["cp", src, f"{CONTAINER_NAME}:/workspace/{filename}"], timeout=10)
+
+        # Render and run solver command
+        cmd = runner_render_command_template(solver.command_template, run, solver)
+        exit_code, stdout, stderr = await _docker_exec(cmd, timeout=solver.timeout_seconds)
+
+        for line in stdout.decode("utf-8", errors="replace").splitlines():
+            if line.strip():
+                await emit_remote_event(run, "stdout", line=line.strip())
+        for line in stderr.decode("utf-8", errors="replace").splitlines():
+            if line.strip():
+                await emit_remote_event(run, "stderr", line=line.strip())
+
+        # Copy results back
+        _docker(["cp", f"{CONTAINER_NAME}:/workspace/.", str(workdir)], timeout=10)
+
+        # Write result.txt
+        (workdir / "result.txt").write_text(
+            f"runner=DockerRunner\nsolver={solver.alias}\nexit_code={exit_code}\n",
+            encoding="utf-8")
+
+        # Collect artifacts
+        for pattern in solver.artifact_patterns:
+            for match in workdir.glob(pattern):
+                dst = run.artifacts_dir / match.name
+                run.artifacts_dir.mkdir(parents=True, exist_ok=True)
+                if not dst.exists():
+                    match.replace(dst)
+
+        run.exit_code = exit_code
+        run.status = "finished" if exit_code == 0 else "failed"
+    except Exception as exc:
+        run.exit_code = -1
+        run.status = "failed"
+        await emit_remote_event(run, "stderr", line=f"Docker error: {exc}")
+    finally:
+        run.finished_at = utc_now()
+        save_run_metadata(run)
+        await emit_finished_event(run, status=run.status, exit_code=run.exit_code,
+                                  line=f"DockerRunner finished with exit_code={run.exit_code}.")
+        run.queue.put_nowait(None)
 
 
 async def execute_local_workflow_run(run: RemoteRun, solvers: list[SolverDefinition]):
@@ -1039,6 +1141,12 @@ def get_app_config():
 @app.get("/v1/connect")
 def connect_to_api_server():
     log.info("Connecting to server...")
+    # Auto-discover solvers on first launch
+    try:
+        from .simfea_api.toolchain import auto_discover_all
+        auto_discover_all()
+    except Exception:
+        pass
     current = settings()
     host = f"http://{current.api_public_host}:{current.api_port}"
     return {
@@ -1162,6 +1270,50 @@ def list_solvers():
         "data": {
             "solvers": [public_solver(solver) for solver in current.solvers.values()],
         },
+    }
+
+
+BENCHMARKS_DIR = PROJECT_ROOT / "learning" / "benchmarks"
+
+
+@app.get("/v1/benchmarks")
+def list_benchmarks():
+    if not BENCHMARKS_DIR.exists():
+        return {"message": "No benchmarks found.", "data": {"cases": []}}
+    cases = []
+    for case_dir in sorted(BENCHMARKS_DIR.iterdir()):
+        if not case_dir.is_dir():
+            continue
+        problem_file = case_dir / "problem.md"
+        results_file = case_dir / "results" / "comparison.csv"
+        cases.append({
+            "name": case_dir.name,
+            "has_problem": problem_file.exists(),
+            "has_results": results_file.exists(),
+        })
+    return {
+        "message": f"Found {len(cases)} benchmark case(s).",
+        "data": {"cases": cases},
+    }
+
+
+@app.get("/v1/benchmarks/{case_name}")
+def get_benchmark_case(case_name: str):
+    case_dir = BENCHMARKS_DIR / case_name
+    if not case_dir.is_dir():
+        raise HTTPException(status_code=404, detail=f"Benchmark case '{case_name}' not found")
+    problem_md = ""
+    problem_file = case_dir / "problem.md"
+    if problem_file.exists():
+        problem_md = problem_file.read_text(encoding="utf-8")
+    results = []
+    results_file = case_dir / "results" / "comparison.csv"
+    if results_file.exists():
+        reader = csv.DictReader(results_file.open(encoding="utf-8"))
+        results = [row for row in reader]
+    return {
+        "message": f"Benchmark case '{case_name}' loaded.",
+        "data": {"name": case_name, "problem_md": problem_md, "results": results},
     }
 
 
@@ -1518,7 +1670,9 @@ async def start_solver_run(alias: str, solver_alias: str):
     )
     ensure_run_files(run)
     remote_runs[run_id] = run
-    if is_local_node(node):
+    if getattr(node, "node_type", "") == "docker":
+        asyncio.create_task(_execute_docker_run(run, solver))
+    elif is_local_node(node):
         asyncio.create_task(execute_local_run(run, solver))
     else:
         run.command = f"bash -lc {sh_quote(build_solver_run_script(run, solver))}"
@@ -1577,6 +1731,72 @@ async def start_freecad_prepomax_workflow(alias: str):
             "remote_workdir": run.remote_workdir,
             "compute_node": node.alias,
             "workflow": workflow,
+        },
+    }
+
+
+@app.post("/v1/runs/{alias}/workflows/custom")
+async def start_custom_workflow(alias: str, payload: T_CustomWorkflow = Body(...)):
+    node = get_compute_node(alias)
+    if not is_local_node(node):
+        raise HTTPException(status_code=400, detail="Custom workflow currently runs on the local node only.")
+
+    current = settings()
+    requested_steps = payload.get("steps", [])
+
+    solvers: list[SolverDefinition] = []
+    skipped: list[str] = []
+    for step_alias in requested_steps:
+        solver = current.solvers.get(step_alias)
+        if solver is not None:
+            solvers.append(solver)
+        else:
+            skipped.append(step_alias)
+
+    if not solvers:
+        raise HTTPException(
+            status_code=400,
+            detail=f"No executable solver steps found. Skipped (no config): {', '.join(skipped) if skipped else 'none'}",
+        )
+
+    slug = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    run_id = f"run_wf_custom_{slug}_{uuid.uuid4().hex[:8]}"
+    local_dir = current.runs_root / run_id
+    label = " -> ".join(s.label for s in solvers)
+    workflow = public_workflow("custom", label, solvers)
+
+    run = RemoteRun(
+        run_id=run_id,
+        case_name=f"Custom workflow: {label}",
+        solver="custom-workflow",
+        solver_label=workflow["label"],
+        solver_kind=workflow["kind"],
+        node_alias=node.alias,
+        node_label=node.label,
+        remote_workdir=str(local_dir),
+        local_dir=local_dir,
+        artifacts_dir=local_dir / "artifacts",
+        command="WorkflowRunner",
+        created_at=utc_now(),
+        runner="WorkflowRunner",
+        toolchain=current.toolchain,
+        artifact_patterns=workflow_artifact_patterns(solvers),
+    )
+    ensure_run_files(run)
+    remote_runs[run_id] = run
+
+    asyncio.create_task(execute_local_workflow_run(run, solvers))
+
+    return {
+        "message": f"Custom workflow ({len(solvers)} steps: {label}) started on {node.alias}.",
+        "data": {
+            "run_id": run_id,
+            "status": run.status,
+            "archive_path": str(run.local_dir),
+            "remote_workdir": run.remote_workdir,
+            "compute_node": node.alias,
+            "workflow": workflow,
+            "skipped_steps": skipped,
         },
     }
 

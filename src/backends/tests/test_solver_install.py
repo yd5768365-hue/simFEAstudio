@@ -34,7 +34,7 @@ class TestSolverInstall(unittest.IsolatedAsyncioTestCase):
             self.assertIn("install_id", result)
             self.assertIn("message", result)
 
-    async def test_start_install_rejects_concurrent(self):
+    async def test_start_install_reuses_existing(self):
         with patch("simfea_api.install.settings") as mock_settings:
             mock_spec = MagicMock()
             mock_spec.download_url = "http://example.com/ccx.zip"
@@ -43,9 +43,10 @@ class TestSolverInstall(unittest.IsolatedAsyncioTestCase):
             mock_settings.return_value.config_path.parent = MagicMock()
             mock_settings.return_value.config_path.parent.__truediv__ = MagicMock(return_value=MagicMock())
 
-            await start_install("calculix")
-            with self.assertRaises(RuntimeError):
-                await start_install("calculix")
+            first = await start_install("calculix")
+            second = await start_install("calculix")
+            self.assertEqual(first["install_id"], second["install_id"])
+            self.assertIn("reusing existing", second["message"])
 
 
 if __name__ == "__main__":

@@ -52,7 +52,7 @@
         "resizable": true,
         "title": "SimFEA Studio",
         "width": 1200,
-        "useHttpsScheme": true
+        "useHttpsScheme": false
       }
     ],
     "security": {

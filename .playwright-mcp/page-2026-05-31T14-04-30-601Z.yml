@@ -1,0 +1,274 @@
+- main [ref=e3]:
+  - generic [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]:
+        - generic [ref=e7]: SF
+        - generic [ref=e8]: 未保存的项目 - SimFEA Workbench
+      - generic "主菜单" [ref=e9]:
+        - generic [ref=e10]: 文件
+        - generic [ref=e11]: 查看
+        - generic [ref=e12]: 工具
+        - generic [ref=e13]: 单位
+        - generic [ref=e14]: 求解
+        - generic [ref=e15]: 帮助
+      - generic "工作台工具栏" [ref=e16]:
+        - button "刷新项目" [ref=e17] [cursor=pointer]
+        - button "启动侧车" [ref=e18] [cursor=pointer]
+        - button "关闭侧车" [disabled] [ref=e19]
+        - button "Benchmark Lab" [ref=e21] [cursor=pointer]
+        - button "学习库" [ref=e22] [cursor=pointer]
+        - button "工具链" [ref=e23] [cursor=pointer]
+    - region "SimFEA 项目原理图工作台" [ref=e24]:
+      - complementary "工具箱" [ref=e25]:
+        - generic [ref=e26]: 工具箱
+        - generic [ref=e27]:
+          - generic [ref=e28]: 固定流程节点
+          - button "模型/几何" [ref=e29] [cursor=pointer]:
+            - generic [ref=e31]: 模型/几何
+          - button "网格" [ref=e32] [cursor=pointer]:
+            - generic [ref=e34]: 网格
+          - button "材料" [ref=e35] [cursor=pointer]:
+            - generic [ref=e37]: 材料
+          - button "边界条件" [ref=e38] [cursor=pointer]:
+            - generic [ref=e40]: 边界条件
+          - button "求解" [ref=e41] [cursor=pointer]:
+            - generic [ref=e43]: 求解
+          - button "后处理" [ref=e44] [cursor=pointer]:
+            - generic [ref=e46]: 后处理
+          - button "验证/报告" [ref=e47] [cursor=pointer]:
+            - generic [ref=e49]: 验证/报告
+      - region "项目原理图" [ref=e50]:
+        - generic [ref=e51]: 项目原理图
+        - article [ref=e53]:
+          - generic [ref=e54]:
+            - generic [ref=e55]: A
+            - generic [ref=e56]:
+              - strong [ref=e57]: SimFEA Workflow Graph
+              - paragraph [ref=e58]: 固定仿真流程，节点工具可替换 / 未配置计算节点
+          - generic "固定仿真流程节点" [ref=e59]:
+            - article [ref=e60] [cursor=pointer]:
+              - generic [ref=e63]:
+                - generic [ref=e64]: "1"
+                - generic [ref=e65]:
+                  - strong [ref=e66]: 模型/几何
+                  - generic [ref=e67]: 待输入
+              - generic [ref=e68]: 导入 .inp
+              - paragraph [ref=e69]: 输入工程模型
+              - generic [ref=e70]:
+                - generic [ref=e71]: 工具
+                - combobox "工具" [ref=e72]:
+                  - option "导入 .inp" [selected]
+                  - option "FreeCAD / STEP"
+                  - option "手写算例"
+              - generic [ref=e73]:
+                - generic [ref=e74]: mesh-ready inp
+                - generic [ref=e75]: 尚未选择输入文件
+            - article [ref=e76] [cursor=pointer]:
+              - generic [ref=e79]:
+                - generic [ref=e80]: "2"
+                - generic [ref=e81]:
+                  - strong [ref=e82]: 网格
+                  - generic [ref=e83]: 已就绪
+              - generic [ref=e84]: 沿用 .inp 网格
+              - paragraph [ref=e85]: 生成或沿用网格
+              - generic [ref=e86]:
+                - generic [ref=e87]: 工具
+                - combobox "工具" [ref=e88]:
+                  - option "沿用 .inp 网格" [selected]
+                  - option "Gmsh"
+                  - option "PrePoMax"
+              - generic [ref=e89]:
+                - generic [ref=e90]: "*.inp"
+                - generic [ref=e91]: 固定槽位，工具可替换
+            - article [ref=e92] [cursor=pointer]:
+              - generic [ref=e95]:
+                - generic [ref=e96]: "3"
+                - generic [ref=e97]:
+                  - strong [ref=e98]: 材料
+                  - generic [ref=e99]: 已就绪
+              - generic [ref=e100]: 沿用 .inp 材料
+              - paragraph [ref=e101]: 定义材料参数
+              - generic [ref=e102]:
+                - generic [ref=e103]: 工具
+                - combobox "工具" [ref=e104]:
+                  - option "沿用 .inp 材料" [selected]
+                  - option "表单编辑"
+                  - option "YAML 材料库"
+              - generic [ref=e105]:
+                - generic [ref=e106]: "*MATERIAL"
+                - generic [ref=e107]: 材料块进入求解输入
+            - article [ref=e108] [cursor=pointer]:
+              - generic [ref=e111]:
+                - generic [ref=e112]: "4"
+                - generic [ref=e113]:
+                  - strong [ref=e114]: 边界条件
+                  - generic [ref=e115]: 已就绪
+              - generic [ref=e116]: 沿用 .inp 边界
+              - paragraph [ref=e117]: 约束与载荷
+              - generic [ref=e118]:
+                - generic [ref=e119]: 工具
+                - combobox "工具" [ref=e120]:
+                  - option "沿用 .inp 边界" [selected]
+                  - option "边界条件表单"
+                  - option "Benchmark 载荷"
+              - generic [ref=e121]:
+                - generic [ref=e122]: "*BOUNDARY / *CLOAD"
+                - generic [ref=e123]: 约束、载荷、工况
+            - article [ref=e124] [cursor=pointer]:
+              - generic [ref=e127]:
+                - generic [ref=e128]: "5"
+                - generic [ref=e129]:
+                  - strong [ref=e130]: 求解
+                  - generic [ref=e131]: 待配置
+              - generic [ref=e132]: CalculiX
+              - paragraph [ref=e133]: 运行外部求解器
+              - generic [ref=e134]:
+                - generic [ref=e135]: 工具
+                - combobox "工具" [ref=e136]:
+                  - option "CalculiX" [selected]
+                  - option "ANSYS MAPDL"
+                  - option "Elmer"
+              - generic [ref=e137]:
+                - generic [ref=e138]: .frd / .dat
+                - generic [ref=e139]: 暂无运行记录
+            - article [ref=e140] [cursor=pointer]:
+              - generic [ref=e143]:
+                - generic [ref=e144]: "6"
+                - generic [ref=e145]:
+                  - strong [ref=e146]: 后处理
+                  - generic [ref=e147]: 待输入
+              - generic [ref=e148]: FRD -> VTK
+              - paragraph [ref=e149]: 转换与查看结果
+              - generic [ref=e150]:
+                - generic [ref=e151]: 工具
+                - combobox "工具" [ref=e152]:
+                  - option "FRD -> VTK" [selected]
+                  - option "结果摘要提取"
+                  - option "VTK Viewer"
+              - generic [ref=e153]:
+                - generic [ref=e154]: .vtk
+                - generic [ref=e155]: 暂无结果
+            - article [ref=e156] [cursor=pointer]:
+              - generic [ref=e159]:
+                - generic [ref=e160]: "7"
+                - generic [ref=e161]:
+                  - strong [ref=e162]: 验证/报告
+                  - generic [ref=e163]: 待输入
+              - generic [ref=e164]: Benchmark Lab
+              - paragraph [ref=e165]: 形成可复盘证据
+              - generic [ref=e166]:
+                - generic [ref=e167]: 工具
+                - combobox "工具" [ref=e168]:
+                  - option "Benchmark Lab" [selected]
+                  - option "解析解对比"
+                  - option "MAPDL 对照"
+              - generic [ref=e169]:
+                - generic [ref=e170]: comparison.csv
+                - generic [ref=e171]: 等待结果
+      - complementary "属性与状态" [ref=e172]:
+        - generic [ref=e173]: 属性
+        - generic [ref=e174]:
+          - generic [ref=e175]: 当前节点
+          - strong [ref=e176]: 求解
+          - paragraph [ref=e177]: 运行外部求解器 / 待配置
+        - generic [ref=e178]:
+          - generic [ref=e179]: 节点工具
+          - strong [ref=e180]: CalculiX
+          - paragraph [ref=e181]: 输出：.frd / .dat
+        - generic [ref=e182]:
+          - generic [ref=e183]: 系统状态
+          - strong [ref=e184]: 侧车离线
+          - paragraph [ref=e185]: 等待连接本地侧车服务。
+        - generic [ref=e186]:
+          - generic [ref=e187]: 工作器
+          - strong [ref=e188]: 待配置
+          - paragraph [ref=e189]: CalculiX / 未发现可用配置
+        - region "项目指标" [ref=e190]:
+          - article [ref=e191]:
+            - generic [ref=e192]: 运行档案
+            - strong [ref=e193]: "0"
+          - article [ref=e194]:
+            - generic [ref=e195]: 工作器入口
+            - strong [ref=e196]: "0"
+          - article [ref=e197]:
+            - generic [ref=e198]: 当前活动
+            - strong [ref=e199]: "0"
+    - region "作业配置工作台" [ref=e200]:
+      - region "作业配置区" [ref=e201]:
+        - generic [ref=e202]:
+          - paragraph [ref=e203]: Job Setup
+          - heading "作业配置区" [level=2] [ref=e204]
+          - paragraph [ref=e205]: 选择工作器、计算节点和输入文件，形成一次可以保存、复用、提交的仿真作业。
+        - generic [ref=e206]:
+          - generic [ref=e207]:
+            - tablist "作业模式" [ref=e208]:
+              - button "单求解器模式" [ref=e209] [cursor=pointer]
+              - button "启动链模式" [ref=e210] [cursor=pointer]
+            - tablist "上传模式" [ref=e211]:
+              - button "单个文件" [ref=e212] [cursor=pointer]
+              - button "实例文件夹" [ref=e213] [cursor=pointer]
+          - generic [ref=e214]:
+            - generic [ref=e215]:
+              - generic [ref=e216]:
+                - text: 作业名称
+                - button "作业名称 结构验证_2026-05-31" [ref=e217] [cursor=pointer]: 存为模板
+              - textbox "例如：cantilever_modal_001" [ref=e218]: 结构验证_2026-05-31
+            - generic [ref=e219]:
+              - generic [ref=e220]: 工作器
+              - combobox "工作器 尚未探测 — 显示预设列表" [ref=e221]:
+                - option "CalculiX / 结构求解器" [selected]
+                - option "Abaqus / 商业求解器"
+                - option "Elmer / 多物理场"
+              - generic [ref=e222]: 尚未探测 — 显示预设列表
+            - generic [ref=e223]:
+              - generic [ref=e224]: 节点类型
+              - combobox "节点类型" [ref=e225]:
+                - option "本地工作站" [selected]
+                - option "SSH 远程"
+                - option "HPC 队列"
+          - generic [ref=e226] [cursor=pointer]:
+            - button "INP 拖拽输入文件到这里 支持主文件和子文件一起放入；当前选择：尚未选择输入文件" [ref=e227]
+            - generic [ref=e228]: INP
+            - strong [ref=e229]: 拖拽输入文件到这里
+            - paragraph [ref=e230]: 支持主文件和子文件一起放入；当前选择：尚未选择输入文件
+          - paragraph [ref=e231]: 当前 CalculiX 需要：.inp (CalculiX 输入文件)
+          - generic [ref=e232]:
+            - generic [ref=e233]:
+              - generic [ref=e234]: 自定义参数
+              - textbox "自定义参数" [ref=e235]:
+                - /placeholder: 例如：--cpus 8 --memory 16G
+            - generic [ref=e236]:
+              - generic [ref=e237]: 超时时间
+              - textbox "超时时间" [ref=e238]:
+                - /placeholder: 分钟
+          - generic [ref=e239]:
+            - button "测试节点" [disabled] [ref=e240]
+            - button "探测工作器" [disabled] [ref=e241]
+            - button "存为模板" [ref=e242] [cursor=pointer]
+            - button "提交作业" [disabled] [ref=e243]
+      - complementary "状态与模板" [ref=e244]:
+        - region "实时日志" [ref=e245]:
+          - generic [ref=e246]:
+            - paragraph [ref=e247]: Live Log
+            - heading "实时日志" [level=2] [ref=e248]
+          - code [ref=e250]: "[system] SimFEA Studio 桌面工作台已加载。"
+        - region "模板列表" [ref=e251]:
+          - generic [ref=e252]:
+            - generic [ref=e253]:
+              - paragraph [ref=e254]: Templates
+              - heading "模板列表" [level=2] [ref=e255]
+            - generic [ref=e256]: 0 个模板
+          - paragraph [ref=e258]: 点击“存为模板”保存当前参数配置，后续同类算例可以直接调用。
+      - region "最近运行证据区" [ref=e259]:
+        - generic [ref=e260]:
+          - paragraph [ref=e261]: Run Evidence
+          - heading "最近运行证据区" [level=2] [ref=e262]
+          - paragraph [ref=e263]: 命令、输入、日志、结果产物和本地归档集中展示，方便确认闭环是否真正跑通。
+        - generic [ref=e264]:
+          - paragraph [ref=e266]: 暂无运行档案。
+          - article [ref=e267]:
+            - paragraph [ref=e268]: 选择一条运行记录后，这里会显示可复盘证据。
+    - generic "工作台状态" [ref=e269]:
+      - generic [ref=e271]: 侧车离线
+      - generic [ref=e272]: CalculiX
+      - generic [ref=e273]: 暂无运行档案
