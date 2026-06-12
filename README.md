@@ -3,11 +3,10 @@
   <p><strong>仿真学习桌面工作台</strong></p>
   <p>为开源求解器、远程算力和学习记录提供统一的图形化执行环境。</p>
 
-  ![Vue.js](https://img.shields.io/badge/Frontend-Vue_3-4FC08D?logo=vuedotjs)
-  ![Tauri](https://img.shields.io/badge/Desktop-Tauri_v2-FFC131?logo=tauri)
   ![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688?logo=fastapi)
+  ![Vue.js](https://img.shields.io/badge/Frontend-Vue_3-4FC08D?logo=vuedotjs)
   ![Python](https://img.shields.io/badge/Language-Python_3.11-3776AB?logo=python)
-  ![Rust](https://img.shields.io/badge/Desktop-Rust-CE422B?logo=rust)
+  ![Tauri](https://img.shields.io/badge/Desktop-Tauri_v2_(optional)-FFC131?logo=tauri)
   ![VTK.js](https://img.shields.io/badge/Visualization-VTK.js-5C6BC0)
   ![CalculiX](https://img.shields.io/badge/Solver-CalculiX-2F6DB3)
   ![License](https://img.shields.io/badge/License-Apache_2.0-8162C3)
@@ -35,15 +34,18 @@ SimFEA Studio 不是新的仿真引擎，不是商业 CAE 的竞品，也不是�
 
 > 不造求解器，只管理求解器、算力、运行环境和学习记录。
 
-当前版本已经从模板验证推进到真实求解链路：本地 CalculiX 悬臂梁算例可以端到端运行，归档 `.frd/.dat/.sta`，转换 FRD 到 VTK，并生成位移、应力摘要。
+当前版本已支持 `pip install` + 浏览器直接启动（无需 Rust/Tauri），内置 demo 数据开箱可见。本地 CalculiX 悬臂梁算例可以端到端运行，归档 `.frd/.dat/.sta`，转换 FRD 到 VTK，并生成位移、应力摘要。
 
-## 当前状态（2026-05-23）
+## 当前状态（2026-06-12）
 
-- **桌面主界面**：首页已经聚合为作业配置、状态区、运行档案、实时任务和日志面板，适合在一个工作台里完成提交、观察和复盘。
-- **学习库**：运行归档可以按状态检索，支持查看详情、导出 Markdown / JSON，并把“无笔记、无报告、有结果”的状态直接暴露出来。
-- **工具链管理**：FreeCAD、PrePoMax、CalculiX 进入独立配置页，支持自动搜索、选择路径、测试运行和安装引导。
-- **CalculiX Solver Pack**：CalculiX 可从“已发现/已验证”继续推进到“可安装包”管理，后端提供安装任务和 SSE 进度事件。
-- **桌面版本验证**：Tauri 桌面壳、Vue 前端、FastAPI sidecar 和本地 CalculiX 配置已在 Windows 开发环境中连通。
+- **pip 安装模式**：`pip install -e . && simfea-studio` 一键启动，浏览器自动打开，内置 demo 数据（悬臂梁运行记录）让新用户立刻看到效果。
+- **FastAPI 独立化**：`python main.py` 不再依赖 Tauri sidecar，检测到终端环境时直接启动 uvicorn。
+- **Benchmark Lab（基准实验室）**：13 个基准案例（杆/梁/板/壳/桁架/扭转/热应力/压力容器），含解析解和 CalculiX/ANSYS/PINN 对比数据，支持多方法对比表。
+- **Method Lab（方法实验室）**：From 1 to 0 教学框架，连接真实基准案例数据，CAE 入口阶梯、证据矩阵、AI 助手协议、案例路线图。
+- **研究笔记**：Markdown 编辑/预览，支持新建、编辑和 KeepAlive 刷新。
+- **学习库**：运行归档按状态检索，支持详情、导出 Markdown / JSON，demo 数据降级（无用户数据时自动展示）。
+- **工具链管理**：FreeCAD、PrePoMax、CalculiX 路径发现、测试运行和安装引导。
+- **桌面版本（可选）**：Tauri 桌面壳作为可选路径，供需要原生窗口的场景使用。
 
 ## 模板来源
 
@@ -54,12 +56,26 @@ SimFEA Studio 不是新的仿真引擎，不是商业 CAE 的竞品，也不是�
 ## 当前架构
 
 ```text
-Tauri 桌面壳
-→ Vue / Vite 前端 + VTK.js 结果视图
-→ FastAPI Python sidecar
-→ Local / SSH / Slurm / SolverRunner / WorkflowRunner
-→ CalculiX / FreeCAD / PrePoMax / OpenFOAM / Elmer
-→ .simfea/runs/<run_id> 物证仓库
+                    ┌─ 浏览器 ──┐     ┌─ Tauri 桌面壳（可选）──┐
+                    │  pip 安装路径 │     │  pnpm dev:tauri        │
+                    └──────┬───────┘     └──────────┬─────────────┘
+                           └──────────┬─────────────┘
+                                      │
+                        FastAPI (独立 uvicorn 或 sidecar)
+                                      │
+              ┌───────────────────────┼───────────────────────┐
+              │                       │                       │
+         Vue SPA 静态文件       /v1/* REST API          SSE 事件流
+         (dist/ → index.html)   (runs/solvers/...)     (实时日志推送)
+                                      │
+              ┌───────────────────────┼───────────────────────┐
+              │                       │                       │
+         LocalRunner            SSHRunner              SlurmRunner
+         SolverRunner           WorkflowRunner
+              │
+    CalculiX / FreeCAD / PrePoMax / OpenFOAM / Elmer
+              │
+    .simfea/runs/<run_id> 物证仓库
 ```
 
 SimFEA Studio 的目标不是“替你理解物理”，而是把每一次亲手拆解过的物理概念留下证据：
@@ -189,85 +205,75 @@ SimFEA Studio 的学习系统按照"日志 → 笔记 → 报告"的顺序逐层
 
 ## 快速开始
 
-### 1. 准备环境
+根据你的需求选择一条路径。
 
-推荐使用 miniconda 环境：
-
-```powershell
-conda activate simfea
-```
-
-需要安装：
-
-- Node.js / Corepack / pnpm
-- Python 3.11+
-- Rust stable
-- Windows OpenSSH
-- Tauri 构建依赖
-
-### 2. 安装依赖
+### 路径一：pip 安装（推荐 — 仅需 Python）
 
 ```powershell
-corepack pnpm install
-python -m pip install -e .
+# 1. 克隆仓库
+git clone https://github.com/yd5768365-hue/simFEA-studio.git
+cd simFEA-studio
+
+# 2. 安装 Python 依赖
+pip install -e .
+
+# 3. 启动（自动打开浏览器）
+simfea-studio
+# 或：python src/backends/main.py
 ```
 
-### 3. 配置计算节点
+浏览器打开 `http://localhost:8008`，内置 demo 数据让你立刻看到效果。
 
-复制示例配置：
+> **需要**: Python 3.11+
+
+### 路径二：前端开发（需要改 UI 时用）
 
 ```powershell
-New-Item -ItemType Directory -Force .simfea
-Copy-Item simfea.config.example.json .simfea\config.json
+# 终端 1：Python API
+python src/backends/main.py
+
+# 终端 2：Vite 前端（支持 HMR 热更新）
+pnpm install
+pnpm dev:frontend
 ```
 
-本地 CalculiX 运行示例：
+浏览器打开 `http://localhost:1420/`（Vite 开发端口），修改 `app/` 下的代码秒级热更新。
+
+> **需要**: Python 3.11+ + Node.js + pnpm
+
+### 路径三：桌面版（需要原生窗口时用）
+
+```powershell
+pnpm install
+pnpm dev:tauri
+```
+
+Tauri 自动编译 Rust 壳、启动 sidecar、打开原生桌面窗口。首次编译需 5-15 分钟。
+
+> **需要**: Python 3.11+ + Node.js + pnpm + Rust + VS Build Tools
+
+---
+
+### 配置求解器（可选）
+
+安装 [CalculiX](http://www.calculix.de/) 后，在 `.simfea/config.json` 中配置路径即可运行真实求解：
 
 ```json
 {
   "compute": {
     "default_node": "local",
     "nodes": [
-      {
-        "alias": "local",
-        "label": "Local workstation",
-        "host": "localhost"
-      }
+      { "alias": "local", "label": "本机", "host": "localhost" }
     ]
   },
   "solvers": [
     {
       "alias": "calculix",
-      "executable": "C:\\path\\to\\CalculiX\\bin\\ccx.bat",
-      "command_template": "C:\\path\\to\\CalculiX\\bin\\ccx.bat cantilever"
+      "executable": "C:\\CalculiX\\bin\\ccx.bat",
+      "command_template": "C:\\CalculiX\\bin\\ccx.bat cantilever"
     }
   ]
 }
-```
-
-### 4. 启动 sidecar
-
-```powershell
-python src/backends/main.py
-```
-
-### 5. 启动前端
-
-```powershell
-corepack pnpm dev:frontend
-```
-
-### 6. 启动桌面版本
-
-```powershell
-npm run dev:tauri
-```
-
-### 7. 触发本地 CalculiX 求解
-
-```powershell
-curl -X POST http://localhost:8008/v1/runs/local/solvers/calculix
-curl http://localhost:8008/v1/runs
 ```
 
 ## API 概览
@@ -300,13 +306,17 @@ curl http://localhost:8008/v1/runs
 
 ## 验证
 
-当前开发日志记录的最新验证：
-
 ```powershell
+# Python
 python -m unittest discover -s src/backends/tests -v
-corepack pnpm test
-corepack pnpm build
 python -m py_compile src/backends/main.py src/backends/simfea_api/*.py src/backends/simfea_api/runners/*.py src/backends/inference/*.py
+
+# 前端
+pnpm test
+pnpm build
+
+# 边界检查
+python scripts/check_backend_boundaries.py
 git diff --check
 ```
 
@@ -342,11 +352,16 @@ git diff --check
 - [x] 结构化引导笔记 + 学习报告自动生成。
 - [x] 工具链管理页面（FreeCAD / PrePoMax / CalculiX 路径发现和验证）。
 - [x] CalculiX Solver Pack 安装任务和 SSE 进度流。
-- [ ] OpenFOAM 真实 case 接入。
-- [ ] Elmer 真实 case 接入。
 - [x] FreeCAD 无头宏入口。
 - [x] PrePoMax 官方 CLI / regeneration 本机样例接入。
 - [x] WorkflowRunner 多步求解器链（freecad-prepomax）。
+- [x] FastAPI 独立启动（`python main.py` 不依赖 Tauri）。
+- [x] pip 安装模式 + demo 数据降级（新用户开箱可见）。
+- [x] Benchmark Lab — 13 个基准案例，多方法对比。
+- [x] Method Lab — From 1 to 0 教学框架。
+- [x] 研究笔记 — Markdown 编辑/预览/管理。
+- [ ] OpenFOAM 真实 case 接入。
+- [ ] Elmer 真实 case 接入。
 - [ ] Salome 前处理入口。
 - [ ] AI 辅助工程证据评分和复盘建议。
 

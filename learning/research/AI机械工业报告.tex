@@ -1,0 +1,421 @@
+% !TEX program = xelatex
+% AI 在机械工业流程中的落地与赋能报告
+% SimFEA Studio — 机械行业 AI 落地研究
+
+\documentclass[a4paper,12pt]{ctexart}
+
+% ── Packages ────────────────────────────────────
+\usepackage[top=2.5cm, bottom=2.5cm, left=2.8cm, right=2.8cm]{geometry}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{tcolorbox}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{hyperref}
+\usepackage{caption}
+\usepackage{fontspec}
+
+% ── Fonts ───────────────────────────────────────
+\setmainfont{Times New Roman}
+\setCJKmainfont{Microsoft YaHei}
+\setmonofont{Cascadia Code}[Scale=0.9]
+
+% ── Colors ──────────────────────────────────────
+\definecolor{accent}{HTML}{8B5CF6}
+\definecolor{darkbg}{HTML}{1B202A}
+\definecolor{cardbg}{HTML}{222835}
+\definecolor{textbody}{HTML}{C4CAD6}
+\definecolor{textmuted}{HTML}{9CA6B8}
+\definecolor{border}{HTML}{2B3240}
+
+% ── Style ───────────────────────────────────────
+\hypersetup{
+  colorlinks=true,
+  linkcolor=accent,
+  urlcolor=accent,
+}
+
+\newtcolorbox{keypoint}{
+  colback=accent!5,
+  colframe=accent,
+  left=12pt, right=12pt, top=8pt, bottom=8pt,
+  fontupper=\small\bfseries,
+}
+
+\newtcolorbox{quotebox}{
+  colback=cardbg!30,
+  colframe=border,
+  left=14pt, right=14pt, top=10pt, bottom=10pt,
+  fontupper=\small\itshape,
+}
+
+\setlist{nosep, leftmargin=*}
+
+% ── Title ───────────────────────────────────────
+\title{\textbf{AI 在机械工业流程中的落地与赋能报告}}
+\author{SimFEA Studio}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+\noindent
+本报告采用离散型机械制造作为主参照，覆盖轴承、齿轮与传动部件、泵及真空设备、
+金属零部件、矿山机械、工程机械和机加工场景。工信部门近年机械细分行业转型样
+本将这类场景拆分为产品设计、工艺设计、计划排程、生产管控、质量管理、仓储物流、
+运维服务等环节，与机械行业「研发—制造—服务」的典型价值链高度一致。
+
+AI 落地工业流程，本质上是\textbf{「工业互联网 + 边缘智能 + 行业知识 +
+业务闭环」}的系统工程。最先值得做、也最容易算清 ROI 的是三类问题：
+停机损失大的预测维护、人工重复高的质量检测、以及多品种小批量下排程复杂的
+计划优化。
+
+\begin{keypoint}
+落地原则：先连通，后建模；先辅助，后闭环；先单点，后复制。
+\end{keypoint}
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+% ════════════════════════════════════════════════
+\section{机械领域流程分解}
+
+机械行业的典型流程，不是单一产线，而是一条贯穿需求、设计、工艺、制造、检测、
+交付、运维、反馈迭代的「数字主线」。
+
+\subsection{数字主线}
+
+\begin{center}
+\begin{tabular}{c}
+\textbf{客户需求 / 订单 / 法规要求} \\
+$\downarrow$ \\
+\textbf{产品设计} \quad (CAD \ CAE \ BOM \ PDM) \\
+$\downarrow$ \\
+\textbf{工艺设计} \quad (CAPP \ CAM \ 工装夹具 \ 工艺路线) \\
+$\downarrow$ \\
+\textbf{计划排程} \quad (APS \ MES \ 物料齐套 \ 产能平衡) \\
+$\downarrow$ \\
+\textbf{生产执行} \quad (机加 \ 焊接 \ 热处理 \ 装配 \ 涂装) \\
+$\downarrow$ \\
+\textbf{质量管理} \quad (首件 \ 过程 \ SPC \ 终检 \ 追溯) \\
+$\downarrow$ \\
+\textbf{仓储物流 / 发运} \\
+$\downarrow$ \\
+\textbf{现场运行 / 维保 / 服务} \\
+$\downarrow$ \\
+\textbf{故障与工况反馈} $\rightarrow$ 回流至设计与工艺
+\end{tabular}
+\end{center}
+
+\subsection{技术架构分层}
+
+当 AI 进入这条主线后，技术架构分成两层：
+
+\begin{itemize}
+\item \textbf{控制层（毫秒级）}：设备控制与安全控制 —— PLC、机器人控制器、
+      安全回路承担。ISO 13849、ISO 10218 要求安全相关控制系统必须满足明确
+      的安全设计原则。
+\item \textbf{智能层（秒级$\sim$小时级）}：感知、预测、优化和决策支持 ——
+      边缘计算、工业数据平台、AI 模型承担。
+\end{itemize}
+
+\textbf{核心原则：AI 可以优化控制，但不应未经验证就替代已认证的安全功能。}
+
+\subsection{参考架构}
+
+综合 ISO 23247、OPC UA、西门子工业边缘实践和 BMW/三一/徐工案例的共性架构：
+
+\begin{description}
+\item[物理层] CNC/机床、机器人/机械臂、PLC/传感器、工业相机/3D测量、AGV/仓储设备
+\item[连接与协议层] OPC UA、MTConnect、Modbus/Profinet/5G 网关
+\item[边缘层] 数据采集/缓存/时间同步、视觉推理/异常检测、规则引擎/本地告警、工业 IPC/GPU
+\item[平台层] 时序库/数据湖/特征库、MES QMS CMMS APS、模型注册/评估/MLOps、数字孪生/仿真
+\item[应用层] 预测维护、质量检测、工艺优化、排程优化、设计/服务助手
+\item[人机协同] 工艺/设备/质量工程师、审批/回退/审计/权限
+\end{description}
+
+% ════════════════════════════════════════════════
+\section{各环节 AI 赋能用例}
+
+\subsection{研发设计}
+
+\begin{tabular}{@{}>{\bfseries}lp{11cm}@{}}
+典型用例 & 设计知识检索、需求解析、参数推荐、生成式设计、仿真代理模型 \\
+数据 & CAD/CAE 模型、BOM、PDM、历史试验、现场故障、标准与工艺文档 \\
+算法 & RAG+LLM、拓扑优化、生成式设计、代理模型、贝叶斯优化 \\
+实时性 & 分钟$\sim$小时级 \\
+工程提示 & 先做「知识助手+参数推荐」，再逐步做自动方案生成；必须与 PDM/CAE 闭环。
+Honda 曲轴原型实现 50\% 减重。
+\end{tabular}
+
+\subsection{工艺设计与机加}
+
+\begin{tabular}{@{}>{\bfseries}lp{11cm}@{}}
+典型用例 & 刀具磨损预测、表面质量预测、切削参数推荐、NC 程序与工艺路线优化 \\
+数据 & 主轴电流、振动、温度、声发射、切削参数、刀具寿命、表面粗糙度 \\
+算法 & 多传感器融合、CNN/ViT、LSTM/Transformer、机理+数据混合模型 \\
+实时性 & 在线校正：秒$\sim$分钟级；离线优化：小时级 \\
+工程提示 & 多品种零件环境下，「机理约束 + 数据模型」并存优于纯黑箱。
+\end{tabular}
+
+\subsection{计划排程}
+
+\begin{tabular}{@{}>{\bfseries}lp{11cm}@{}}
+典型用例 & 智能排程、插单重排、交期风险预测、物料齐套检查、瓶颈资源优化 \\
+数据 & 订单、BOM、工艺路线、设备状态、模具/刀具准备、库存、采购周期 \\
+算法 & 约束优化、启发式搜索、机器学习、强化学习、数字孪生仿真 \\
+实时性 & 分钟$\sim$小时级 \\
+工程提示 & 多品种、小批量场景尤为重要。工信部样本已提出用 ML/RL+数字孪生
+做动态排程。
+\end{tabular}
+
+\subsection{设备维护}
+
+\begin{tabular}{@{}>{\bfseries}lp{11cm}@{}}
+典型用例 & 预测维护、RUL 剩余寿命预测、异常预警、备件需求预测 \\
+数据 & 振动、温度、电流、功率、润滑、控制器日志、报警、维修工单、运行历史 \\
+算法 & 异常检测、RUL 预测、时序分类、机理+AI 混合模型 \\
+实时性 & 秒$\sim$分钟级；硬保护仍应留在 PLC/控制器 \\
+工程提示 & BMW 证明很多维护场景可优先利用已有控制数据；
+FANUC/徐工汉云表明预测维护可与备件、服务、计划联动。
+\end{tabular}
+
+\subsection{质量管理}
+
+\begin{tabular}{@{}>{\bfseries}lp{11cm}@{}}
+典型用例 & 缺陷检测、漏装/错装识别、焊缝质量判断、尺寸偏差与3D测量 \\
+数据 & 图像、视频、3D 点云、光谱、工艺参数、质检标签、返修记录 \\
+算法 & 目标检测、分割、分类、异常检测、视觉 Transformer、3D 视觉模型 \\
+实时性 & 毫秒级$\sim$节拍约束内 \\
+工程提示 & BMW 已在量产中做到毫秒级图像检测；深度学习上限高度依赖数据质量与标签一致性。
+\end{tabular}
+
+\subsection{机器人控制与装配}
+
+\begin{tabular}{@{}>{\bfseries}lp{11cm}@{}}
+典型用例 & 视觉引导抓取、路径规划、柔顺装配、力控插装、协作机器人自适应任务 \\
+数据 & RGB/RGB-D、点云、力/力矩、机器人状态、夹爪状态、仿真数据、示教数据 \\
+算法 & 视觉-力觉融合、阻抗/导纳控制、运动规划、RL、模仿学习 \\
+实时性 & 伺服与安全回路：毫秒级；AI 感知/规划：10--100ms 或更慢 \\
+工程提示 & 机器人 AI 放在「任务层和规划层」，不侵入安全控制层。须满足 ISO 10218 与 ISO 13849。
+\end{tabular}
+
+\subsection{数字孪生}
+
+\begin{tabular}{@{}>{\bfseries}lp{11cm}@{}}
+典型用例 & 虚拟调试、碰撞检查、布局优化、物流路径仿真、产能与能耗分析 \\
+数据 & 建筑/设备/物流/产品数据、3D 扫描、实时遥测、工艺与资源约束 \\
+算法 & 离散事件仿真、三维物理仿真、优化算法、生成式/代理式 AI 助手 \\
+实时性 & 近实时，不属于硬实时 \\
+工程提示 & 无实时数据与业务系统联动则退化为「三维动画」。
+BMW 实践表明真正价值在于把多源数据做成统一可计算空间。
+\end{tabular}
+
+\subsection{服务与运维知识}
+
+\begin{tabular}{@{}>{\bfseries}lp{11cm}@{}}
+典型用例 & 远程诊断、知识问答、AR 维修指导、备件查询、工单总结、技术手册检索 \\
+数据 & 维修手册、图册、备件编码、服务记录、车联网/设备遥测、故障案例、PDF/图像 \\
+算法 & RAG、LLM、多模态文档解析、知识图谱、工单分类与摘要 \\
+实时性 & 低实时$\sim$秒级 \\
+工程提示 & 见效快（人工作业重、文档多）。徐工已把备件查询、智能派工和远程服务做成体系。
+必须先做权限分层与知识脱敏。
+\end{tabular}
+
+% ════════════════════════════════════════════════
+\section{国内外落地案例}
+
+公开案例最有价值之处在于展示了 AI 如何嵌入工业流程。世界经济论坛灯塔工厂总结指出，
+成熟 AI 已越过试点阶段，开始形成网络化复制效应。
+
+\begin{longtable}{p{2.5cm}p{3cm}p{5.5cm}p{3.5cm}}
+\toprule
+\textbf{案例} & \textbf{公司} & \textbf{技术栈} & \textbf{效果} \\
+\midrule
+\endhead
+长沙18号灯塔工厂 & 三一重工 & 端到端智能制造；1540传感器、200机器人、100 AGV & 产能+123\%，人效+98\% \\
+北京桩机灯塔工厂 & 三一+树根互联 & 全栈架构：5G+AGV+机器视觉+AI+IIoT & 年产500→3000台，人员2000→500人 \\
+徐工汉云赋能泰隆 & 徐工+泰隆 & 机床数据采集、故障识别、PHM机理+AI混合模型 & 设备利用率+3.6\%，计划达成率+8.3\% \\
+徐工数字孪生服务 & 徐工 & 「1314」智能服务体系，覆盖32万数字孪生产品 & 备件24h到位率>90\% \\
+冀凯河北机电 & 冀凯 & 计划自动排产、质量检测自动判定、设备监测、质量追溯 & 排产准确率+30\%，不良率-15\% \\
+BMW Virtual Factory & BMW+NVIDIA & 30+工厂数字孪生(Omniverse)，多源数据统一仿真 & 规划成本-30\%，碰撞检查4周→3天 \\
+BMW GenAI4Q & BMW+Datagon & 总装终检「按车定制」检查目录 + AI视觉/音频质检 & 服务1400辆/日产线 \\
+BMW 雷根斯堡智能维护 & BMW & AI监控装配输送系统，利用已有控制数据 & 年均避免500+分钟装配中断 \\
+FANUC ZDT & FANUC & 机器人故障预防与诊断，减速器/过程/系统健康监测 & 3.5万+台连接，避免1700+起非计划停机 \\
+Honda 曲轴 & Honda+Autodesk & Fusion 360 生成式设计 + 实机测试 & 曲轴原型50\%减重 \\
+\bottomrule
+\caption{国内外落地案例概览}
+\end{longtable}
+
+\subsection{共性架构}
+
+\begin{enumerate}
+\item 设备数据先标准化接入（OPC UA / MTConnect / 网关）
+\item 边缘端做低延迟感知与告警
+\item 平台层做训练、仿真、调度和跨系统协同
+\item 工程师在人机协同界面里确认、回退和持续优化
+\end{enumerate}
+
+% ════════════════════════════════════════════════
+\section{主要困难与工程缓解}
+
+AI 在机械工业里真正难的往往不是「模型做不出来」，而是「做出来以后不稳定、
+不可信、接不上、跑不动、养不起」。
+
+\subsection{挑战与缓解措施}
+
+\begin{longtable}{p{2.5cm}p{4.5cm}p{4.5cm}p{3.5cm}}
+\toprule
+\textbf{挑战} & \textbf{表现} & \textbf{缓解措施} & \textbf{工程建议} \\
+\midrule
+\endhead
+数据质量 & 点位缺失、时间戳不齐、传感器漂移 & 设备台账、点位字典、时间同步、校准制度 & 先做「黄金数据样板间」 \\
+标注稀缺 & 罕见缺陷、早期故障样本少 & 异常检测、一类分类、弱监督、合成数据 & BMW 用 SORDI 合成数据提升效率 \\
+数据孤岛 & PLC/CNC/MES/QMS 各自为政 & OPC UA、MTConnect、统一主数据 & 统一设备ID、产品ID、工艺版本 \\
+模型泛化 & 换光照/批次/材料就掉点 & 分层模型、域自适应、漂移检测 & 规则兜底+人工复判双保险 \\
+安全可靠 & 误报多→告警疲劳，漏报→损失 & 影子运行→有限闭环，置信度阈值 & AI不绕过安全 PLC/控制器 \\
+实时性 & 云端延迟大、网络抖动 & 低延迟推理前移边缘，训练放云 & 质检/机器人→边缘；排程→平台 \\
+系统集成 & 账号权限、网络分区冲突 & OT分区分域、最小权限、白名单 & ISA/IEC 62443 全生命周期安全 \\
+人才协同 & 半年后无人维护 & MLOps、模型注册、版本管理 & 工艺负责人做业务 Owner \\
+组织合规 & 员工担忧、法务顾虑 & 人机协同岗位，EHS/法务前置 & 涉及员工数据必须合规评估 \\
+\bottomrule
+\caption{主要困难与工程缓解措施}
+\end{longtable}
+
+% ════════════════════════════════════════════════
+\section{实施路线图与优先级}
+
+最容易形成正循环的是：先抓一个损失清晰的瓶颈场景，先做可观测、可验证的小闭环，
+再复制到同类工位、同类设备或同类工厂。
+
+\subsection{试点选择}
+
+\begin{tabular}{p{5.5cm}p{5.5cm}p{5.5cm}}
+\toprule
+\textbf{维度} & \textbf{高优先级} & \textbf{低优先级} \\
+\midrule
+业务价值 & 停机损失高、返工废品高、人工复检多 & 价值难量化、只能靠主观感受 \\
+数据条件 & 已有设备数据/图像/工单/质量记录 & 数据未采集，全靠纸面记录 \\
+工艺稳定性 & 工序稳定、节拍明确 & 极高定制、几乎无重复样本 \\
+风险控制 & 先影子运行，不进入安全闭环 & 一上来就想控制安全关键动作 \\
+复制性 & 同类设备多、跨线复用潜力大 & 只能服务单个孤立工位 \\
+\bottomrule
+\end{tabular}
+
+\subsection{首推三类 MVP}
+
+\begin{enumerate}
+\item 终检或关键工序视觉质检 —— 人工基线易建立、节拍明确、标签可控
+\item 高价值设备或机器人单元预测维护 —— 停机损失清晰，已有日志和控制数据
+\item 瓶颈工序排程优化 —— 交付、在制品和换型时间都能直接量化
+\end{enumerate}
+
+\subsection{建议路线图}
+
+\begin{longtable}{p{2cm}p{3.5cm}p{5cm}p{2.5cm}}
+\toprule
+\textbf{阶段} & \textbf{目标} & \textbf{关键交付物} & \textbf{周期} \\
+\midrule
+\endhead
+诊断立项 & 明确痛点、基线KPI、风险边界 & 现状图、设备台账、ROI假设 & 2--4周 \\
+数据打底 & 接通数据、建立标签和主数据 & 数据管道、点位字典、基线看板 & 4--8周 \\
+MVP开发 & 离线训练、回放验证 & MVP模型、评估报告、上线SOP & 8--12周 \\
+影子运行 & 旁路推荐和在线评估 & 影子日志、回退机制、版本管理 & 4--8周 \\
+小范围闭环 & 限定工位/班次上线、保留审批 & KPI复盘、告警闭环、运维规范 & 8--12周 \\
+复制平台化 & 复制到同类工位/工厂 & 模型模板、数据标准、MLOps审计 & 3--12月 \\
+\bottomrule
+\caption{建议实施路线图}
+\end{longtable}
+
+\subsection{评估指标}
+
+\begin{tabular}{p{3cm}p{6cm}p{6cm}}
+\toprule
+\textbf{场景} & \textbf{业务指标} & \textbf{模型指标} \\
+\midrule
+维护 & 避免停机分钟数、MTBF、MTTR、OEE & 误报率、漏报率、预警提前时间 \\
+质量 & 首检合格率、漏检率、返修率、废品率 & 检出率、过杀率、mAP \\
+排程 & 准交率、在制品、换型时间、计划稳定性 & 计划达成偏差、重排频率 \\
+设计 & 设计周期、材料/重量变化、试验通过率 & 方案生成质量、知识检索命中率 \\
+\bottomrule
+\end{tabular}
+
+\subsection{团队配置}
+
+最少需要一个跨职能小组：
+
+\begin{tabular}{>{\bfseries}lp{12cm}}
+工艺负责人 & 定义业务约束 \\
+设备/OT 工程师 & 采集、控制边界和现场接入 \\
+数据工程师 & 数据流与主数据 \\
+算法工程师 & 模型与评估 \\
+MES/IT 架构师 & 系统集成 \\
+质量/EHS/安全负责人 & 上线前审查 \\
+财务/工厂负责人 & ROI 和资源拍板 \\
+\end{tabular}
+
+% ════════════════════════════════════════════════
+\section{风险合规与附录}
+
+AI 合规不是「上线后再看」，而是必须前置到方案设计阶段。
+
+\subsection{关键风险与底线}
+
+\begin{longtable}{p{3cm}p{4.5cm}p{7cm}}
+\toprule
+\textbf{主题} & \textbf{风险点} & \textbf{建议底线} \\
+\midrule
+\endhead
+设备与机器人安全 & AI 建议直接下发到安全回路 & 遵循 ISO 10218、ISO 13849；AI 优先停留在任务层 \\
+工控网络安全 & 新增边缘设备扩大攻击面 & ISA/IEC 62443 分区分域、最小权限 \\
+中国法律合规 & 数据处理、跨境提供 & 《数据安全法》《网络数据安全管理条例》 \\
+个人信息保护 & 视觉质检中员工影像/声音 & 《个人信息保护法》最小化采集、目的限定 \\
+生成式 AI & 大模型开放给外部 & 《生成式人工智能服务管理暂行办法》 \\
+知识产权 & CAD/BOM/工艺窗口/故障机理 & 外部模型服务隔离；重要图纸优先本地部署 \\
+\bottomrule
+\caption{关键风险与合规底线}
+\end{longtable}
+
+\subsection{工具与平台}
+
+\begin{tabular}{>{\bfseries}lp{10cm}}
+\toprule
+\textbf{类别} & \textbf{推荐工具/平台} \\
+\midrule
+设备互联 & OPC UA、MTConnect \\
+边缘部署 & Siemens Industrial Edge、OpenVINO \\
+视觉模型 & Ultralytics YOLO、PaddleDetection、SAM \\
+数字孪生与机器人仿真 & NVIDIA Omniverse、Isaac Sim、OpenUSD \\
+机器人软件栈 & ROS 2、ROS-Industrial \\
+数据标注 & CVAT、Label Studio \\
+文档解析与知识助手 & PaddleOCR、Qwen \\
+\bottomrule
+\end{tabular}
+
+\subsection{核心参考资料}
+
+\begin{enumerate}
+\item 中国信通院 —— 人工智能发展与治理年度报告
+\item 工信系统 —— 机械细分行业数字化转型实践样本
+\item 标准组织 —— ISO 23247、OPC UA、MTConnect、ISA/IEC 62443、ISO 10218、ISO 13849
+\item 厂商案例 —— 三一、徐工、BMW、FANUC、Autodesk/Honda
+\end{enumerate}
+
+% ════════════════════════════════════════════════
+\section*{结语}
+
+\vspace{8pt}
+\begin{keypoint}
+把「AI 赋能工业流程」压缩成最朴素的一句话：
+\textbf{让机械企业的设计、制造、维护和服务，第一次能在同一条数据主线上
+持续学习、持续优化、持续复制。}
+这也是机械领域 AI 真正的落地方向。
+\end{keypoint}
+
+\end{document}

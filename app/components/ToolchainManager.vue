@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { open } from '@tauri-apps/plugin-dialog'
-import { onMounted, onUnmounted, reactive, ref } from 'vue'
+import { onActivated, onMounted, onUnmounted, reactive, ref } from 'vue'
 import type { SimfeaClient } from '@/api/simfeaClient'
 import type { SolverInstallation } from '@/types'
 
@@ -183,6 +183,7 @@ async function installSolver(alias: string) {
 }
 
 onMounted(loadInstallations)
+onActivated(loadInstallations)
 </script>
 
 <template>
@@ -272,7 +273,7 @@ onMounted(loadInstallations)
 
             <!-- Install error -->
             <div v-if="installError[selectedSolver()!.alias]" class="property-block">
-              <p style="color: #ef4444">{{ installError[selectedSolver()!.alias] }}</p>
+              <p class="toolchain-error">{{ installError[selectedSolver()!.alias] }}</p>
             </div>
 
             <!-- Verify output -->
@@ -293,7 +294,7 @@ onMounted(loadInstallations)
             </div>
           </div>
         </template>
-        <div v-else style="padding: 48px 16px; text-align: center; color: #9ca6b8; font-size: 0.78rem">
+        <div v-else style="padding: 48px 16px; text-align: center; color: var(--text-muted); font-size: 0.78rem">
           ← 从左侧选择一个求解器
         </div>
       </aside>
@@ -309,5 +310,6 @@ onMounted(loadInstallations)
 <style scoped>
 .install-bar { height: 8px; background: #1e2330; border-radius: 4px; overflow: hidden; margin: 6px 0; }
 .install-bar-fill { height: 100%; background: #8b5cf6; border-radius: 4px; transition: width 0.3s ease; }
-.tool-output { max-height: 160px; overflow-y: auto; padding: 8px; background: #0f1116; border-radius: 4px; font-size: 0.62rem; color: #9ca6b8; margin-top: 6px; white-space: pre-wrap; }
+.tool-output { max-height: 160px; overflow-y: auto; padding: 8px; background: var(--bg-app); border-radius: 4px; font-size: 0.62rem; color: var(--text-muted); margin-top: 6px; white-space: pre-wrap; }
+.toolchain-error { color: var(--red); }
 </style>

@@ -1,0 +1,9 @@
+{"type":"run_started","seq":1,"timestamp":"2026-06-12T10:00:01+08:00","run_id":"demo_悬臂梁弯曲","data":{"solver":"calculix","command":"ccx.bat cantilever"}}
+{"type":"log_stdout","seq":2,"timestamp":"2026-06-12T10:00:01+08:00","run_id":"demo_悬臂梁弯曲","data":"CalculiX version 2.20, Copyright(C) 1998-2022 Guido Dhondt"}
+{"type":"log_stdout","seq":3,"timestamp":"2026-06-12T10:00:01+08:00","run_id":"demo_悬臂梁弯曲","data":"Reading input file: cantilever.inp"}
+{"type":"log_stdout","seq":4,"timestamp":"2026-06-12T10:00:01+08:00","run_id":"demo_悬臂梁弯曲","data":"Determining the structure of the matrix:"}
+{"type":"log_stdout","seq":5,"timestamp":"2026-06-12T10:00:01+08:00","run_id":"demo_悬臂梁弯曲","data":"number of equations: 2688"}
+{"type":"log_stdout","seq":6,"timestamp":"2026-06-12T10:00:01+08:00","run_id":"demo_悬臂梁弯曲","data":"Solving the system of equations..."}
+{"type":"log_stdout","seq":7,"timestamp":"2026-06-12T10:00:02+08:00","run_id":"demo_悬臂梁弯曲","data":"Writing frd file: cantilever.frd"}
+{"type":"log_stdout","seq":8,"timestamp":"2026-06-12T10:00:02+08:00","run_id":"demo_悬臂梁弯曲","data":"Job finished"}
+{"type":"run_finished","seq":9,"timestamp":"2026-06-12T10:00:02+08:00","run_id":"demo_悬臂梁弯曲","data":{"status":"finished","wall_seconds":0.1}}

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { createSimfeaClient } from '@/api/simfeaClient'
 import ResultEvidenceView from '@/components/ResultEvidenceView.vue'
 import type { GuidedQuestion, RunArchive } from '@/types'
@@ -15,8 +15,7 @@ const emit = defineEmits<{
   refresh: []
 }>()
 
-const localLog: string[] = []
-const api = createSimfeaClient(props.apiBaseUrl, (line) => localLog.push(line))
+const api = createSimfeaClient(props.apiBaseUrl, () => {})
 
 const questions = ref<GuidedQuestion[]>([])
 const answers = ref<Record<string, string>>({})
@@ -207,6 +206,7 @@ watch(
         <pre v-if="hasReport" class="detail-report"><code>{{ displayReport }}</code></pre>
         <p v-else class="empty-state">先保存引导问题笔记，系统会自动生成报告，也可以手动点击"生成报告"。</p>
       </div>
+
     </section>
   </div>
 </template>

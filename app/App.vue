@@ -1,16 +1,37 @@
 <script setup lang="ts">
 import { invoke } from '@tauri-apps/api/core'
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, KeepAlive, onMounted, onUnmounted, ref, watch } from 'vue'
 import { createSimfeaClient } from '@/api/simfeaClient'
+import AiChatView from '@/components/AiChatView.vue'
 import BenchmarkLab from '@/components/BenchmarkLab.vue'
+import ChatTaskInput from '@/components/ChatTaskInput.vue'
+import ConnectionStatus from '@/components/ConnectionStatus.vue'
+import ExperimentLab from '@/components/ExperimentLab.vue'
 import LearningLibrary from '@/components/LearningLibrary.vue'
+import MethodLabView from '@/components/MethodLabView.vue'
+import PropertyPanel from '@/components/PropertyPanel.vue'
+import ResearchView from '@/components/ResearchView.vue'
 import RunDetailView from '@/components/RunDetailView.vue'
+import SolverDevView from '@/components/SolverDevView.vue'
+import SystemStatus from '@/components/SystemStatus.vue'
 import ToolchainManager from '@/components/ToolchainManager.vue'
+import WorkflowTree from '@/components/WorkflowTree.vue'
+import { useAppSettings } from '@/composables/useAppSettings'
 import { useRemoteRuns } from '@/composables/useRemoteRuns'
 import { useRunEvents } from '@/composables/useRunEvents'
 import { useSidecarListeners } from '@/composables/useSidecarListeners'
+import { useWorkflowState } from '@/composables/useWorkflowState'
+import type { WorkflowSlotId, WorkflowStatus, WorkflowToolOption } from '@/composables/workflowConfig'
+import {
+  allTools,
+  defaultToolSelections,
+  downstreamOrder,
+  solverToolCompat,
+  toolToSolverAlias,
+} from '@/composables/workflowConfig'
 import type { RunArchive, ToolchainItem } from '@/types'
 import { resolveApiBaseUrl } from '@/utils/apiBaseUrl'
+import { formatDate } from '@/utils/date'
 
 const configuredApiBaseUrl = import.meta.env.VITE_SIMFEA_API_BASE_URL as string | undefined
 const apiBaseUrl = resolveApiBaseUrl(configuredApiBaseUrl, window.location.hostname)
@@ -44,26 +65,6 @@ interface JobTemplate {
 
 type JobMode = 'single' | 'pipeline'
 type UploadMode = 'single-file' | 'folder'
-type WorkflowSlotId = 'geometry' | 'mesh' | 'material' | 'boundary' | 'solver' | 'post' | 'validation'
-type WorkflowStatus = 'ready' | 'neutral' | 'blocked' | 'running'
-
-interface WorkflowToolOption {
-  id: string
-  label: string
-  output: string
-}
-
-interface WorkflowSlotView {
-  id: WorkflowSlotId
-  order: number
-  title: string
-  subtitle: string
-  detail: string
-  status: WorkflowStatus
-  statusLabel: string
-  tools: WorkflowToolOption[]
-  selectedTool: WorkflowToolOption
-}
 
 interface PipelineStep {
   id: string
@@ -128,37 +129,6 @@ const workerOptions = [
   { alias: 'elmer', label: 'Elmer', kind: '多物理场' },
 ]
 
-const toolToSolverAlias: Record<string, string | null> = {
-  'freecad-step': 'freecad',
-  gmsh: 'gmsh',
-  prepomax: 'prepomax',
-  calculix: 'calculix',
-  'ansys-mapdl': 'ansys-mapdl',
-  elmer: 'elmer',
-  'frd-vtk': 'frd_to_vtk',
-  'summary-json': 'summary-json',
-  'import-inp': null,
-  'manual-case': null,
-  'inp-mesh': null,
-  'inp-material': null,
-  'material-form': null,
-  'yaml-material': null,
-  'inp-boundary': null,
-  'bc-form': null,
-  'benchmark-load': null,
-  'vtk-viewer': null,
-  'benchmark-lab': null,
-  'analytic-check': null,
-  'mapdl-compare': null,
-  blockmesh: null,
-  snappyhexmesh: null,
-  elmergrid: null,
-  openfoam: 'openfoam',
-  paraview: null,
-  foamtovtk: null,
-  elmervtk: null,
-}
-
 const nodeModeOptions = [
   { value: 'local', label: '本地工作站' },
   { value: 'ssh', label: 'SSH 远程' },
@@ -205,7 +175,8 @@ const fileCheckHint = computed(() => {
   return `缺少 ${check.ext.join(' 或 ')} 文件，请检查`
 })
 
-const selectedWorker = ref('calculix')
+const settings = useAppSettings()
+const selectedWorker = settings.selectedWorker
 const nodeMode = ref('local')
 
 watch(nodeMode, (mode) => {
@@ -213,39 +184,49 @@ watch(nodeMode, (mode) => {
     selectedComputeNode.value = 'local'
   }
 })
-const jobName = ref(`结构验证_${new Date().toISOString().slice(0, 10)}`)
-const customArgs = ref('')
-const timeoutMinutes = ref('')
+
+watch(selectedComputeNode, (v) => {
+  settings.selectedComputeNode.value = v
+})
+const jobName = ref(settings.jobName.value || `结构验证_${new Date().toISOString().slice(0, 10)}`)
+watch(jobName, (v) => {
+  settings.jobName.value = v
+})
+const customArgs = settings.customArgs
+const timeoutMinutes = settings.timeoutMinutes
 const jobMode = ref<JobMode>('single')
 const uploadMode = ref<UploadMode>('single-file')
-const singleInputFormat = ref('.inp')
-const selectedWorkflowSlotId = ref<WorkflowSlotId>('solver')
-const workflowToolSelection = ref<Record<WorkflowSlotId, string>>({
-  geometry: 'import-inp',
-  mesh: 'inp-mesh',
-  material: 'inp-material',
-  boundary: 'inp-boundary',
-  solver: 'calculix',
-  post: 'frd-vtk',
-  validation: 'benchmark-lab',
-})
+const {
+  selectedWorkflowSlotId,
+  dirtyNodes,
+  enabledNodes,
+  workflowToolSelection,
+  toggleNodeEnabled,
+  applyPreset,
+  markDirty,
+  clearDirtyNodes,
+  buildWorkflowSolverSteps,
+  buildStepsFromNode,
+} = useWorkflowState()
+
+// Init workflow tool selections from persisted settings
+if (Object.keys(settings.workflowToolSelections.value).length > 0) {
+  workflowToolSelection.value = { ...workflowToolSelection.value, ...settings.workflowToolSelections.value }
+}
+watch(
+  workflowToolSelection,
+  (v) => {
+    settings.workflowToolSelections.value = { ...v }
+  },
+  { deep: true }
+)
+
 const contextMenu = ref<{ show: boolean; x: number; y: number; slotId: WorkflowSlotId | null }>({
   show: false,
   x: 0,
   y: 0,
   slotId: null,
 })
-
-const defaultToolSelections: Record<WorkflowSlotId, string> = {
-  geometry: 'import-inp',
-  mesh: 'inp-mesh',
-  material: 'inp-material',
-  boundary: 'inp-boundary',
-  solver: 'calculix',
-  post: 'frd-vtk',
-  validation: 'benchmark-lab',
-}
-
 const statusIcon: Record<WorkflowStatus, string> = {
   ready: '✓',
   neutral: '—',
@@ -255,6 +236,7 @@ const statusIcon: Record<WorkflowStatus, string> = {
 
 const instanceFolderName = ref('')
 const uploadedInputFiles = ref<UploadedInputFile[]>([])
+const uploadedRawFiles = ref<File[]>([])
 const savedJobTemplates = ref<JobTemplate[]>([])
 const pipelineSteps = ref<PipelineStep[]>([
   { id: 'step-freecad', launcher: 'FreeCAD', inputName: 'model.FCStd' },
@@ -263,51 +245,6 @@ const pipelineSteps = ref<PipelineStep[]>([
   { id: 'step-archive', launcher: '归档', inputName: 'result bundle' },
 ])
 const queueItems = ref<QueueItem[]>([])
-const isFileDragActive = ref(false)
-const showSolverConfig = ref(false)
-
-const downstreamOrder: WorkflowSlotId[] = [
-  'geometry',
-  'mesh',
-  'material',
-  'boundary',
-  'solver',
-  'post',
-  'validation',
-]
-const dirtyNodes = ref<Set<WorkflowSlotId>>(new Set())
-const enabledNodes = ref<Set<WorkflowSlotId>>(new Set(downstreamOrder))
-
-function toggleNodeEnabled(slotId: WorkflowSlotId) {
-  const next = new Set(enabledNodes.value)
-  if (next.has(slotId)) {
-    next.delete(slotId)
-  } else {
-    next.add(slotId)
-  }
-  enabledNodes.value = next
-}
-
-function applyPreset(name: string) {
-  if (name === 'full') {
-    enabledNodes.value = new Set(downstreamOrder)
-  } else if (name === 'solver-only') {
-    enabledNodes.value = new Set(['solver'])
-  } else if (name === 'geom-solver') {
-    enabledNodes.value = new Set(['geometry', 'solver'])
-  }
-}
-
-function markDirty(slotId: WorkflowSlotId) {
-  const idx = downstreamOrder.indexOf(slotId)
-  for (let i = idx; i < downstreamOrder.length; i++) {
-    dirtyNodes.value.add(downstreamOrder[i])
-  }
-}
-
-function clearDirtyNodes() {
-  dirtyNodes.value = new Set()
-}
 
 const finishedRunCount = computed(() => archivedRuns.value.filter((run) => run.status === 'finished').length)
 const failedRunCount = computed(() => archivedRuns.value.filter((run) => run.status === 'failed').length)
@@ -353,7 +290,11 @@ const workstationReady = computed(() => status.value.connected && selectedWorker
 
 const selectedInputs = computed(() => selectedRun.value?.input_files ?? [])
 
-const recentRuns = computed(() => archivedRuns.value.slice(0, 6))
+const MAX_RECENT_RUNS = 6
+const MAX_QUEUE_ITEMS = 8
+const MAX_SAVED_TEMPLATES = 6
+
+const recentRuns = computed(() => archivedRuns.value.slice(0, MAX_RECENT_RUNS))
 
 const mainInputFile = computed(() => uploadedInputFiles.value[0]?.name || '尚未选择输入文件')
 
@@ -365,75 +306,7 @@ const latestRunStatus = computed(() => {
 })
 
 // Base tool definitions — each tool must appear here exactly once
-const allTools: Record<WorkflowSlotId, WorkflowToolOption[]> = {
-  geometry: [
-    { id: 'import-inp', label: '导入 .inp', output: 'mesh-ready inp' },
-    { id: 'freecad-step', label: 'FreeCAD / STEP', output: '.step / .FCStd' },
-    { id: 'manual-case', label: '手写算例', output: 'case folder' },
-  ],
-  mesh: [
-    { id: 'inp-mesh', label: '沿用 .inp 网格', output: '*.inp' },
-    { id: 'gmsh', label: 'Gmsh', output: '*.msh / *.inp' },
-    { id: 'prepomax', label: 'PrePoMax', output: '*.inp' },
-    { id: 'blockmesh', label: 'blockMesh', output: 'polyMesh' },
-    { id: 'snappyhexmesh', label: 'snappyHexMesh', output: 'polyMesh' },
-    { id: 'elmergrid', label: 'ElmerGrid', output: 'mesh.*' },
-  ],
-  material: [
-    { id: 'inp-material', label: '沿用 .inp 材料', output: '*MATERIAL' },
-    { id: 'material-form', label: '表单编辑', output: 'material block' },
-    { id: 'yaml-material', label: 'YAML 材料库', output: 'materials.yaml' },
-  ],
-  boundary: [
-    { id: 'inp-boundary', label: '沿用 .inp 边界', output: '*BOUNDARY / *CLOAD' },
-    { id: 'bc-form', label: '边界条件表单', output: 'bc block' },
-    { id: 'benchmark-load', label: 'Benchmark 载荷', output: 'reference load' },
-  ],
-  solver: [
-    { id: 'calculix', label: 'CalculiX', output: '.frd / .dat' },
-    { id: 'ansys-mapdl', label: 'ANSYS MAPDL', output: '.rst / text result' },
-    { id: 'elmer', label: 'Elmer', output: 'Elmer results' },
-    { id: 'openfoam', label: 'OpenFOAM', output: 'foam case' },
-  ],
-  post: [
-    { id: 'frd-vtk', label: 'FRD -> VTK', output: '.vtk' },
-    { id: 'summary-json', label: '结果摘要提取', output: 'result_summary.json' },
-    { id: 'vtk-viewer', label: 'VTK Viewer', output: 'viewport' },
-    { id: 'paraview', label: 'ParaView', output: 'screenshot / data' },
-    { id: 'foamtovtk', label: 'foamToVTK', output: '.vtk' },
-    { id: 'elmervtk', label: 'ElmerVTK', output: '.vtk' },
-  ],
-  validation: [
-    { id: 'benchmark-lab', label: 'Benchmark Lab', output: 'comparison.csv' },
-    { id: 'analytic-check', label: '解析解对比', output: 'error table' },
-    { id: 'mapdl-compare', label: 'MAPDL 对照', output: 'solver comparison' },
-  ],
-}
-
 // Solver → compatible tool ids per slot (only declare slots that DIFFER from allTools)
-const solverToolCompat: Record<string, Partial<Record<WorkflowSlotId, string[]>>> = {
-  calculix: {
-    mesh: ['inp-mesh', 'gmsh', 'prepomax'],
-    post: ['frd-vtk', 'summary-json', 'vtk-viewer'],
-  },
-  'ansys-mapdl': {
-    mesh: ['inp-mesh', 'gmsh'],
-    post: ['frd-vtk', 'summary-json', 'vtk-viewer'],
-    validation: ['benchmark-lab', 'analytic-check', 'mapdl-compare'],
-  },
-  elmer: {
-    mesh: ['gmsh', 'elmergrid'],
-    post: ['elmervtk', 'summary-json', 'vtk-viewer'],
-    validation: ['benchmark-lab', 'analytic-check'],
-  },
-  openfoam: {
-    geometry: ['manual-case'],
-    mesh: ['blockmesh', 'snappyhexmesh', 'gmsh'],
-    post: ['paraview', 'foamtovtk', 'summary-json'],
-    validation: ['benchmark-lab'],
-  },
-}
-
 function buildToolsForSolver(slotId: WorkflowSlotId): WorkflowToolOption[] {
   const compatIds = solverToolCompat[selectedWorker.value]?.[slotId]
   const allSlotTools = allTools[slotId]
@@ -492,25 +365,34 @@ function selectedWorkflowTool(slotId: WorkflowSlotId) {
 }
 
 function workflowStatus(slotId: WorkflowSlotId): WorkflowStatus {
-  // Running/blocked takes priority
+  const hasFiles = uploadedInputFiles.value.length > 0
+
+  // Solver states
   if (slotId === 'solver' && remoteStatus.value.running) return 'running'
   if (slotId === 'solver' && !selectedWorkerReady.value) return 'blocked'
-  // Dirty: needs update → ⚡
-  if (dirtyNodes.value.has(slotId)) return 'neutral'
-  // Otherwise check data availability
-  if (slotId === 'geometry') return uploadedInputFiles.value.length > 0 ? 'ready' : 'neutral'
+
+  // Dependent slots: only ready when upstream is satisfied
+  if (slotId === 'geometry') return hasFiles ? 'ready' : 'neutral'
+  if (slotId === 'mesh') return hasFiles ? 'ready' : 'neutral'
+  if (slotId === 'material') return hasFiles ? 'ready' : 'neutral'
+  if (slotId === 'boundary') return hasFiles ? 'ready' : 'neutral'
   if (slotId === 'solver') return 'ready'
-  if (slotId === 'post' || slotId === 'validation') return latestRun.value ? 'ready' : 'neutral'
-  return workflowToolSelection.value.geometry === 'import-inp' ? 'ready' : 'neutral'
+  if (slotId === 'post') return latestRun.value ? 'ready' : 'neutral'
+  if (slotId === 'validation') return latestRun.value ? 'ready' : 'neutral'
+
+  return 'neutral'
 }
 
 function workflowStatusLabel(slotId: WorkflowSlotId) {
-  const status = workflowStatus(slotId)
-  if (status === 'running') return '运行中'
-  if (status === 'blocked') return '待配置'
   if (dirtyNodes.value.has(slotId)) return '需更新'
-  if (status === 'ready') return '已就绪'
-  return '待输入'
+  return statusLabelMap[workflowStatus(slotId)] ?? '待输入'
+}
+
+const statusLabelMap: Record<WorkflowStatus, string> = {
+  ready: '已就绪',
+  neutral: '待输入',
+  running: '运行中',
+  blocked: '待配置',
 }
 
 const workflowSlots = computed<WorkflowSlotView[]>(() => [
@@ -672,18 +554,6 @@ function statusTone(statusText: string) {
   return 'neutral'
 }
 
-function formatDate(value?: string | null) {
-  if (!value) return '暂无'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  return new Intl.DateTimeFormat('zh-CN', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(date)
-}
-
 function metricValue(run: RunArchive | null, key: 'max_displacement_mm' | 'max_von_mises_mpa') {
   const value = run?.summary?.metrics?.[key]
   return typeof value === 'number' ? value.toFixed(3) : '暂无'
@@ -693,12 +563,6 @@ function artifactSummary(run: RunArchive | null) {
   const artifacts = run?.artifacts?.filter((artifact) => artifact !== 'artifacts/result_summary.json') ?? []
   if (artifacts.length === 0) return '暂无产物'
   return artifacts.slice(0, 3).join(' / ')
-}
-
-function formatFileSize(size: number) {
-  if (size < 1024) return `${size} B`
-  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
-  return `${(size / 1024 / 1024).toFixed(1)} MB`
 }
 
 function mapQueueTone(statusText: QueueItem['status']) {
@@ -734,7 +598,7 @@ function createQueueItem(mode: JobMode) {
     logs: [`[queue] 已提交任务，输入模式：${inputMode}`],
     createdAt: new Date().toISOString(),
   }
-  queueItems.value = [item, ...queueItems.value].slice(0, 8)
+  queueItems.value = [item, ...queueItems.value].slice(0, MAX_QUEUE_ITEMS)
   return item.id
 }
 
@@ -757,7 +621,9 @@ function toggleQueueLog(id: string) {
 
 function acceptInputFiles(files: FileList | null) {
   if (!files || files.length === 0) return
-  uploadedInputFiles.value = Array.from(files).map((file) => ({
+  const arr = Array.from(files)
+  uploadedRawFiles.value = arr
+  uploadedInputFiles.value = arr.map((file) => ({
     name: file.name,
     size: file.size,
   }))
@@ -766,7 +632,6 @@ function acceptInputFiles(files: FileList | null) {
 }
 
 function handleFileDrop(event: DragEvent) {
-  isFileDragActive.value = false
   acceptInputFiles(event.dataTransfer?.files ?? null)
 }
 
@@ -789,7 +654,7 @@ function saveCurrentTemplate() {
     files: [...uploadedInputFiles.value],
     savedAt: new Date().toISOString(),
   }
-  savedJobTemplates.value = [template, ...savedJobTemplates.value].slice(0, 6)
+  savedJobTemplates.value = [template, ...savedJobTemplates.value].slice(0, MAX_SAVED_TEMPLATES)
   appendLog(`[template] 已保存模板：${template.name}`)
 }
 
@@ -800,19 +665,6 @@ function applyTemplate(template: JobTemplate) {
   nodeMode.value = template.nodeMode
   uploadedInputFiles.value = [...template.files]
   appendLog(`[template] 已载入模板：${template.name}`)
-}
-
-function buildWorkflowSolverSteps(): string[] {
-  const result: string[] = []
-  for (const slotId of downstreamOrder) {
-    if (!enabledNodes.value.has(slotId)) continue
-    const toolId = workflowToolSelection.value[slotId]
-    const solverAlias = toolToSolverAlias[toolId]
-    if (solverAlias) {
-      result.push(solverAlias)
-    }
-  }
-  return result
 }
 
 function handleNodeContextMenu(slotId: WorkflowSlotId, event: MouseEvent) {
@@ -828,19 +680,6 @@ function switchNodeTool(slotId: WorkflowSlotId, toolId: string) {
   workflowToolSelection.value = { ...workflowToolSelection.value, [slotId]: toolId }
   markDirty(slotId)
   closeContextMenu()
-}
-
-function buildStepsFromNode(slotId: WorkflowSlotId): string[] {
-  const idx = downstreamOrder.indexOf(slotId)
-  const result: string[] = []
-  for (let i = idx; i < downstreamOrder.length; i++) {
-    const sid = downstreamOrder[i]
-    if (!enabledNodes.value.has(sid)) continue
-    const toolId = workflowToolSelection.value[sid]
-    const solverAlias = toolToSolverAlias[toolId]
-    if (solverAlias) result.push(solverAlias)
-  }
-  return result
 }
 
 function updateNode(slotId: WorkflowSlotId) {
@@ -865,6 +704,7 @@ function resetNodeTool(slotId: WorkflowSlotId) {
 
 function removeInputFile(name: string) {
   uploadedInputFiles.value = uploadedInputFiles.value.filter((f) => f.name !== name)
+  uploadedRawFiles.value = uploadedRawFiles.value.filter((f) => f.name !== name)
   appendLog(`[upload] 已移除文件：${name}`)
 }
 
@@ -889,6 +729,88 @@ function handleTreeKeydown(event: KeyboardEvent) {
     }
     selectedWorkflowSlotId.value = slotOrder[nextIdx]
   }
+}
+
+function handleTaskTranslated(config: {
+  solver: string
+  caseName: string
+  explanation: string
+  suggestedParams: Record<string, string>
+}) {
+  if (solvers.value.find((s) => s.alias === config.solver)) {
+    selectedWorker.value = config.solver
+  }
+  if (config.caseName) {
+    jobName.value = config.caseName
+  }
+  appendLog(`[ai] ${config.explanation}`)
+}
+
+// Preflight check
+const preflightRunning = ref(false)
+const preflightResult = ref<Record<string, unknown> | null>(null)
+const preflightError = ref('')
+
+async function runPreflightCheck() {
+  preflightRunning.value = true
+  preflightResult.value = null
+  preflightError.value = ''
+  try {
+    // Read file content from uploaded file, or use solver default
+    let content = ''
+    if (uploadedRawFiles.value.length > 0) {
+      content = await uploadedRawFiles.value[0].text()
+    } else {
+      content = getDefaultInpContent()
+    }
+    const resp = await fetch(`${apiBaseUrl}/v1/preflight`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content }),
+    })
+    const j = await resp.json()
+    if (resp.ok) {
+      preflightResult.value = j.data as Record<string, unknown>
+    } else {
+      preflightError.value = (j.detail as string) || '检查失败'
+    }
+  } catch (err) {
+    preflightError.value = String(err)
+  } finally {
+    preflightRunning.value = false
+  }
+}
+
+function getDefaultInpContent(): string {
+  // Return the default cantilever template from the selected solver
+  const solver = solvers.value.find((s) => s.alias === selectedWorker.value)
+  // The solver's input_files template is not exposed through the public API
+  // Use a basic CalculiX template
+  return `*HEADING
+Preflight Check
+*NODE, NSET=Nall
+1, 0., 0., 0.
+2, 100., 0., 0.
+*ELEMENT, TYPE=B31, ELSET=beam
+1, 1, 2
+*MATERIAL, NAME=steel
+*ELASTIC
+210000., 0.3
+*BEAM SECTION, ELSET=beam, MATERIAL=steel, SECTION=RECT
+20., 20.
+0., 0., 1.
+*BOUNDARY
+1, 1, 6
+*STEP
+*STATIC
+*CLOAD
+2, 2, -100.
+*NODE FILE
+U
+*EL FILE, ELSET=beam
+S
+*END STEP
+`
 }
 
 function submitConfiguredJob() {
@@ -969,37 +891,50 @@ const selectRunAction = async (runId: string) => {
   selectedRun.value = result.data
 }
 
-const connectServerAction = async () => {
-  try {
-    const result = await api.connect()
-    status.value = {
-      connected: true,
-      host: result.data.host,
-      pid: String(result.data.pid),
-      runsRoot: result.data.runs_root,
-      configPath: result.data.config_path,
-      learningExportRoot: result.data.learning_export_root,
-      learningFormats: result.data.learning_formats ?? ['md', 'json', 'txt'],
-      learningDefaultFormat: result.data.learning_default_format ?? 'md',
-      message: '本地侧车服务连接成功。',
+const connectServerAction = async (retries = 5, delayMs = 1000) => {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const result = await api.connect()
+      status.value = {
+        connected: true,
+        host: result.data.host,
+        pid: String(result.data.pid),
+        runsRoot: result.data.runs_root,
+        configPath: result.data.config_path,
+        learningExportRoot: result.data.learning_export_root,
+        learningFormats: result.data.learning_formats ?? ['md', 'json', 'txt'],
+        learningDefaultFormat: result.data.learning_default_format ?? 'md',
+        message: '本地侧车服务连接成功。',
+      }
+      remoteRuns.setComputeNodes(result.data.compute_nodes ?? [], result.data.default_compute_node ?? '')
+      // Restore persisted compute node if available
+      const savedNode = settings.selectedComputeNode.value
+      if (savedNode && computeNodes.value.find((n) => n.alias === savedNode)) {
+        selectedComputeNode.value = savedNode
+      }
+      remoteRuns.setSolvers(result.data.solvers ?? [])
+      toolchainItems.value = result.data.toolchain ?? []
+      await loadRunsAction()
+      return
+    } catch (err) {
+      if (attempt < retries) {
+        appendLog(`[connect] 尝试 ${attempt}/${retries} 失败，${delayMs / 1000}s 后重试…`)
+        await new Promise((r) => setTimeout(r, delayMs))
+      } else {
+        status.value = {
+          connected: false,
+          host: '',
+          pid: '',
+          runsRoot: '',
+          configPath: '',
+          learningExportRoot: '',
+          learningFormats: ['md', 'json', 'txt'],
+          learningDefaultFormat: 'md',
+          message: '连接失败，请确认 FastAPI sidecar 已启动。',
+        }
+        appendLog(`[connect] ${err}`)
+      }
     }
-    remoteRuns.setComputeNodes(result.data.compute_nodes ?? [], result.data.default_compute_node ?? '')
-    remoteRuns.setSolvers(result.data.solvers ?? [])
-    toolchainItems.value = result.data.toolchain ?? []
-    await loadRunsAction()
-  } catch (err) {
-    status.value = {
-      connected: false,
-      host: '',
-      pid: '',
-      runsRoot: '',
-      configPath: '',
-      learningExportRoot: '',
-      learningFormats: ['md', 'json', 'txt'],
-      learningDefaultFormat: 'md',
-      message: '连接失败，请确认 FastAPI sidecar 已启动。',
-    }
-    appendLog(`[connect] ${err}`)
   }
 }
 
@@ -1072,8 +1007,21 @@ onUnmounted(() => {
   window.removeEventListener('keydown', handleKeydown)
 })
 
-type AppView = 'composer' | 'run-detail' | 'learning-library' | 'toolchain-manager' | 'benchmark-lab'
-const currentView = ref<AppView>('composer')
+type AppView =
+  | 'composer'
+  | 'run-detail'
+  | 'learning-library'
+  | 'method-lab'
+  | 'ai-chat'
+  | 'experiment'
+  | 'research'
+  | 'toolchain-manager'
+  | 'benchmark-lab'
+  | 'solver-dev'
+const currentView = ref<AppView>((settings.lastView.value as AppView) || 'composer')
+watch(currentView, (v) => {
+  settings.lastView.value = v
+})
 const detailRunId = ref<string | null>(null)
 
 function navigateTo(view: AppView) {
@@ -1100,8 +1048,8 @@ function backToComposer() {
         :class="{ active: currentView === 'composer' }"
         @click="navigateTo('composer')"
       >
-        <span class="nav-icon" aria-hidden="true">▦</span>
-        <span class="nav-label">作业区</span>
+        <span class="nav-icon" aria-hidden="true">⚙</span>
+        <span class="nav-label">作业</span>
       </button>
       <button
         type="button"
@@ -1109,8 +1057,44 @@ function backToComposer() {
         :class="{ active: currentView === 'learning-library' }"
         @click="navigateTo('learning-library')"
       >
-        <span class="nav-icon" aria-hidden="true">▤</span>
-        <span class="nav-label">学习库</span>
+        <span class="nav-icon" aria-hidden="true">📚</span>
+        <span class="nav-label">学习</span>
+      </button>
+      <button
+        type="button"
+        class="nav-item"
+        :class="{ active: currentView === 'method-lab' }"
+        @click="navigateTo('method-lab')"
+      >
+        <span class="nav-icon" aria-hidden="true">M</span>
+        <span class="nav-label">方法</span>
+      </button>
+      <button
+        type="button"
+        class="nav-item"
+        :class="{ active: currentView === 'ai-chat' }"
+        @click="navigateTo('ai-chat')"
+      >
+        <span class="nav-icon" aria-hidden="true">AI</span>
+        <span class="nav-label">问答</span>
+      </button>
+      <button
+        type="button"
+        class="nav-item"
+        :class="{ active: currentView === 'experiment' }"
+        @click="navigateTo('experiment')"
+      >
+        <span class="nav-icon" aria-hidden="true">⟨⟩</span>
+        <span class="nav-label">实验</span>
+      </button>
+      <button
+        type="button"
+        class="nav-item"
+        :class="{ active: currentView === 'research' }"
+        @click="navigateTo('research')"
+      >
+        <span class="nav-icon" aria-hidden="true">R</span>
+        <span class="nav-label">研究</span>
       </button>
       <button
         type="button"
@@ -1118,8 +1102,17 @@ function backToComposer() {
         :class="{ active: currentView === 'benchmark-lab' }"
         @click="navigateTo('benchmark-lab')"
       >
-        <span class="nav-icon" aria-hidden="true">BL</span>
+        <span class="nav-icon" aria-hidden="true">⊞</span>
         <span class="nav-label">基准</span>
+      </button>
+      <button
+        type="button"
+        class="nav-item"
+        :class="{ active: currentView === 'solver-dev' }"
+        @click="navigateTo('solver-dev')"
+      >
+        <span class="nav-icon" aria-hidden="true">∫</span>
+        <span class="nav-label">求解器</span>
       </button>
       <button
         type="button"
@@ -1127,12 +1120,13 @@ function backToComposer() {
         :class="{ active: currentView === 'toolchain-manager' }"
         @click="navigateTo('toolchain-manager')"
       >
-        <span class="nav-icon" aria-hidden="true">TC</span>
-        <span class="nav-label">工具链</span>
+        <span class="nav-icon" aria-hidden="true">⚡</span>
+        <span class="nav-label">工具</span>
       </button>
     </nav>
 
-    <div v-if="currentView === 'composer'" class="view-container workbench-view">
+    <KeepAlive>
+      <div v-if="currentView === 'composer'" class="view-container workbench-view">
       <header class="workbench-topbar">
         <div class="workbench-titlebar">
           <div class="app-mark" aria-hidden="true">SF</div>
@@ -1140,11 +1134,15 @@ function backToComposer() {
           <span class="topbar-status" :class="status.connected ? 'online' : 'offline'">{{ status.connected ? '已连接' : '离线' }}</span>
         </div>
         <div class="workbench-commandbar" aria-label="工作台工具栏">
-          <button type="button" @click="navigateTo('learning-library')">学习库</button>
-          <button type="button" @click="navigateTo('benchmark-lab')">基准</button>
-          <button type="button" @click="navigateTo('toolchain-manager')">工具链</button>
+          <span class="topbar-status" :class="status.connected ? 'online' : 'offline'">{{ status.connected ? '● 已连接' : '○ 离线' }}</span>
         </div>
       </header>
+
+      <ChatTaskInput
+        :api-base-url="apiBaseUrl"
+        :disabled="remoteStatus.running"
+        @task-translated="handleTaskTranslated"
+      />
 
       <div v-if="remoteStatus.running" class="run-progress-bar" aria-label="求解器运行进度">
         <div class="progress-bar-strip" />
@@ -1155,210 +1153,69 @@ function backToComposer() {
       </div>
 
       <section class="workbench-layout" aria-label="SimFEA 项目原理图工作台">
-        <section class="schematic-pane" aria-label="项目原理图">
-          <div class="pane-title">项目原理图</div>
-          <div class="schematic-canvas">
-            <article class="schematic-system">
-              <header class="system-header">
-                <span class="system-letter">A</span>
-                <div>
-                  <strong>SimFEA Workflow Graph</strong>
-                  <p>固定仿真流程，节点工具可替换 / {{ activeComputeNodeLabel }}</p>
-                </div>
-              </header>
-              <div class="model-tree" aria-label="固定仿真流程节点" @keydown="handleTreeKeydown">
-                <!-- Presets -->
-                <div class="tree-presets">
-                  <button type="button" class="preset-btn" @click="applyPreset('full')">完整流程</button>
-                  <button type="button" class="preset-btn" @click="applyPreset('solver-only')">仅求解</button>
-                  <button type="button" class="preset-btn" @click="applyPreset('geom-solver')">几何+求解</button>
-                </div>
-                <template v-for="slot in workflowSlots" :key="slot.id">
-                  <!-- Group headers -->
-                  <div v-if="slot.id === 'geometry'" class="tree-group">前处理</div>
-                  <div v-if="slot.id === 'solver'" class="tree-group">求解</div>
-                  <div v-if="slot.id === 'post'" class="tree-group">后处理</div>
-                  <div
-                    class="tree-node"
-                    :class="[slot.status, { selected: selectedWorkflowSlotId === slot.id, disabled: !enabledNodes.has(slot.id) }]"
-                    tabindex="0"
-                    @click="selectedWorkflowSlotId = slot.id"
-                    @contextmenu.prevent="handleNodeContextMenu(slot.id, $event)"
-                  >
-                    <span
-                      class="tree-toggle"
-                      :class="{ off: !enabledNodes.has(slot.id) }"
-                      @click.stop="toggleNodeEnabled(slot.id)"
-                      title="点击启用/禁用"
-                    ></span>
-                    <span class="tree-icon" :class="[slot.status, { dirty: dirtyNodes.has(slot.id) }]"></span>
-                    <div class="tree-body">
-                      <div class="tree-head">
-                        <strong>{{ slot.title }}</strong>
-                        <span class="tree-state" :class="slot.status">{{ slot.statusLabel }}</span>
-                        <span class="tree-badge">{{ slot.selectedTool.label }}</span>
-                      </div>
-                      <small>{{ slot.selectedTool.output }}</small>
-                    </div>
-                    <span class="tree-arrow">›</span>
-                  </div>
-                  <!-- Geometry node: inline file upload + file list -->
-                  <div v-if="slot.id === 'geometry' && selectedWorkflowSlotId === 'geometry'" class="tree-extra">
-                    <label
-                      class="tree-upload"
-                      :class="{ active: isFileDragActive }"
-                      @click.stop
-                      @dragenter.prevent="isFileDragActive = true"
-                      @dragover.prevent="isFileDragActive = true"
-                      @dragleave.prevent="isFileDragActive = false"
-                      @drop.prevent="handleFileDrop"
-                    >
-                      <input type="file" multiple @change="handleFileInputChange" />
-                      <span class="tree-upload-icon">+</span>
-                      <span>{{ uploadedInputFiles.length ? mainInputFile : '选择或拖拽输入文件' }}</span>
-                      <small v-if="uploadedInputFiles.length">{{ uploadedInputFiles.length }} 个文件</small>
-                    </label>
-                    <p v-if="fileCheckHint" class="tree-hint" :class="{ ok: fileCheckHint.includes('可直接提交') }">{{ fileCheckHint }}</p>
-                    <div v-if="uploadedInputFiles.length" class="tree-files">
-                      <div v-for="file in uploadedInputFiles" :key="file.name" class="tree-file-item">
-                        <span class="tree-file-name">{{ file.name }}</span>
-                        <small>{{ formatFileSize(file.size) }}</small>
-                        <button type="button" class="tree-file-remove" @click.stop="removeInputFile(file.name)" title="移除">×</button>
-                      </div>
-                    </div>
-                  </div>
-                </template>
-              </div>
-            </article>
-          </div>
-        </section>
+        <WorkflowTree
+          :workflow-slots="workflowSlots"
+          :selected-workflow-slot-id="selectedWorkflowSlotId"
+          :enabled-nodes="enabledNodes"
+          :dirty-nodes="dirtyNodes"
+          :uploaded-input-files="uploadedInputFiles"
+          :main-input-file="mainInputFile"
+          :file-check-hint="fileCheckHint"
+          :active-compute-node-label="activeComputeNodeLabel"
+          :workflow-tools="workflowTools"
+          :workflow-tool-selection="workflowToolSelection"
+          :context-menu="contextMenu"
+          @select-slot="selectedWorkflowSlotId = $event"
+          @toggle-node="toggleNodeEnabled"
+          @apply-preset="applyPreset"
+          @tree-keydown="handleTreeKeydown"
+          @context-menu="handleNodeContextMenu"
+          @files-dropped="handleFileDrop"
+          @files-selected="handleFileInputChange"
+          @remove-file="removeInputFile"
+          @close-context-menu="closeContextMenu"
+          @switch-tool="switchNodeTool"
+          @update-node="updateNode"
+          @reset-tool="resetNodeTool"
+        />
 
-        <aside class="properties-pane" aria-label="属性与配置" @click="closeContextMenu">
-          <div class="pane-title">属性</div>
-
-          <!-- Global settings — always visible -->
-          <section class="property-global">
-            <label class="prop-field">
-              <span>作业名称</span>
-              <input v-model="jobName" type="text" placeholder="例如：结构验证_2026" class="prop-input" />
-            </label>
-            <div class="prop-status-strip">
-              <span class="status-pin" :class="status.connected ? 'online' : 'offline'" aria-hidden="true"></span>
-              <span class="prop-status-text">{{ status.connected ? '侧车已连接' : '侧车离线' }}</span>
-              <span class="prop-status-text">{{ selectedWorkerLabel }}</span>
-            </div>
-          </section>
-
-          <!-- Node configuration — varies by selected node -->
-          <section class="property-node">
-            <div class="node-header">
-              <span class="node-header-badge" :class="selectedWorkflowSlot.status">{{ selectedWorkflowSlot.order }}</span>
-              <div>
-                <strong>{{ selectedWorkflowSlot.title }}</strong>
-                <small>{{ selectedWorkflowSlot.statusLabel }}</small>
-              </div>
-            </div>
-
-            <!-- Tool selector: shown for ALL nodes -->
-            <div class="property-block prop-tool-block">
-              <span>工作器工具</span>
-              <select
-                class="prop-tool-select"
-                :value="workflowToolSelection[selectedWorkflowSlot.id]"
-                @change="updateWorkflowTool(selectedWorkflowSlot.id, $event)"
-              >
-                <option v-for="tool in selectedWorkflowSlot.tools" :key="tool.id" :value="tool.id">
-                  {{ tool.label }}
-                </option>
-              </select>
-              <p class="prop-tool-output">输出格式：{{ selectedWorkflowSlot.selectedTool.output }}</p>
-            </div>
-
-            <!-- Solver node: full execution config -->
-            <template v-if="selectedWorkflowSlot.id === 'solver'">
-              <div class="property-block">
-                <span>求解器</span>
-                <select v-model="selectedWorker" class="prop-input">
-                  <option v-if="solvers.length === 0" v-for="w in workerOptions" :key="w.alias" :value="w.alias">
-                    {{ w.label }} / {{ w.kind }}
-                  </option>
-                  <option v-for="s in solvers" :key="s.alias" :value="s.alias">
-                    {{ s.label }} / {{ s.kind }}
-                  </option>
-                </select>
-              </div>
-              <div class="property-block">
-                <span>计算资源</span>
-                <select v-model="selectedComputeNode" :disabled="computeNodes.length === 0 || remoteStatus.running" class="prop-input">
-                  <option v-for="n in computeNodes" :key="n.alias" :value="n.alias">{{ n.label }}</option>
-                </select>
-              </div>
-              <div class="property-block">
-                <span>自定义参数</span>
-                <input v-model="customArgs" type="text" placeholder="例如：--cpus 8 --memory 16G" class="prop-input" />
-              </div>
-              <div class="property-block">
-                <span>超时时间</span>
-                <input v-model="timeoutMinutes" type="text" placeholder="分钟" class="prop-input" />
-              </div>
-            </template>
-
-            <!-- Geometry node: file info -->
-            <template v-else-if="selectedWorkflowSlot.id === 'geometry'">
-              <div class="property-block">
-                <span>输入文件</span>
-                <p>{{ uploadedInputFiles.length ? `${uploadedInputFiles.length} 个文件已选择` : '尚未选择输入文件' }}</p>
-                <div v-if="uploadedInputFiles.length" class="prop-file-list">
-                  <div v-for="file in uploadedInputFiles" :key="`${file.name}-${file.size}`">
-                    <span>{{ file.name }}</span>
-                    <small>{{ formatFileSize(file.size) }}</small>
-                  </div>
-                </div>
-              </div>
-              <p v-if="fileCheckHint" class="prop-hint" :class="{ ok: fileCheckHint.includes('可直接提交') }">{{ fileCheckHint }}</p>
-            </template>
-
-            <!-- Other nodes: detail + tool info -->
-            <template v-else>
-              <div class="property-block">
-                <span>节点详情</span>
-                <p>{{ selectedWorkflowSlot.detail }}</p>
-              </div>
-              <div class="property-block">
-                <span>输入要求</span>
-                <p>{{ selectedWorkflowSlot.selectedTool.output }}</p>
-              </div>
-            </template>
-          </section>
-
-          <!-- System status — always at bottom -->
-          <template v-if="false">
-          <section class="property-block">
-            <span>系统状态</span>
-            <strong>{{ status.connected ? '侧车已连接' : '侧车离线' }}</strong>
-            <p>{{ status.connected ? `${status.host} / pid ${status.pid}` : status.message }}</p>
-          </section>
-          <section class="property-block">
-            <span>工作器</span>
-            <strong>{{ workstationReady ? '已就绪' : '待配置' }}</strong>
-            <p>{{ selectedWorkerLabel }} / {{ selectedWorkerReady ? '已在侧车配置中' : '未发现可用配置' }}</p>
-          </section>
-
-          <!-- Metrics grid -->
-          <section class="property-metrics" aria-label="项目指标">
-            <article v-for="metric in dashboardMetrics" :key="metric.label">
-              <span>{{ metric.label }}</span>
-              <strong>{{ metric.value }}</strong>
-            </article>
-          </section>
-          </template>
-        </aside>
+        <PropertyPanel
+          :job-name="jobName"
+          :selected-workflow-slot="selectedWorkflowSlot"
+          :workflow-tool-selection="workflowToolSelection"
+          :selected-worker="selectedWorker"
+          :solvers="solvers"
+          :worker-options="workerOptions"
+          :compute-nodes="computeNodes"
+          :selected-compute-node="selectedComputeNode"
+          :remote-running="remoteStatus.running"
+          :status-connected="status.connected"
+          :custom-args="customArgs"
+          :timeout-minutes="timeoutMinutes"
+          :uploaded-input-files="uploadedInputFiles"
+          :file-check-hint="fileCheckHint"
+          @update:job-name="jobName = $event"
+          @update-tool="updateWorkflowTool"
+          @update:selected-worker="selectedWorker = $event"
+          @update:selected-compute-node="selectedComputeNode = $event"
+          @update:custom-args="customArgs = $event"
+          @update:timeout-minutes="timeoutMinutes = $event"
+          @click="closeContextMenu"
+        />
       </section>
 
-      <!-- Action bar: file upload + submit -->
+      <!-- Action bar: preflight + submit -->
       <div class="action-bar">
-        <span class="action-status">{{ status.connected ? '侧车已连接' : '侧车离线' }}</span>
+        <ConnectionStatus :connected="status.connected" :label="status.connected ? '侧车已连接' : '侧车离线'" @reconnect="connectServerAction()" />
         <span class="action-worker">{{ selectedWorkerLabel }} · {{ activeComputeNodeLabel }}</span>
+        <button
+          type="button"
+          class="action-preflight"
+          :disabled="!status.connected || preflightRunning"
+          @click="runPreflightCheck"
+        >
+          {{ preflightRunning ? '检查中…' : '预检查' }}
+        </button>
         <button
           type="button"
           class="action-submit"
@@ -1369,376 +1226,41 @@ function backToComposer() {
         </button>
       </div>
 
-      <!-- Context menu -->
-      <div
-        v-if="contextMenu.show"
-        class="ctx-menu"
-        :style="{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }"
-        @click.stop
-      >
-        <template v-if="contextMenu.slotId && workflowTools[contextMenu.slotId]">
-          <div class="ctx-label">切换工具</div>
-          <button
-            v-for="tool in workflowTools[contextMenu.slotId]"
-            :key="tool.id"
-            type="button"
-            class="ctx-item"
-            :class="{ 'ctx-item-active': workflowToolSelection[contextMenu.slotId] === tool.id }"
-            @click="switchNodeTool(contextMenu.slotId!, tool.id)"
-          >
-            {{ tool.label }}
-          </button>
-          <div class="ctx-sep"></div>
-        </template>
-        <button type="button" class="ctx-item ctx-item-primary" @click="contextMenu.slotId ? updateNode(contextMenu.slotId!) : null">Update — 从此节点开始执行</button>
-        <div class="ctx-sep"></div>
-        <button type="button" class="ctx-item" @click="contextMenu.slotId ? resetNodeTool(contextMenu.slotId!) : null">重置为默认</button>
-        <button type="button" class="ctx-item ctx-item-dimmed" @click="closeContextMenu">取消</button>
+      <!-- Preflight result -->
+      <div v-if="preflightResult || preflightError" class="preflight-result" :class="preflightResult ? (preflightResult.status as string) : 'error'">
+        <div class="pf-head">
+          <span v-if="preflightResult" class="pf-status" :class="preflightResult.status as string">
+            {{ preflightResult.status === 'PASS' ? '✓ 通过' : preflightResult.status === 'BLOCKED' ? '✕ 阻塞' : '⚠ 警告' }}
+          </span>
+          <span v-if="preflightError" class="pf-status error">✕ 错误</span>
+          <button type="button" class="pf-close" @click="preflightResult = null; preflightError = ''">×</button>
+        </div>
+        <p v-if="preflightError" class="pf-err-msg">{{ preflightError }}</p>
+        <div v-if="preflightResult" class="pf-summary">
+          <span v-if="(preflightResult.summary as Record<string,number>)?.total === 0" class="pf-clean">未发现任何问题，可以提交求解。</span>
+          <span v-else>
+            共 {{ (preflightResult.summary as Record<string,number>)?.total }} 个问题：
+            <em class="pf-sev-error" v-if="(preflightResult.summary as Record<string,number>)?.error">错误 {{ (preflightResult.summary as Record<string,number>)?.error }}</em>
+            <em class="pf-sev-warn" v-if="(preflightResult.summary as Record<string,number>)?.warning">警告 {{ (preflightResult.summary as Record<string,number>)?.warning }}</em>
+          </span>
+        </div>
+        <div v-if="preflightResult && (preflightResult.issues as unknown[]).length" class="pf-issues">
+          <div v-for="(issue, i) in (preflightResult.issues as Record<string,unknown>[])" :key="i" class="pf-issue" :class="'sev-' + (issue.severity as string).toLowerCase()">
+            <span class="pf-issue-sev">{{ issue.severity }}</span>
+            <span class="pf-issue-rule">{{ issue.rule_id }}</span>
+            <span class="pf-issue-msg">{{ issue.message }}</span>
+            <span v-if="issue.location?.line" class="pf-issue-line">行 {{ issue.location.line }}</span>
+          </div>
+        </div>
       </div>
-
-    <template v-if="false">
-    <section class="job-shell-grid" aria-label="作业配置工作台">
-      <section class="panel job-config-panel" aria-labelledby="job-config-title">
-        <div class="section-heading">
-          <p class="eyebrow">Job Setup</p>
-          <h2 id="job-config-title">作业配置区</h2>
-          <p>选择工作器、计算节点和输入文件，形成一次可以保存、复用、提交的仿真作业。</p>
-        </div>
-
-        <div class="config-card">
-          <div class="toggle-stack">
-            <div class="mode-toggle" role="tablist" aria-label="作业模式">
-              <button type="button" :class="{ active: jobMode === 'single' }" @click="jobMode = 'single'">单求解器模式</button>
-              <button type="button" :class="{ active: jobMode === 'pipeline' }" @click="jobMode = 'pipeline'">启动链模式</button>
-            </div>
-
-            <div class="mode-toggle" role="tablist" aria-label="上传模式">
-              <button type="button" :class="{ active: uploadMode === 'single-file' }" @click="uploadMode = 'single-file'">单个文件</button>
-              <button type="button" :class="{ active: uploadMode === 'folder' }" @click="uploadMode = 'folder'">实例文件夹</button>
-            </div>
-          </div>
-
-          <div v-if="jobMode === 'pipeline'" class="pipeline-steps-card">
-            <span class="pipeline-label">启动链步骤</span>
-            <div class="pipeline-chain">
-              <div v-for="(step, idx) in pipelineSteps" :key="step.id" class="pipeline-node">
-                <span class="pipeline-node-icon">{{ idx + 1 }}</span>
-                <strong>{{ step.launcher }}</strong>
-                <small>{{ step.inputName }}</small>
-              </div>
-            </div>
-          </div>
-
-          <div class="form-grid">
-            <label class="field">
-              <span>
-                作业名称
-                <button type="button" class="save-template-inline" @click="saveCurrentTemplate">存为模板</button>
-              </span>
-              <input v-model="jobName" type="text" placeholder="例如：cantilever_modal_001" />
-            </label>
-
-            <label v-if="jobMode === 'single'" class="field">
-              <span>工作器</span>
-              <select v-model="selectedWorker">
-                <option v-if="solvers.length === 0" v-for="worker in workerOptions" :key="worker.alias" :value="worker.alias">
-                  {{ worker.label }} / {{ worker.kind }}
-                </option>
-                <option v-for="solver in solvers" :key="solver.alias" :value="solver.alias">
-                  {{ solver.label }} / {{ solver.kind }}
-                </option>
-              </select>
-              <small v-if="solvers.length === 0" class="field-hint">尚未探测 — 显示预设列表</small>
-            </label>
-
-            <label class="field">
-              <span>节点类型</span>
-              <select v-model="nodeMode">
-                <option v-for="mode in nodeModeOptions" :key="mode.value" :value="mode.value">
-                  {{ mode.label }}
-                </option>
-              </select>
-            </label>
-
-            <label v-if="nodeMode !== 'local'" class="field">
-              <span>计算节点</span>
-              <select
-                v-model="selectedComputeNode"
-                :disabled="computeNodes.length === 0 || remoteStatus.running"
-              >
-                <option v-for="node in filteredComputeNodes" :key="node.alias" :value="node.alias">
-                  {{ node.label }} / {{ node.alias }}
-                </option>
-              </select>
-            </label>
-          </div>
-
-          <label
-            class="drop-zone"
-            :class="{ active: isFileDragActive }"
-            @dragenter.prevent="isFileDragActive = true"
-            @dragover.prevent="isFileDragActive = true"
-            @dragleave.prevent="isFileDragActive = false"
-            @drop.prevent="handleFileDrop"
-          >
-            <input type="file" multiple :webkitdirectory="uploadMode === 'folder' ? 'true' : undefined" @change="handleFileInputChange" />
-            <span class="drop-icon">INP</span>
-            <strong>拖拽输入文件到这里</strong>
-            <p>支持主文件和子文件一起放入；当前选择：{{ mainInputFile }}</p>
-          </label>
-
-          <div v-if="uploadedInputFiles.length" class="uploaded-list" aria-label="已选择输入文件">
-            <div v-for="file in uploadedInputFiles" :key="`${file.name}-${file.size}`">
-              <span>{{ file.name }}</span>
-              <small>{{ formatFileSize(file.size) }}</small>
-            </div>
-          </div>
-
-          <p v-if="fileCheckHint" class="input-format-hint" :class="{ 'check-ok': fileCheckHint.includes('可直接提交') }">{{ fileCheckHint }}</p>
-          <p v-else class="input-format-hint">当前 {{ selectedWorkerLabel }} 需要：{{ solverInputHint }}</p>
-
-          <div class="form-grid compact">
-            <label class="field">
-              <span>自定义参数</span>
-              <input v-model="customArgs" type="text" placeholder="例如：--cpus 8 --memory 16G" />
-            </label>
-            <label class="field">
-              <span>超时时间</span>
-              <input v-model="timeoutMinutes" type="text" placeholder="分钟" />
-            </label>
-          </div>
-
-          <div class="job-actions">
-            <button type="button" @click="remoteRuns.probeRemoteNodeAction()" :disabled="!status.connected">
-              测试节点
-            </button>
-            <button type="button" @click="remoteRuns.probeSolversAction()" :disabled="!status.connected">
-              探测工作器
-            </button>
-            <button type="button" @click="saveCurrentTemplate">存为模板</button>
-            <button
-              type="button"
-              class="primary-action"
-              :disabled="!canSubmitConfiguredJob"
-              @click="submitConfiguredJob"
-            >
-              提交作业
-            </button>
-          </div>
-        </div>
-      </section>
-
-      <aside class="right-rail" aria-label="状态与模板">
-
-        <section class="panel log-panel" aria-labelledby="log-title">
-          <div class="section-heading">
-            <p class="eyebrow">Live Log</p>
-            <h2 id="log-title">实时日志</h2>
-          </div>
-          <pre class="logs-display logs-display--compact"><code>{{ logs }}</code></pre>
-        </section>
-
-        <section class="panel template-panel" aria-labelledby="template-title">
-          <div class="section-heading split-heading">
-            <div>
-              <p class="eyebrow">Templates</p>
-              <h2 id="template-title">模板列表</h2>
-            </div>
-            <span>{{ savedJobTemplates.length }} 个模板</span>
-          </div>
-
-          <div class="template-list">
-            <button
-              v-for="template in savedJobTemplates"
-              :key="template.id"
-              type="button"
-              class="template-card"
-              @click="applyTemplate(template)"
-            >
-              <strong>{{ template.name }}</strong>
-              <span>{{ template.worker }} / {{ template.nodeMode }} / {{ template.files.length }} 个文件</span>
-            </button>
-            <p v-if="savedJobTemplates.length === 0" class="empty-state">
-              点击“存为模板”保存当前参数配置，后续同类算例可以直接调用。
-            </p>
-          </div>
-        </section>
-      </aside>
-
-      <section v-if="queueItems.length" class="panel queue-panel" aria-labelledby="queue-title">
-        <div class="section-heading">
-          <p class="eyebrow">Task Queue</p>
-          <h2 id="queue-title">任务队列</h2>
-        </div>
-        <div class="queue-grid">
-          <article
-            v-for="item in queueItems"
-            :key="item.id"
-            class="queue-card"
-            :class="`tone-${mapQueueTone(item.status)}`"
-          >
-            <div class="queue-head">
-              <strong>{{ item.title }}</strong>
-              <span class="status-pill" :class="mapQueueTone(item.status)">{{ item.status }}</span>
-            </div>
-            <div class="queue-progress">
-              <div class="queue-progress-fill" :style="{ width: `${item.progress}%` }" />
-            </div>
-            <div class="queue-meta">
-              <span>{{ item.stage }}</span>
-              <small>{{ formatDate(item.createdAt) }}</small>
-            </div>
-            <button type="button" class="queue-log-toggle" @click="toggleQueueLog(item.id)">
-              {{ item.logOpen ? '收起日志' : '展开日志' }}
-            </button>
-            <pre v-if="item.logOpen" class="queue-log"><code>{{ item.logs.join('\n') }}</code></pre>
-          </article>
-        </div>
-      </section>
-
-      <section class="panel evidence-section" aria-labelledby="evidence-title">
-        <div class="section-heading">
-          <p class="eyebrow">Run Evidence</p>
-          <h2 id="evidence-title">最近运行证据区</h2>
-          <p>命令、输入、日志、结果产物和本地归档集中展示，方便确认闭环是否真正跑通。</p>
-        </div>
-
-        <div class="evidence-layout">
-          <div class="run-list">
-            <button
-              v-for="run in recentRuns"
-              :key="run.run_id"
-              type="button"
-              class="run-card"
-              :class="{ selected: selectedRun?.run_id === run.run_id }"
-              @click="selectRunAction(run.run_id)"
-            >
-              <span class="run-title">{{ run.case_name }}</span>
-              <span class="run-meta">{{ run.solver }} / {{ formatDate(run.created_at) }}</span>
-              <span class="status-pill" :class="statusTone(run.status)">{{ run.status }}</span>
-            </button>
-            <p v-if="recentRuns.length === 0" class="empty-state">暂无运行档案。</p>
-          </div>
-
-          <article class="evidence-detail">
-            <template v-if="selectedRun">
-              <div class="detail-head">
-                <div>
-                  <span class="eyebrow">Selected Run</span>
-                  <h3>{{ selectedRun.case_name }}</h3>
-                </div>
-                <span class="status-pill" :class="statusTone(selectedRun.status)">{{ selectedRun.status }}</span>
-              </div>
-              <dl class="detail-grid">
-                <div>
-                  <dt>Run ID</dt>
-                  <dd>{{ selectedRun.run_id }}</dd>
-                </div>
-                <div>
-                  <dt>Runner</dt>
-                  <dd>{{ selectedRun.runner }}</dd>
-                </div>
-                <div>
-                  <dt>节点</dt>
-                  <dd>{{ selectedRun.compute_node }}</dd>
-                </div>
-                <div>
-                  <dt>退出码</dt>
-                  <dd>{{ selectedRun.exit_code ?? '暂无' }}</dd>
-                </div>
-                <div>
-                  <dt>最大位移</dt>
-                  <dd>{{ metricValue(selectedRun, 'max_displacement_mm') }} mm</dd>
-                </div>
-                <div>
-                  <dt>等效应力</dt>
-                  <dd>{{ metricValue(selectedRun, 'max_von_mises_mpa') }} MPa</dd>
-                </div>
-              </dl>
-              <div class="evidence-files">
-                <div>
-                  <span>输入文件</span>
-                  <p>{{ selectedInputs.length ? selectedInputs.join(' / ') : '暂无输入文件' }}</p>
-                </div>
-                <div>
-                  <span>结果产物</span>
-                  <p>{{ artifactSummary(selectedRun) }}</p>
-                </div>
-                <div>
-                  <span>本地档案</span>
-                  <p>{{ selectedRun.local_archive }}</p>
-                </div>
-              </div>
-            </template>
-            <p v-else class="empty-state">选择一条运行记录后，这里会显示可复盘证据。</p>
-          </article>
-        </div>
-      </section>
-
-      <ResultEvidenceView
-        :run="selectedRun"
-        :api-base-url="apiBaseUrl"
-        :report-preview="selectedRun?.learning_report ?? ''"
-        :remote-output="remoteStatus.output"
-      />
-
-    </section>
-    </template>
 
       <footer class="workbench-statusbar" aria-label="工作台状态">
-        <span :class="status.connected ? 'status-dot online' : 'status-dot offline'" aria-hidden="true"></span>
-        <span>{{ status.connected ? '准备' : '侧车离线' }}</span>
-        <span>{{ selectedWorkerLabel }}</span>
-        <span>{{ latestRun ? `最近运行：${latestRun.case_name}` : '暂无运行档案' }}</span>
+        <SystemStatus
+          :sidecar-connected="status.connected"
+          :solvers-available="solvers.length"
+          :runs-archived="archivedRuns.length"
+        />
       </footer>
-
-      <div v-if="showSolverConfig" class="dialog-backdrop" @click.self="showSolverConfig = false">
-        <div class="dialog-card solver-config-dialog">
-          <div class="dialog-header">
-            <strong>求解器配置详情</strong>
-            <p>配置文件：{{ status.configPath || '未获取' }}</p>
-          </div>
-          <div class="dialog-body solver-list">
-            <div v-if="solvers.length === 0 && toolchainItems.length === 0" class="empty-state">
-              暂无求解器配置。请先探测工作器或检查侧车配置。
-            </div>
-            <article v-for="solver in solvers" :key="solver.alias" class="solver-entry">
-              <div class="solver-entry-head">
-                <strong>{{ solver.label }}</strong>
-                <span class="tag tag-purple">{{ solver.kind }}</span>
-              </div>
-              <dl class="solver-entry-detail">
-                <div>
-                  <dt>别名</dt>
-                  <dd>{{ solver.alias }}</dd>
-                </div>
-                <div>
-                  <dt>可执行文件</dt>
-                  <dd>{{ solver.executable }}</dd>
-                </div>
-                <div v-if="solver.description">
-                  <dt>描述</dt>
-                  <dd>{{ solver.description }}</dd>
-                </div>
-                <div>
-                  <dt>产物匹配</dt>
-                  <dd>{{ solver.artifact_patterns.join(', ') || '无' }}</dd>
-                </div>
-              </dl>
-            </article>
-            <article v-for="item in toolchainItems" :key="item.name" class="solver-entry">
-              <div class="solver-entry-head">
-                <strong>{{ item.name }}</strong>
-                <span class="tag tag-neutral">{{ item.role }}</span>
-              </div>
-              <p class="solver-entry-status">状态：{{ item.status }}</p>
-            </article>
-          </div>
-          <div class="dialog-actions">
-            <button type="button" class="primary-action" @click="showSolverConfig = false">关闭</button>
-          </div>
-        </div>
-      </div>
     </div>
 
     <RunDetailView
@@ -1758,8 +1280,39 @@ function backToComposer() {
       @select-run="openRunDetail"
     />
 
+    <MethodLabView
+      v-else-if="currentView === 'method-lab'"
+      :api-base-url="apiBaseUrl"
+      @back="backToComposer"
+    />
+
+    <AiChatView
+      v-else-if="currentView === 'ai-chat'"
+      :runs="archivedRuns"
+      :api-base-url="apiBaseUrl"
+      @back="backToComposer"
+    />
+
+    <ExperimentLab
+      v-else-if="currentView === 'experiment'"
+      :api-base-url="apiBaseUrl"
+      @back="backToComposer"
+    />
+
+    <ResearchView
+      v-else-if="currentView === 'research'"
+      :api-base-url="apiBaseUrl"
+      @back="backToComposer"
+    />
+
     <BenchmarkLab
       v-else-if="currentView === 'benchmark-lab'"
+      :api-base-url="apiBaseUrl"
+      @back="backToComposer"
+    />
+
+    <SolverDevView
+      v-else-if="currentView === 'solver-dev'"
       :api-base-url="apiBaseUrl"
       @back="backToComposer"
     />
@@ -1770,5 +1323,6 @@ function backToComposer() {
       :config-path="status.configPath"
       @back="backToComposer"
     />
+    </KeepAlive>
   </main>
 </template>

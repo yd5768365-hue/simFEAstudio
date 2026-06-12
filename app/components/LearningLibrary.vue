@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { createSimfeaClient } from '@/api/simfeaClient'
+import KnowledgePanel from '@/components/KnowledgePanel.vue'
 import type { RunArchive } from '@/types'
+import { formatDate } from '@/utils/date'
 
 const props = defineProps<{
   runs: RunArchive[]
@@ -13,13 +15,13 @@ const emit = defineEmits<{
   'select-run': [runId: string]
 }>()
 
-const localLog: string[] = []
-const api = createSimfeaClient(props.apiBaseUrl, (line) => localLog.push(line))
+const api = createSimfeaClient(props.apiBaseUrl, () => {})
 
 const searchText = ref('')
 const statusFilter = ref('')
 const exportingId = ref<string | null>(null)
 const exportMessage = ref('')
+const showKnowledge = ref(false)
 
 const runsWithLearning = computed(() =>
   props.runs.filter((run) => {
@@ -68,18 +70,6 @@ async function handleExport(run: RunArchive, format: string) {
     exportingId.value = null
   }
 }
-
-function formatDate(value?: string | null) {
-  if (!value) return ''
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  return new Intl.DateTimeFormat('zh-CN', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(date)
-}
 </script>
 
 <template>
@@ -91,13 +81,21 @@ function formatDate(value?: string | null) {
         <span class="library-count">{{ runsWithLearning.length }} 条记录</span>
       </div>
       <div class="library-controls">
+        <button
+          type="button"
+          class="kp-toggle-btn"
+          @click="showKnowledge = !showKnowledge"
+        >
+          {{ showKnowledge ? '学习记录' : '知识库' }}
+        </button>
         <input
+          v-if="!showKnowledge"
           v-model="searchText"
           type="text"
           class="library-search"
           placeholder="搜索案例名称、求解器…"
         />
-        <select v-model="statusFilter">
+        <select v-if="!showKnowledge" v-model="statusFilter">
           <option value="">全部状态</option>
           <option v-for="s in statuses" :key="s" :value="s">{{ s }}</option>
         </select>
@@ -105,6 +103,13 @@ function formatDate(value?: string | null) {
       </div>
     </header>
 
+    <KnowledgePanel
+      v-if="showKnowledge"
+      :api-base-url="apiBaseUrl"
+      @back="showKnowledge = false"
+    />
+
+    <template v-else>
     <div v-if="runsWithLearning.length === 0" class="empty-state library-empty">
       暂无学习记录。运行求解器并填写引导问题后，这里会汇总所有历史算例的学习记录。
     </div>
@@ -160,5 +165,6 @@ function formatDate(value?: string | null) {
         </div>
       </article>
     </div>
+  </template>
   </div>
 </template>

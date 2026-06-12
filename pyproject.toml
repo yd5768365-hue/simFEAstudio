@@ -23,6 +23,9 @@ dependencies = [
     "setuptools<81",
 ]
 
+[project.scripts]
+simfea-studio = "cli:main"
+
 [project.optional-dependencies]
 dev = [
     # Add development specific dependencies here if needed
@@ -30,6 +33,9 @@ dev = [
 build = [
     "pyinstaller>=6.0",
 ]
+
+[tool.setuptools.package-data]
+"*" = ["*.json", "*.html", "*.js", "*.css", "*.svg", "*.png", "*.ico", "*.woff", "*.woff2", "*.ttf"]
 
 [tool.setuptools.packages.find]
 where = ["src/backends"]

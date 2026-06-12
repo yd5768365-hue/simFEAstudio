@@ -401,18 +401,30 @@ Cargo.lock
 .simfea/
 .codex-run/
 
+# pnpm local overrides (node-linker, etc.)
+.npmrc
+
 # Local solver installations (CalculiX, OpenFOAM, etc.)
 CalculiX_2_10_win_002/
 
 # Temp files
 *.tmp
 
-# Local reference checkouts
+# Debug artifacts
+wan22_debug_frames/
+comfy_ltx2_start*.log
+
+# Local reference checkouts (third-party, read-only)
 sim-main/
-learning/
+learning/sim-main/
+learning/OpenCAEHub-main/
+learning/voicebox-main/
 
 uv.lock
 
 # RuVector database
 ruvector.db
+
+# Frontend build copy for pip packaging
+src/backends/frontend/
 

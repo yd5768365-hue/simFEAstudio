@@ -1,4 +1,4 @@
-﻿import asyncio
+import asyncio
 import csv
 import json
 import subprocess
@@ -12,9 +12,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TypedDict
 
-from fastapi import Body, FastAPI, HTTPException
+from fastapi import Body, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from sse_starlette.sse import EventSourceResponse
 from uvicorn import Config, Server
 
@@ -57,6 +58,7 @@ try:
         run_command as runner_run_command,
         sh_quote as runner_sh_quote,
     )
+    from .cae_preflight_lib.sta_monitor import StaMonitor
     from .simfea_api.runners.slurm import (
         build_slurm_job_script as runner_build_slurm_job_script,
         build_slurm_submit_script as runner_build_slurm_submit_script,
@@ -94,6 +96,12 @@ try:
     from .simfea_api.install import start_install, event_generator
     from .simfea_api.toolchain import _scan_solver_install, update_solver_executable, verify_solver_install
     from .simfea_api.logger import create_logger
+    from .simfea_api.knowledge import (
+        ingest_document as knowledge_ingest_document,
+        search_knowledge as knowledge_search,
+        list_documents as knowledge_list_documents,
+    )
+    from .simfea_api.knowledge_store import delete_document as knowledge_delete_document
 except ImportError:
     from simfea_api.cleanup import cleanup_old_runs
     from simfea_api.config import ComputeNode, PROJECT_ROOT, SolverDefinition, settings
@@ -165,6 +173,12 @@ except ImportError:
     from simfea_api.install import start_install, event_generator
     from simfea_api.toolchain import _scan_solver_install, update_solver_executable, verify_solver_install
     from simfea_api.logger import create_logger
+    from simfea_api.knowledge import (
+        ingest_document as knowledge_ingest_document,
+        search_knowledge as knowledge_search,
+        list_documents as knowledge_list_documents,
+    )
+    from simfea_api.knowledge_store import delete_document as knowledge_delete_document
 
 log = create_logger("sidecar")
 
@@ -216,7 +230,7 @@ class T_SolverExecutable(TypedDict, total=False):
 
 
 class T_CustomWorkflow(TypedDict):
-    steps: list[str]
+    steps: list[str | dict[str, object]]
 
 
 def utc_now() -> str:
@@ -629,6 +643,46 @@ async def execute_local_run(run: RemoteRun, solver_definition=None):
         render_command_template(solver.command_template, run, solver) if solver else ""
     )
     await emit_remote_event(run, "stdout", line=f"command={run.command}")
+
+    # ── STA progress monitor (background) ──
+    _sta_stop = False
+    _sta_task: asyncio.Task | None = None
+
+    async def _poll_sta(sta_path: Path):
+        """Poll CalculiX .sta file every 2s for progress events."""
+        monitor = StaMonitor(sta_path)
+        while not _sta_stop:
+            try:
+                snap = monitor.poll()
+                if snap.changed and snap.step > 0:
+                    await emit_remote_event(
+                        run, "sta_progress",
+                        line=monitor.status_line(snap),
+                        step=snap.step,
+                        increment=snap.increment,
+                        iteration=snap.iteration,
+                        progress_pct=monitor.progress_pct(snap),
+                    )
+            except Exception:
+                pass
+            await asyncio.sleep(2.0)
+
+    # Determine expected STA path from input files or solver command
+    _sta_path: Path | None = None
+    inp_names = [k for k in run.input_files if k.lower().endswith(".inp")]
+    if inp_names:
+        _sta_path = workdir / (Path(inp_names[0]).stem + ".sta")
+    else:
+        # Try to extract from solver command (-i <jobname>)
+        import re as _re
+        m = _re.search(r"-i\s+(\S+)", run.command)
+        if m:
+            _sta_path = workdir / (m.group(1) + ".sta")
+
+    if _sta_path:
+        _sta_task = asyncio.create_task(_poll_sta(_sta_path))
+
+    # ── Execute solver ──
     loop = asyncio.get_running_loop()
     def _on_output(stream, line):
         asyncio.run_coroutine_threadsafe(
@@ -637,6 +691,15 @@ async def execute_local_run(run: RemoteRun, solver_definition=None):
     exit_code, stdout, stderr = await _run_local_command(
         run.command, workdir, timeout=solver.timeout_seconds, on_output=_on_output,
     )
+
+    # Stop STA monitor
+    _sta_stop = True
+    if _sta_task:
+        _sta_task.cancel()
+        try:
+            await _sta_task
+        except asyncio.CancelledError:
+            pass
     for line in stdout.decode("utf-8", errors="replace").splitlines():
         append_text(run.local_dir / "stdout.log", line)
     for line in stderr.decode("utf-8", errors="replace").splitlines():
@@ -1173,6 +1236,333 @@ def llm_completion(payload: T_Query = Body(...)):
     return infer_text_api.completions(payload)
 
 
+class T_TranslateTask(TypedDict):
+    description: str
+
+
+@app.post("/v1/completions/translate-task")
+def translate_task(payload: T_TranslateTask = Body(...)):
+    """Translate a natural-language task description into a solver config."""
+    description = payload.get("description", "").strip()
+    if not description:
+        raise HTTPException(status_code=400, detail="缺少 'description' 字段。")
+
+    current = settings()
+    available_solvers = [
+        {"alias": s.alias, "label": s.label, "kind": s.kind}
+        for s in current.solvers.values()
+    ]
+
+    try:
+        result = infer_text_api.translate_task_to_run(description, available_solvers)
+    except (ConnectionError, TimeoutError) as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+
+    return {
+        "message": "任务分析完成。",
+        "data": result,
+    }
+
+
+# ── Learning path resolution ─────────────────────────────
+
+def _resolve_learning_dir(subdir: str) -> Path:
+    """Resolve a learning/ subdirectory: env var → package dir → project root."""
+    _BENCH_ENV = os.getenv("SIMFEA_BENCHMARKS_DIR")
+    if subdir == "benchmarks" and _BENCH_ENV:
+        p = Path(_BENCH_ENV)
+        if p.is_dir():
+            return p
+    _LEARNING_ENV = os.getenv("SIMFEA_LEARNING_DIR")
+    if _LEARNING_ENV:
+        p = Path(_LEARNING_ENV) / subdir if subdir else Path(_LEARNING_ENV)
+        if p.is_dir():
+            return p
+    base = PROJECT_ROOT / "learning"
+    if subdir:
+        base = base / subdir
+    return base
+
+
+# ── Experiment Lab ────────────────────────────────────────
+
+_EXPERIMENT_BASE = _resolve_learning_dir("")
+_EXPERIMENT_DIRS = [
+    str(_EXPERIMENT_BASE / "experiments"),
+    str(_EXPERIMENT_BASE / "benchmarks"),
+    str(_EXPERIMENT_BASE / "research"),
+]
+
+
+@app.get("/v1/experiment/files")
+def list_experiment_files():
+    """List .py, .ipynb, .md files in experiment directories."""
+    files: list[dict] = []
+    for rel_dir in _EXPERIMENT_DIRS:
+        d = Path(rel_dir) if Path(rel_dir).is_absolute() else PROJECT_ROOT / rel_dir
+        if not d.exists():
+            continue
+        for p in sorted(d.rglob("*")):
+            if p.is_file() and p.suffix in (".py", ".ipynb", ".md"):
+                rel_path = p.relative_to(_EXPERIMENT_BASE)
+                # Make name unique by including the case subdirectory
+                # e.g. "01_一维杆拉伸/问题描述.md" instead of bare "问题描述.md"
+                parent_dir = p.parent.relative_to(d)
+                display_name = str(parent_dir / p.name).replace("\\", "/") if str(parent_dir) != "." else p.name
+                files.append({
+                    "path": str(rel_path).replace("\\", "/"),
+                    "name": display_name,
+                    "dir": rel_dir,
+                    "size": p.stat().st_size,
+                })
+    return {"message": f"{len(files)} 个文件。", "data": {"files": files}}
+
+
+@app.get("/v1/experiment/files/{file_path:path}")
+def read_experiment_file(file_path: str):
+    """Read an experiment file."""
+    p = (PROJECT_ROOT / file_path).resolve()
+    if not str(p).startswith(str(PROJECT_ROOT.resolve())):
+        raise HTTPException(status_code=403, detail="路径不在项目目录内。")
+    if not p.is_file():
+        raise HTTPException(status_code=404, detail="文件不存在。")
+    return {
+        "message": "文件已读取。",
+        "data": {"content": p.read_text(encoding="utf-8"), "path": str(p.relative_to(PROJECT_ROOT)).replace("\\", "/")},
+    }
+
+
+@app.post("/v1/experiment/files/{file_path:path}")
+def save_experiment_file(file_path: str, payload: dict = Body(...)):
+    """Save content to an experiment file."""
+    content = payload.get("content", "")
+    p = (PROJECT_ROOT / file_path).resolve()
+    if not str(p).startswith(str(PROJECT_ROOT.resolve())):
+        raise HTTPException(status_code=403, detail="路径不在项目目录内。")
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(content, encoding="utf-8")
+    return {"message": "文件已保存。", "data": {"path": str(p.relative_to(PROJECT_ROOT)).replace("\\", "/")}}
+
+
+@app.post("/v1/experiment/run")
+async def run_experiment_code(payload: dict = Body(...)):
+    """Execute Python code (inline or file) and return stdout/stderr."""
+    code = payload.get("code", "").strip()
+    file_path = payload.get("file_path", "").strip()
+
+    import tempfile
+    import subprocess as _sp
+
+    if file_path:
+        target = (PROJECT_ROOT / file_path).resolve()
+        if not str(target).startswith(str(PROJECT_ROOT.resolve())):
+            raise HTTPException(status_code=403, detail="路径不在项目目录内。")
+        if not target.is_file():
+            raise HTTPException(status_code=404, detail=f"文件不存在: {file_path}")
+        tmp_name = str(target)
+        cleanup = False
+    elif code:
+        tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False, encoding="utf-8")
+        try:
+            tmp.write(code)
+            tmp.close()
+            tmp_name = tmp.name
+            cleanup = True
+        except Exception:
+            raise HTTPException(status_code=500, detail="临时文件写入失败。")
+    else:
+        raise HTTPException(status_code=400, detail="缺少 'code' 或 'file_path' 字段。")
+
+    try:
+        r = _sp.run(
+            ["python", tmp_name],
+            capture_output=True,
+            timeout=60,
+            cwd=str(target.parent) if file_path else str(PROJECT_ROOT),
+        )
+        return {
+            "message": "代码执行完成。",
+            "data": {
+                "exit_code": r.returncode,
+                "stdout": r.stdout.decode("utf-8", errors="replace"),
+                "stderr": r.stderr.decode("utf-8", errors="replace"),
+            },
+        }
+    except _sp.TimeoutExpired:
+        return {
+            "message": "代码执行超时。",
+            "data": {
+                "exit_code": -1,
+                "stdout": "",
+                "stderr": "Execution timed out after 30 seconds.",
+            },
+        }
+    finally:
+        if cleanup:
+            try:
+                import os
+                os.unlink(tmp_name)
+            except OSError:
+                pass
+
+
+# ── Preflight Check ────────────────────────────────────────
+
+@app.post("/v1/preflight")
+def run_preflight_check(payload: dict = Body(...)):
+    """Validate an .inp file before solver submission."""
+    content = payload.get("content", "").strip()
+    if not content:
+        raise HTTPException(status_code=400, detail="缺少 'content' 字段。")
+
+    import tempfile
+    tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".inp", delete=False, encoding="utf-8")
+    try:
+        tmp.write(content)
+        tmp.close()
+        from cae_preflight_lib.preflight import run_preflight as _run_preflight
+        result = _run_preflight(Path(tmp.name))
+        return {"message": "预检查完成。", "data": result.to_dict()}
+    finally:
+        try:
+            os.unlink(tmp.name)
+        except OSError:
+            pass
+
+
+# ── Knowledge Base ──────────────────────────────────────────
+
+@app.post("/v1/knowledge/documents")
+async def upload_knowledge_document(file: UploadFile = File(...)):
+    """Upload a document (PDF/MD/TXT) to the knowledge base."""
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="缺少文件名。")
+    suffix = Path(file.filename).suffix.lower()
+    if suffix not in (".pdf", ".md", ".txt", ".markdown"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"不支持的文件格式: {suffix}。支持 .pdf, .md, .txt",
+        )
+
+    tmp_dir = Path(settings().runs_root).parent / "knowledge" / "uploads"
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+    tmp_path = tmp_dir / file.filename
+
+    try:
+        content = await file.read()
+        tmp_path.write_bytes(content)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"文件保存失败: {exc}")
+
+    try:
+        doc_info = knowledge_ingest_document(tmp_path)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except ConnectionError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    finally:
+        if tmp_path.exists():
+            tmp_path.unlink()
+
+    return {
+        "message": f"文档 '{file.filename}' 已上传并处理完成。",
+        "data": doc_info,
+    }
+
+
+@app.post("/v1/knowledge/documents/by-path")
+def ingest_knowledge_by_path(payload: dict = Body(...)):
+    """Index a document by its local file path."""
+    file_path = payload.get("path", "").strip()
+    if not file_path:
+        raise HTTPException(status_code=400, detail="缺少 'path' 字段。")
+    p = Path(file_path).expanduser().resolve()
+    if not p.is_file():
+        raise HTTPException(status_code=404, detail=f"文件不存在: {file_path}")
+    try:
+        doc_info = knowledge_ingest_document(p)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except ConnectionError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    return {"message": f"已索引: {p.name}", "data": doc_info}
+
+
+@app.get("/v1/knowledge/documents")
+def list_knowledge_documents():
+    """List all documents in the knowledge base."""
+    docs = knowledge_list_documents()
+    return {
+        "message": f"共 {len(docs)} 份文档。",
+        "data": {"documents": docs},
+    }
+
+
+@app.delete("/v1/knowledge/documents/{doc_id}")
+def delete_knowledge_document(doc_id: str):
+    """Delete a document and all its chunks from the knowledge base."""
+    deleted = knowledge_delete_document(doc_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail=f"文档 '{doc_id}' 不存在。")
+    return {
+        "message": f"文档 '{doc_id}' 已删除。",
+        "data": {"deleted": True},
+    }
+
+
+@app.post("/v1/knowledge/ask")
+def ask_knowledge(payload: dict = Body(...)):
+    """RAG query: retrieve relevant knowledge + run context, then answer via LLM."""
+    run_id = payload.get("run_id", "")
+    question = payload.get("question", "").strip()
+    doc_ids = payload.get("doc_ids") or None
+
+    if not question:
+        raise HTTPException(status_code=400, detail="缺少 'question' 字段。")
+
+    try:
+        search_results = knowledge_search(question, top_k=5, doc_ids=doc_ids)
+    except ConnectionError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+
+    run_context = ""
+    if run_id:
+        try:
+            run_dir = Path(settings().runs_root) / run_id
+            note = read_optional_text(run_dir / "note.md", "")
+            report = read_optional_text(run_dir / "learning_report.md", "")
+            meta = json.loads((run_dir / "meta.json").read_text(encoding="utf-8")) if (run_dir / "meta.json").exists() else {}
+            run_context = (
+                f"运行状态: {meta.get('status', '未知')}\n"
+                f"求解器: {meta.get('solver', '未知')}\n"
+                f"算例: {meta.get('case_name', '未知')}\n"
+                f"学习笔记: {note[:500] if note else '无'}\n"
+                f"学习报告: {report[:500] if report else '无'}\n"
+            )
+        except Exception:
+            run_context = ""
+
+    context_chunks = [{"text": r["text"], "source": r["source"]} for r in search_results]
+    if run_context:
+        context_chunks.insert(0, {"text": run_context, "source": "当前运行上下文"})
+
+    try:
+        answer = infer_text_api.chat_with_context(question, context_chunks)
+    except (ConnectionError, TimeoutError) as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+
+    return {
+        "message": "查询完成。",
+        "data": {
+            "answer": answer,
+            "sources": [
+                {"text": r["text"][:200], "source": r["source"], "score": r["score"]}
+                for r in search_results
+            ],
+        },
+    }
+
+
 @app.get("/v1/compute-nodes")
 def list_compute_nodes():
     current = settings()
@@ -1273,7 +1663,48 @@ def list_solvers():
     }
 
 
-BENCHMARKS_DIR = PROJECT_ROOT / "learning" / "benchmarks"
+BENCHMARKS_DIR = _resolve_learning_dir("benchmarks")
+
+
+def _read_case_group(case_dir: Path) -> str:
+    """Read group tag from case.json, default to '基础案例'."""
+    meta_file = case_dir / "case.json"
+    if meta_file.exists():
+        try:
+            meta = json.loads(meta_file.read_text(encoding="utf-8"))
+            return meta.get("group", "基础案例")
+        except (json.JSONDecodeError, OSError):
+            pass
+    return "基础案例"
+
+
+def _extract_title_subtitle(md_path: Path) -> tuple[str, str]:
+    """Extract the first H1 heading as title and the next meaningful line as subtitle."""
+    title = ""
+    subtitle = ""
+    if not md_path.exists():
+        return title, subtitle
+    try:
+        text = md_path.read_text(encoding="utf-8")
+        lines = text.splitlines()
+        past_h1 = False
+        for line in lines:
+            stripped = line.strip()
+            if not past_h1:
+                if stripped.startswith("# ") and not stripped.startswith("## "):
+                    title = stripped[2:].strip()
+                    past_h1 = True
+            else:
+                # Skip blank lines, headings, code fences, table rows
+                if not stripped or stripped.startswith("#") or stripped.startswith("```") or stripped.startswith("|"):
+                    continue
+                # Take first substantive line as subtitle (remove markdown formatting)
+                import re
+                subtitle = re.sub(r'\*\*|__|\$', '', stripped)[:80]
+                break
+    except OSError:
+        pass
+    return title, subtitle
 
 
 @app.get("/v1/benchmarks")
@@ -1284,12 +1715,20 @@ def list_benchmarks():
     for case_dir in sorted(BENCHMARKS_DIR.iterdir()):
         if not case_dir.is_dir():
             continue
-        problem_file = case_dir / "problem.md"
-        results_file = case_dir / "results" / "comparison.csv"
+        problem_file = case_dir / "问题描述.md"
+        if not problem_file.exists():
+            problem_file = case_dir / "problem.md"
+        results_file = case_dir / "results" / "对比结果.csv"
+        if not results_file.exists():
+            results_file = case_dir / "results" / "comparison.csv"
+        title, subtitle = _extract_title_subtitle(problem_file)
         cases.append({
             "name": case_dir.name,
             "has_problem": problem_file.exists(),
             "has_results": results_file.exists(),
+            "group": _read_case_group(case_dir),
+            "title": title,
+            "subtitle": subtitle,
         })
     return {
         "message": f"Found {len(cases)} benchmark case(s).",
@@ -1302,18 +1741,30 @@ def get_benchmark_case(case_name: str):
     case_dir = BENCHMARKS_DIR / case_name
     if not case_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"Benchmark case '{case_name}' not found")
+    problem_html = ""
+    html_file = case_dir / "问题描述.html"
+    if not html_file.exists():
+        html_file = case_dir / "problem.html"
+    if html_file.exists():
+        problem_html = html_file.read_text(encoding="utf-8")
+    # Fallback: render markdown if no HTML
     problem_md = ""
-    problem_file = case_dir / "problem.md"
-    if problem_file.exists():
-        problem_md = problem_file.read_text(encoding="utf-8")
+    if not problem_html:
+        md_file = case_dir / "问题描述.md"
+        if not md_file.exists():
+            md_file = case_dir / "problem.md"
+        if md_file.exists():
+            problem_md = md_file.read_text(encoding="utf-8")
     results = []
-    results_file = case_dir / "results" / "comparison.csv"
+    results_file = case_dir / "results" / "对比结果.csv"
+    if not results_file.exists():
+        results_file = case_dir / "results" / "comparison.csv"
     if results_file.exists():
         reader = csv.DictReader(results_file.open(encoding="utf-8"))
         results = [row for row in reader]
     return {
         "message": f"Benchmark case '{case_name}' loaded.",
-        "data": {"name": case_name, "problem_md": problem_md, "results": results},
+        "data": {"name": case_name, "problem_html": problem_html, "problem_md": problem_md, "results": results},
     }
 
 
@@ -1389,9 +1840,38 @@ async def probe_compute_node_solvers(alias: str):
     }
 
 
+_DEMO_RUNS_DIR = Path(__file__).resolve().parent / "demo_runs"
+
+
+def _load_demo_runs():
+    """Load demo run archives shipped with the package, for first-launch UX."""
+    if not _DEMO_RUNS_DIR.is_dir():
+        return []
+    runs = []
+    for meta_path in sorted(_DEMO_RUNS_DIR.glob("**/meta.json")):
+        try:
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            if (meta_path.parent / "learning_report.md").exists():
+                meta["learning_report"] = "learning_report.md"
+            if (meta_path.parent / "artifacts" / "result_summary.json").exists():
+                meta["result_summary"] = "artifacts/result_summary.json"
+                try:
+                    meta["summary"] = json.loads(
+                        (meta_path.parent / "artifacts" / "result_summary.json").read_text(encoding="utf-8")
+                    )
+                except (OSError, json.JSONDecodeError):
+                    pass
+            runs.append(meta)
+        except (OSError, json.JSONDecodeError):
+            continue
+    return runs
+
+
 @app.get("/v1/runs")
 def list_runs():
     current = settings()
+    archived = load_archived_runs()
+    runs = archived if archived else _load_demo_runs()
     return {
         "message": "SimFEA Studio archived runs loaded.",
         "data": {
@@ -1399,13 +1879,25 @@ def list_runs():
             "learning_export_root": str(current.learning_export_root),
             "learning_formats": current.learning_formats,
             "learning_default_format": current.learning_default_format,
-            "runs": load_archived_runs(),
+            "runs": runs,
         },
     }
 
 
 @app.get("/v1/runs/{run_id}")
 def get_run(run_id: str):
+    # Demo data fallback
+    demo_dir = _DEMO_RUNS_DIR / run_id
+    if demo_dir.is_dir():
+        meta_path = demo_dir / "meta.json"
+        if meta_path.exists():
+            demo_meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            demo_meta["note"] = read_optional_text(demo_dir / "note.md")
+            demo_meta["report"] = read_optional_text(demo_dir / "learning_report.md")
+            demo_meta["stdout"] = read_optional_text(demo_dir / "stdout.log")
+            demo_meta["stderr"] = read_optional_text(demo_dir / "stderr.log")
+            return {"message": "Demo run loaded.", "data": demo_meta}
+
     run = remote_runs.get(run_id)
     if run is not None:
         summary = generate_result_summary(run.local_dir)
@@ -1647,6 +2139,40 @@ async def start_solver_run(alias: str, solver_alias: str):
     node = get_compute_node(alias)
     solver = get_solver(solver_alias)
     current = settings()
+
+    # ── Preflight check on INP content ──
+    preflight_warnings: list[dict] = []
+    inp_content = solver.input_files.get("model.inp", "")
+    if not inp_content:
+        # Find first .inp file
+        for k, v in solver.input_files.items():
+            if k.lower().endswith(".inp"):
+                inp_content = v
+                break
+    if inp_content:
+        try:
+            import tempfile as _tmp
+            from cae_preflight_lib.preflight import run_preflight as _run_preflight
+            tf = _tmp.NamedTemporaryFile(mode="w", suffix=".inp", delete=False, encoding="utf-8")
+            try:
+                tf.write(inp_content)
+                tf.close()
+                pf_result = _run_preflight(Path(tf.name))
+                for issue in pf_result.issues:
+                    if issue.severity in ("error", "warning"):
+                        preflight_warnings.append({
+                            "severity": issue.severity,
+                            "category": issue.category,
+                            "message": issue.message,
+                        })
+            finally:
+                try:
+                    os.unlink(tf.name)
+                except OSError:
+                    pass
+        except Exception:
+            pass  # preflight is best-effort, don't block submission
+
     run_id = f"run_{uuid.uuid4().hex[:10]}"
     remote_workdir = remote_workdir_for(node, run_id)
     local_dir = current.runs_root / run_id
@@ -1687,6 +2213,7 @@ async def start_solver_run(alias: str, solver_alias: str):
             "remote_workdir": run.remote_workdir,
             "compute_node": node.alias,
             "solver": public_solver(solver),
+            "preflight_issues": preflight_warnings,
         },
     }
 
@@ -1744,9 +2271,21 @@ async def start_custom_workflow(alias: str, payload: T_CustomWorkflow = Body(...
     current = settings()
     requested_steps = payload.get("steps", [])
 
+    # Normalize steps: accept both string aliases and {solver, params} dicts
+    step_params: dict[str, dict] = {}
+    step_aliases: list[str] = []
+    for item in requested_steps:
+        if isinstance(item, str):
+            step_aliases.append(item)
+        elif isinstance(item, dict):
+            alias = str(item.get("solver", ""))
+            if alias:
+                step_aliases.append(alias)
+                step_params[alias] = {k: v for k, v in item.items() if k != "solver"}
+
     solvers: list[SolverDefinition] = []
     skipped: list[str] = []
-    for step_alias in requested_steps:
+    for step_alias in step_aliases:
         solver = current.solvers.get(step_alias)
         if solver is not None:
             solvers.append(solver)
@@ -1784,6 +2323,12 @@ async def start_custom_workflow(alias: str, payload: T_CustomWorkflow = Body(...
     )
     ensure_run_files(run)
     remote_runs[run_id] = run
+
+    # Store per-step parameters in metadata for workflow execution
+    if step_params:
+        meta = run_metadata(run)
+        meta["workflow_step_params"] = step_params
+        save_run_metadata(run, meta)
 
     asyncio.create_task(execute_local_workflow_run(run, solvers))
 
@@ -2063,6 +2608,28 @@ def start_input_thread():
         log.error("Failed to start input handler.")
 
 
+# ── Serve frontend static files ──
+# Priority: SIMFEA_FRONTEND env → pip package dir → dev dist/
+def _find_frontend_dir() -> Path | None:
+    env_path = os.getenv("SIMFEA_FRONTEND")
+    if env_path:
+        p = Path(env_path)
+        if (p / "index.html").exists():
+            return p
+    # pip install: frontend bundled inside the package
+    pkg_dist = Path(__file__).resolve().parent / "frontend"
+    if (pkg_dist / "index.html").exists():
+        return pkg_dist
+    # dev mode: Vite build output at project root
+    dev_dist = PROJECT_ROOT / "dist"
+    if (dev_dist / "index.html").exists():
+        return dev_dist
+    return None
+
+_frontend_dir = _find_frontend_dir()
+if _frontend_dir:
+    app.mount("/", StaticFiles(directory=str(_frontend_dir), html=True), name="spa")
+
 if __name__ == "__main__":
     try:
         result = cleanup_old_runs(settings())
@@ -2070,5 +2637,15 @@ if __name__ == "__main__":
             log.info(f"Startup cleanup: removed {result['removed']} old runs, {result['kept']} kept")
     except Exception as e:
         log.warn(f"Startup cleanup skipped: {e}")
-    start_input_thread()
-    start_api_server()
+
+    if sys.stdin.isatty():
+        # Standalone mode: python main.py 直接启动
+        import uvicorn
+
+        port = settings().api_port
+        print(f"\n  SimFEA Studio 启动 → http://localhost:{port}\n")
+        uvicorn.run(app, host="0.0.0.0", port=port)
+    else:
+        # Tauri sidecar 模式：stdin 监听生命周期命令
+        start_input_thread()
+        start_api_server()

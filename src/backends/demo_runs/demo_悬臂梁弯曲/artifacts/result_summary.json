@@ -1,0 +1,16 @@
+{
+  "max_displacement_mm": 8.93,
+  "max_von_mises_mpa": 37.50,
+  "displacement_unit": "mm",
+  "stress_unit": "MPa",
+  "node_count": 896,
+  "element_count": 400,
+  "solver": "CalculiX",
+  "model": "悬臂梁 — 端部集中力",
+  "analytics": {
+    "analytic_displacement_mm": 8.93,
+    "analytic_stress_mpa": 37.50,
+    "error_displacement_pct": 0.0,
+    "error_stress_pct": 0.0
+  }
+}
