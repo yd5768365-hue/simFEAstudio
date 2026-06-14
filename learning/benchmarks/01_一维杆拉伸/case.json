@@ -1,0 +1,9 @@
+{
+  "group": "基础案例",
+  "title": "一维杆拉伸",
+  "level": "L1",
+  "physics": "结构力学",
+  "dimension": "1D 杆",
+  "methods": ["analytic", "simfea-core", "calculix", "ansys", "pinn"],
+  "status": "completed"
+}

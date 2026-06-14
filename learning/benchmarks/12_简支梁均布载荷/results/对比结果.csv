@@ -1,0 +1,3 @@
+method,delta_max_mm,sigma_max_MPa,error_pct,notes
+analytic,0.43,20.8,,简支梁均布载荷公式
+calculix,,,,B31 梁单元 (to verify)

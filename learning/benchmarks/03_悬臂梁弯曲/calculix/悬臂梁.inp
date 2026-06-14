@@ -1,0 +1,42 @@
+*HEADING
+SimFEA Studio Benchmark: Cantilever Beam Bending (B31, N, mm, MPa)
+*NODE, NSET=Nall
+1, 0., 0., 0.
+2, 100., 0., 0.
+3, 200., 0., 0.
+4, 300., 0., 0.
+5, 400., 0., 0.
+6, 500., 0., 0.
+7, 600., 0., 0.
+8, 700., 0., 0.
+9, 800., 0., 0.
+10, 900., 0., 0.
+11, 1000., 0., 0.
+*ELEMENT, TYPE=B31, ELSET=beam
+1, 1, 2
+2, 2, 3
+3, 3, 4
+4, 4, 5
+5, 5, 6
+6, 6, 7
+7, 7, 8
+8, 8, 9
+9, 9, 10
+10, 10, 11
+*MATERIAL, NAME=steel
+*ELASTIC
+210000., 0.3
+*BEAM SECTION, ELSET=beam, MATERIAL=steel, SECTION=RECT
+20., 20.
+0., 0., 1.
+*BOUNDARY
+1, 1, 6
+*STEP
+*STATIC
+*CLOAD
+11, 2, -100.
+*NODE FILE
+U
+*EL FILE, ELSET=beam
+S
+*END STEP

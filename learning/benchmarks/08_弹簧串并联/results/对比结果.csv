@@ -1,0 +1,3 @@
+method,delta_series_mm,delta_parallel_mm,error_pct,notes
+analytic,7.5,1.67,,弹簧串并联公式
+calculix,,,,SPRING1 单元 (to verify)

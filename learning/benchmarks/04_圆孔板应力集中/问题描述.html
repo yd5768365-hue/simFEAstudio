@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>04_圆孔板应力集中</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<style>
+  :root { color-scheme: dark; }
+  body {
+    max-width: 960px; margin: 0 auto; padding: 40px 24px;
+    background: #0f1116; color: #c4cad6;
+    font-family: 'Microsoft YaHei', 'Segoe UI', system-ui, sans-serif;
+    font-size: 0.92rem; line-height: 1.85;
+  }
+  h1 { font-size: 1.4rem; color: #edf2fb; border-bottom: 1px solid #2b3240; padding-bottom: 10px; }
+  h2 { font-size: 1.1rem; color: #edf2fb; border-left: 3px solid #8b5cf6; padding-left: 12px; margin-top: 32px; }
+  h3 { font-size: 0.95rem; color: #edf2fb; margin-top: 22px; }
+  strong { color: #edf2fb; }
+  a { color: #a78bfa; }
+  code { background: #11141a; padding: 2px 7px; border-radius: 4px; font-size: 0.88em; color: #38bdf8; }
+  pre { background: #11141a; border: 1px solid #2b3240; border-radius: 8px; padding: 16px 20px; overflow-x: auto; }
+  pre code { background: none; padding: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; border: 1px solid #2b3240; border-radius: 8px; overflow: hidden; }
+  th { background: #151922; color: #9ca6b8; font-weight: 700; padding: 10px 14px; text-align: left; font-size: 0.72rem; text-transform: uppercase; }
+  td { padding: 8px 14px; border-bottom: 1px solid #242936; }
+  tr:nth-child(even) td { background: rgba(255,255,255,0.015); }
+  blockquote { border-left: 3px solid #8b5cf6; margin: 16px 0; padding: 12px 18px; background: rgba(139,92,246,0.12); border-radius: 0 8px 8px 0; }
+  hr { border: none; border-top: 1px solid #242936; margin: 28px 0; }
+  ul, ol { padding-left: 24px; }
+  li { margin: 5px 0; line-height: 1.75; }
+  .katex { color: #c4cad6; }
+  .katex-error { color: #ef4444; font-family: monospace; }
+</style>
+</head>
+<body>
+<h1>Case 3: 圆孔板应力集中 (Hole-in-Plate Stress Concentration)</h1>
+<h2>物理问题描述</h2>
+<p>矩形平板中心有一圆孔，上下两端受均匀拉伸应力 σ_0。圆孔边缘产生应力集中，最大周向应力出现在孔边水平方向。属于 2D 平面应力问题。</p>
+<pre><code>          σ_0 (均匀拉伸)
+    ┌──────────────────────────┐
+    │                          │
+    │           ╭───╮          │
+    │           │ ○ │  d=20    │ ← H=200
+    │           ╰───╯          │
+    │                          │
+    └──────────────────────────┘
+          σ_0              W=100
+</code></pre>
+<p><strong>几何与材料参数：</strong></p>
+<table>
+<thead>
+<tr>
+<th>参数</th>
+<th>符号</th>
+<th>值</th>
+<th>单位</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>板宽</td>
+<td>W</td>
+<td>100</td>
+<td>mm</td>
+</tr>
+<tr>
+<td>板高</td>
+<td>H</td>
+<td>200</td>
+<td>mm</td>
+</tr>
+<tr>
+<td>孔径</td>
+<td>d</td>
+<td>20</td>
+<td>mm</td>
+</tr>
+<tr>
+<td>板厚</td>
+<td>t</td>
+<td>1</td>
+<td>mm</td>
+</tr>
+<tr>
+<td>弹性模量</td>
+<td>E</td>
+<td>210000</td>
+<td>MPa</td>
+</tr>
+<tr>
+<td>泊松比</td>
+<td>ν</td>
+<td>0.3</td>
+<td>—</td>
+</tr>
+<tr>
+<td>远端拉伸应力</td>
+<td>σ_0</td>
+<td>100</td>
+<td>MPa</td>
+</tr>
+</tbody>
+</table>
+<h2>控制方程</h2>
+<p>2D 平面应力弹性力学方程（Airy 应力函数 φ 满足双调和方程）：</p>
+<p><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><msup><mi mathvariant="normal">∇</mi><mn>4</mn></msup><mi>ϕ</mi><mo>=</mo><mn>0</mn></mrow><annotation encoding="application/x-tex">\nabla^4 \phi = 0</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1.0585em;vertical-align:-0.1944em;"></span><span class="mord"><span class="mord">∇</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8641em;"><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">4</span></span></span></span></span></span></span></span><span class="mord mathnormal">ϕ</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">0</span></span></span></span></span></p>
+<h2>解析解（无限大板）</h2>
+<p>Kirsch 解给出了无限大板圆孔问题的应力分布：</p>
+<p><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><msub><mi>σ</mi><mrow><mi>θ</mi><mi>θ</mi></mrow></msub><mo stretchy="false">(</mo><mi>r</mi><mo separator="true">,</mo><mi>θ</mi><mo stretchy="false">)</mo><mo>=</mo><mfrac><msub><mi>σ</mi><mn>0</mn></msub><mn>2</mn></mfrac><mrow><mo fence="true">(</mo><mn>1</mn><mo>+</mo><mfrac><msup><mi>a</mi><mn>2</mn></msup><msup><mi>r</mi><mn>2</mn></msup></mfrac><mo fence="true">)</mo></mrow><mo>−</mo><mfrac><msub><mi>σ</mi><mn>0</mn></msub><mn>2</mn></mfrac><mrow><mo fence="true">(</mo><mn>1</mn><mo>+</mo><mn>3</mn><mfrac><msup><mi>a</mi><mn>4</mn></msup><msup><mi>r</mi><mn>4</mn></msup></mfrac><mo fence="true">)</mo></mrow><mi>cos</mi><mo>⁡</mo><mn>2</mn><mi>θ</mi></mrow><annotation encoding="application/x-tex">\sigma_{\theta\theta}(r,\theta) = \frac{\sigma_0}{2}\left(1 + \frac{a^2}{r^2}\right) - \frac{\sigma_0}{2}\left(1 + 3\frac{a^4}{r^4}\right)\cos 2\theta</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0359em;">σ</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.0278em;">θ</span><span class="mord mathnormal mtight" style="margin-right:0.0278em;">θ</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.0278em;">r</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.0278em;">θ</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:2.4411em;vertical-align:-0.95em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.1076em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">2</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord"><span class="mord mathnormal" style="margin-right:0.0359em;">σ</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">0</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.686em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="minner"><span class="mopen delimcenter" style="top:0em;"><span class="delimsizing size3">(</span></span><span class="mord">1</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.4911em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord"><span class="mord mathnormal" style="margin-right:0.0278em;">r</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.7401em;"><span style="top:-2.989em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord"><span class="mord mathnormal">a</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.686em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mclose delimcenter" style="top:0em;"><span class="delimsizing size3">)</span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:2.4411em;vertical-align:-0.95em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.1076em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">2</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord"><span class="mord mathnormal" style="margin-right:0.0359em;">σ</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">0</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.686em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="minner"><span class="mopen delimcenter" style="top:0em;"><span class="delimsizing size3">(</span></span><span class="mord">1</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord">3</span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.4911em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord"><span class="mord mathnormal" style="margin-right:0.0278em;">r</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.7401em;"><span style="top:-2.989em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">4</span></span></span></span></span></span></span></span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord"><span class="mord mathnormal">a</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">4</span></span></span></span></span></span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.686em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mclose delimcenter" style="top:0em;"><span class="delimsizing size3">)</span></span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mop">cos</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord">2</span><span class="mord mathnormal" style="margin-right:0.0278em;">θ</span></span></span></span></span></p>
+<p>孔边（r=a，θ=90°）最大周向应力：</p>
+<p><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><msub><mi>σ</mi><mi>max</mi><mo>⁡</mo></msub><mo>=</mo><mn>3</mn><msub><mi>σ</mi><mn>0</mn></msub></mrow><annotation encoding="application/x-tex">\sigma_{\max} = 3\sigma_0</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.5806em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0359em;">σ</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mop mtight"><span class="mtight">m</span><span class="mtight">a</span><span class="mtight">x</span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.7944em;vertical-align:-0.15em;"></span><span class="mord">3</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0359em;">σ</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">0</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span></span></span></p>
+<p>应力集中系数：<strong>K_t = 3.0</strong></p>
+<h2>有限宽度修正</h2>
+<p>当 d/W = 0.2，H/W = 2 时，有限宽度修正：</p>
+<ul>
+<li><strong>K_t ≈ 2.73</strong>（Peterson, Stress Concentration Factors）</li>
+</ul>
+<h2>参考值</h2>
+<table>
+<thead>
+<tr>
+<th>物理量</th>
+<th>表达式</th>
+<th>数值</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>远端应力</td>
+<td>σ_0</td>
+<td>100 MPa</td>
+</tr>
+<tr>
+<td>孔边最大应力（无限板）</td>
+<td>3σ_0</td>
+<td>300 MPa</td>
+</tr>
+<tr>
+<td>孔边最大应力（有限板，d/W=0.2）</td>
+<td>K_t·σ_0</td>
+<td>≈273 MPa</td>
+</tr>
+<tr>
+<td>应力集中系数 K_t</td>
+<td>—</td>
+<td>2.73</td>
+</tr>
+</tbody>
+</table>
+<h2>求解器配置参考</h2>
+<ul>
+<li><strong>CalculiX</strong>: 2D 平面应力，CPS4 四边形单元，1/4 对称模型</li>
+<li><strong>ANSYS MAPDL</strong>: PLANE182 平面应力单元</li>
+<li><strong>PinN</strong>: 2D 平面应力 PINN（难度远大于 1D 杆）</li>
+</ul>
+<h2>参考文献</h2>
+<ul>
+<li>Kirsch, G. (1898). Die Theorie der Elastizität und die Bedürfnisse der Festigkeitslehre. <em>VDI-Z</em>, 42, 797-807.</li>
+<li>Peterson, R. E. (1974). <em>Stress Concentration Factors</em>. Wiley.</li>
+<li>徐芝纶. (2006). <em>弹性力学</em> (第4版). 高等教育出版社.</li>
+</ul>
+
+</body>
+</html>

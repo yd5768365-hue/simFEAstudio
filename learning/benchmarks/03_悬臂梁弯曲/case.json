@@ -1,0 +1,9 @@
+{
+  "group": "基础案例",
+  "title": "悬臂梁弯曲",
+  "level": "L2",
+  "physics": "结构力学",
+  "dimension": "1D 梁",
+  "methods": ["analytic", "calculix"],
+  "status": "completed"
+}

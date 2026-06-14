@@ -310,6 +310,8 @@ Tauri 自动编译 Rust 壳、启动 sidecar、打开原生桌面窗口。首次
 # Python
 python -m unittest discover -s src/backends/tests -v
 python -m py_compile src/backends/main.py src/backends/simfea_api/*.py src/backends/simfea_api/runners/*.py src/backends/inference/*.py
+python scripts/check_benchmark_contract.py
+python scripts/build_benchmark_learning_path.py
 
 # 前端
 pnpm test
@@ -334,6 +336,8 @@ git diff --check
 - `docs/DEV_LOG_2026-05-13.md`：结构化引导笔记、学习报告修复、asyncio 死锁修复。
 - `docs/DEV_LOG_2026-05-12.md`：开发日志和验证记录。
 - `docs/ARCHITECTURE_ROADMAP.md`：架构路线图，以及 sim-main / OpenCAEHub 借鉴分析。
+- `docs/OPEN_SOURCE_BORROWING_MATRIX.md`：FreeCAD、SALOME、Gmsh、OpenFOAM、FEniCSx、MFEM 的可借鉴边界和第一轮落地。
+- `learning/benchmarks/LEARNING_PATH.md`：借鉴 MFEM / FEniCSx 的 Benchmark Lab 学习路径索引。
 - `docs/RUNNER_DESIGN.md`：Runner 边界和执行模型。
 - `docs/API_CONTRACTS.md`：API 契约和示例响应。
 - `docs/AI_FEA_EXPLORATION_NOTE_2030.md`：AI + 有限元探索笔记和项目介绍。

@@ -1,0 +1,28 @@
+*HEADING
+Demo: 修复后的 inp 文件
+*NODE
+1, 0., 0., 0.
+2, 100., 0., 0.
+*NSET, NSET=Nall
+1, 2
+*ELEMENT, TYPE=B31
+1, 1, 2
+*ELSET, ELSET=beam
+1
+*MATERIAL, NAME=steel
+*ELASTIC
+210000., 0.3
+*BEAM SECTION, ELSET=beam, MATERIAL=steel, SECTION=RECT
+20., 20.
+0., 0., 1.
+*BOUNDARY
+Nall, 1, 6
+*STEP
+*STATIC
+*CLOAD
+Nall, 2, -100.
+*NODE FILE
+U
+*EL FILE, ELSET=beam
+S
+*END STEP

@@ -1,0 +1,3 @@
+method,delta_max_mm,sigma_max_MPa,error_pct,notes
+analytic,0.275,41.7,,简支梁中央集中力公式
+calculix,,,,B31 梁单元 (to verify)

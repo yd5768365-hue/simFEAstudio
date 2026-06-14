@@ -1,0 +1,3 @@
+method,sigma_thermal_MPa,free_elongation_mm,error_pct,notes
+analytic,-126.0,0.3,,热应力公式
+calculix,,,,C3D8 热力耦合 (to verify)

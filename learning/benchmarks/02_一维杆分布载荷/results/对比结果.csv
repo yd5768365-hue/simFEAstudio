@@ -1,0 +1,5 @@
+method,u_L_mm,sigma_max_MPa,error_u_L_mm,notes
+analytic,0.0238095238,100.0,0.0,closed form; u(x) quadratic σ(x) linear
+calculix,,,,TBD — T3D2 rod elements (10+)
+ansys,,,,TBD — MAPDL LINK180
+pinn,,,,TBD — nondimensionalized PyTorch PINN with distributed load term

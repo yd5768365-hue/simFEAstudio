@@ -1,0 +1,9 @@
+{
+  "group": "基础案例",
+  "title": "圆孔板应力集中",
+  "level": "L2",
+  "physics": "结构力学",
+  "dimension": "2D 平面应力",
+  "methods": ["analytic-kirsch", "analytic-heywood", "calculix"],
+  "status": "completed"
+}

@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>05_预检查演示</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<style>
+  :root { color-scheme: dark; }
+  body {
+    max-width: 960px; margin: 0 auto; padding: 40px 24px;
+    background: #0f1116; color: #c4cad6;
+    font-family: 'Microsoft YaHei', 'Segoe UI', system-ui, sans-serif;
+    font-size: 0.92rem; line-height: 1.85;
+  }
+  h1 { font-size: 1.4rem; color: #edf2fb; border-bottom: 1px solid #2b3240; padding-bottom: 10px; }
+  h2 { font-size: 1.1rem; color: #edf2fb; border-left: 3px solid #8b5cf6; padding-left: 12px; margin-top: 32px; }
+  h3 { font-size: 0.95rem; color: #edf2fb; margin-top: 22px; }
+  strong { color: #edf2fb; }
+  a { color: #a78bfa; }
+  code { background: #11141a; padding: 2px 7px; border-radius: 4px; font-size: 0.88em; color: #38bdf8; }
+  pre { background: #11141a; border: 1px solid #2b3240; border-radius: 8px; padding: 16px 20px; overflow-x: auto; }
+  pre code { background: none; padding: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; border: 1px solid #2b3240; border-radius: 8px; overflow: hidden; }
+  th { background: #151922; color: #9ca6b8; font-weight: 700; padding: 10px 14px; text-align: left; font-size: 0.72rem; text-transform: uppercase; }
+  td { padding: 8px 14px; border-bottom: 1px solid #242936; }
+  tr:nth-child(even) td { background: rgba(255,255,255,0.015); }
+  blockquote { border-left: 3px solid #8b5cf6; margin: 16px 0; padding: 12px 18px; background: rgba(139,92,246,0.12); border-radius: 0 8px 8px 0; }
+  hr { border: none; border-top: 1px solid #242936; margin: 28px 0; }
+  ul, ol { padding-left: 24px; }
+  li { margin: 5px 0; line-height: 1.75; }
+  .katex { color: #c4cad6; }
+  .katex-error { color: #ef4444; font-family: monospace; }
+</style>
+</head>
+<body>
+<h1>Case 5: INP 文件预检查 (Preflight Validation Demo)</h1>
+<h2>说明</h2>
+<p>本案例演示 SimFEA Studio 的 INP 预检查功能——在提交求解器之前自动验证输入文件的常见错误。</p>
+<h2>包含文件</h2>
+<table>
+<thead>
+<tr>
+<th>文件</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>错误示例.inp</code></td>
+<td>包含多处错误的 INP 文件（缺少材料定义、未引用的节点集）</td>
+</tr>
+<tr>
+<td><code>修正示例.inp</code></td>
+<td>修正后的 INP 文件</td>
+</tr>
+</tbody>
+</table>
+<h2>预检查功能</h2>
+<p>提交求解器运行时，后端会自动对 INP 文件执行以下检查：</p>
+<ol>
+<li><strong>结构检查</strong> — 是否包含必要的关键字（<code>*NODE</code>, <code>*ELEMENT</code>, <code>*MATERIAL</code>, <code>*STEP</code>）</li>
+<li><strong>材料检查</strong> — <code>*ELASTIC</code> 是否包含弹性模量和泊松比</li>
+<li><strong>截面检查</strong> — <code>*SOLID SECTION</code> 是否引用了有效的材料</li>
+<li><strong>边界检查</strong> — <code>*BOUNDARY</code> 引用的节点集是否存在</li>
+<li><strong>载荷检查</strong> — <code>*CLOAD</code> / <code>*DLOAD</code> 格式是否正确</li>
+<li><strong>分析步检查</strong> — <code>*STEP</code> 内是否包含必要的求解控制</li>
+</ol>
+<h2>使用方式</h2>
+<p>在 Composer 视图配置好求解器后，点击「预检查」按钮即可查看验证结果。</p>
+
+</body>
+</html>

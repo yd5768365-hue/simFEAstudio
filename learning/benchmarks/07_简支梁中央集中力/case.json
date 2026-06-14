@@ -1,0 +1,9 @@
+{
+  "group": "扩展案例",
+  "title": "简支梁中央集中力",
+  "level": "L2",
+  "physics": "结构力学",
+  "dimension": "1D 梁",
+  "methods": ["analytic", "calculix"],
+  "status": "completed"
+}

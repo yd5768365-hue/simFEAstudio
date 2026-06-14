@@ -280,6 +280,14 @@ export const startSlurmDemoRunResponseSchema = z.object({
 
 export type StartSlurmDemoRunResponse = z.output<typeof startSlurmDemoRunResponseSchema>
 
+export const preflightIssueSchema = z.object({
+  severity: z.string(),
+  category: z.string(),
+  message: z.string(),
+})
+
+export type PreflightIssue = z.output<typeof preflightIssueSchema>
+
 export const startSolverRunResponseSchema = z.object({
   message: z.string(),
   data: z.object({
@@ -289,6 +297,7 @@ export const startSolverRunResponseSchema = z.object({
     remote_workdir: z.string(),
     compute_node: z.string(),
     solver: solverDefinitionSchema,
+    preflight_issues: z.array(preflightIssueSchema).optional().default([]),
   }),
 })
 
@@ -310,8 +319,18 @@ export const startWorkflowRunResponseSchema = z.object({
 
 export type StartWorkflowRunResponse = z.output<typeof startWorkflowRunResponseSchema>
 
+export const workflowStepSchema = z.union([
+  z.string(),
+  z.object({
+    solver: z.string(),
+    params: z.record(z.string()).optional(),
+  }),
+])
+
+export type WorkflowStep = z.output<typeof workflowStepSchema>
+
 export const customWorkflowBodySchema = z.object({
-  steps: z.array(z.string()),
+  steps: z.array(workflowStepSchema),
 })
 
 export type CustomWorkflowBody = z.output<typeof customWorkflowBodySchema>
@@ -407,12 +426,22 @@ export const finishedEventSchema = sseEventBaseSchema.extend({
   allocated_node: z.string().nullable().optional(),
 })
 
+export const staProgressEventSchema = sseEventBaseSchema.extend({
+  type: z.literal('sta_progress'),
+  line: z.string(),
+  step: z.number(),
+  increment: z.number(),
+  iteration: z.number(),
+  progress_pct: z.number().nullable().optional(),
+})
+
 export const sseEventSchema = z.discriminatedUnion('type', [
   stdoutEventSchema,
   stderrEventSchema,
   statusEventSchema,
   artifactEventSchema,
   finishedEventSchema,
+  staProgressEventSchema,
 ])
 
 export type SseEvent = z.output<typeof sseEventSchema>
@@ -421,6 +450,7 @@ export type StderrEvent = z.output<typeof stderrEventSchema>
 export type StatusEvent = z.output<typeof statusEventSchema>
 export type ArtifactEvent = z.output<typeof artifactEventSchema>
 export type FinishedEvent = z.output<typeof finishedEventSchema>
+export type StaProgressEvent = z.output<typeof staProgressEventSchema>
 
 export const probeSchedulerResponseSchema = z.object({
   message: z.string(),
@@ -527,10 +557,27 @@ export type InstallEvent = z.output<typeof installEventSchema>
 
 // ── Benchmark Lab ───────────────────────────────────────────
 
+export const learningTierSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  focus: z.string(),
+})
+
+export type LearningTier = z.output<typeof learningTierSchema>
+
 export const benchmarkCaseSchema = z.object({
   name: z.string(),
   has_problem: z.boolean(),
   has_results: z.boolean(),
+  group: z.string().optional().default('基础案例'),
+  title: z.string().optional().default(''),
+  subtitle: z.string().optional().default(''),
+  level: z.string().optional().default(''),
+  physics: z.string().optional().default(''),
+  dimension: z.string().optional().default(''),
+  methods: z.array(z.string()).optional().default([]),
+  status: z.string().optional().default(''),
+  learning_tier: learningTierSchema.nullable().optional(),
 })
 
 export type BenchmarkCase = z.output<typeof benchmarkCaseSchema>
@@ -557,7 +604,16 @@ export type BenchmarkResult = z.output<typeof benchmarkResultSchema>
 
 export const benchmarkCaseDetailSchema = z.object({
   name: z.string(),
-  problem_md: z.string(),
+  group: z.string().optional().default('基础案例'),
+  title: z.string().optional().default(''),
+  level: z.string().optional().default(''),
+  physics: z.string().optional().default(''),
+  dimension: z.string().optional().default(''),
+  methods: z.array(z.string()).optional().default([]),
+  status: z.string().optional().default(''),
+  learning_tier: learningTierSchema.nullable().optional(),
+  problem_html: z.string().optional().default(''),
+  problem_md: z.string().optional().default(''),
   results: z.array(benchmarkResultSchema),
 })
 
@@ -569,3 +625,66 @@ export const getBenchmarkCaseResponseSchema = z.object({
 })
 
 export type GetBenchmarkCaseResponse = z.output<typeof getBenchmarkCaseResponseSchema>
+
+// ── Knowledge Base ─────────────────────────────────────────
+
+export const knowledgeDocumentSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  original_path: z.string().optional(),
+  created_at: z.string(),
+  chunk_count: z.number(),
+})
+
+export type KnowledgeDocument = z.output<typeof knowledgeDocumentSchema>
+
+export const uploadKnowledgeResponseSchema = z.object({
+  message: z.string(),
+  data: z.object({
+    doc_id: z.string(),
+    name: z.string(),
+    chunk_count: z.number(),
+  }),
+})
+
+export type UploadKnowledgeResponse = z.output<typeof uploadKnowledgeResponseSchema>
+
+export const listKnowledgeResponseSchema = z.object({
+  message: z.string(),
+  data: z.object({
+    documents: z.array(knowledgeDocumentSchema),
+  }),
+})
+
+export type ListKnowledgeResponse = z.output<typeof listKnowledgeResponseSchema>
+
+export const deleteKnowledgeResponseSchema = z.object({
+  message: z.string(),
+  data: z.object({
+    deleted: z.boolean(),
+  }),
+})
+
+export type DeleteKnowledgeResponse = z.output<typeof deleteKnowledgeResponseSchema>
+
+export const askKnowledgeBodySchema = z.object({
+  run_id: z.string().optional(),
+  question: z.string(),
+  doc_ids: z.array(z.string()).optional(),
+})
+
+export const knowledgeSourceSchema = z.object({
+  text: z.string(),
+  source: z.string(),
+  score: z.number(),
+})
+
+export const askKnowledgeResponseSchema = z.object({
+  message: z.string(),
+  data: z.object({
+    answer: z.string(),
+    sources: z.array(knowledgeSourceSchema),
+  }),
+})
+
+export type AskKnowledgeResponse = z.output<typeof askKnowledgeResponseSchema>

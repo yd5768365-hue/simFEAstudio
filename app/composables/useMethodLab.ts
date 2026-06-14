@@ -77,6 +77,11 @@ const CAE_LADDER_DEFS = [
 ] as const
 
 function classifyCase(c: BenchmarkCase): { l1: boolean; l2: boolean; l3: boolean } {
+  const level = (c.level || '').toUpperCase()
+  if (level === 'L1') return { l1: true, l2: false, l3: false }
+  if (level === 'L2') return { l1: false, l2: true, l3: false }
+  if (level === 'L3') return { l1: false, l2: false, l3: true }
+
   const name = c.name.toLowerCase()
   const title = (c.title || '').toLowerCase()
   const searchText = `${name} ${title}`

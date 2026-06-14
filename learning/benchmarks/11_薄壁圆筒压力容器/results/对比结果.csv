@@ -1,0 +1,3 @@
+method,sigma_hoop_MPa,sigma_axial_MPa,delta_r_mm,error_pct,notes
+analytic,100.0,50.0,0.081,,薄壁圆筒公式
+calculix,,,,,S4 壳单元 (to verify)

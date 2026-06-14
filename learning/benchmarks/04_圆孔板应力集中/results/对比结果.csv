@@ -1,0 +1,4 @@
+method,sigma_max_MPa,K_t,error,notes
+analytic-kirsch,300.0,3.0,,Kirsch infinite-plate solution
+analytic-heywood,251.2,2.51,,Heywood finite-width Kt=2+(1-d/W)^3 for d/W=0.2
+calculix,,,,2D CPS4 plane stress (to verify)

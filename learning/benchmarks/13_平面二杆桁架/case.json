@@ -1,0 +1,9 @@
+{
+  "group": "扩展案例",
+  "title": "平面二杆桁架",
+  "level": "L2",
+  "physics": "结构力学",
+  "dimension": "2D 桁架",
+  "methods": ["analytic", "calculix"],
+  "status": "completed"
+}

@@ -1,0 +1,9 @@
+{
+  "group": "扩展案例",
+  "title": "热膨胀约束杆",
+  "level": "L2",
+  "physics": "热应力",
+  "dimension": "1D 杆",
+  "methods": ["analytic", "calculix"],
+  "status": "completed"
+}

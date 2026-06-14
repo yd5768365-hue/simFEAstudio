@@ -1,0 +1,3 @@
+method,issues_found,issues_fixed,notes
+错误示例,5,0,缺少 *MATERIAL、*ELASTIC、未引用节点集
+修正示例,0,5,所有问题已修正

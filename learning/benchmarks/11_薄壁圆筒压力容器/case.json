@@ -1,0 +1,9 @@
+{
+  "group": "扩展案例",
+  "title": "薄壁圆筒压力容器",
+  "level": "L2",
+  "physics": "压力容器",
+  "dimension": "壳体",
+  "methods": ["analytic", "calculix"],
+  "status": "completed"
+}

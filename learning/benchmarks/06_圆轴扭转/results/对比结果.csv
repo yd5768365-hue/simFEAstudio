@@ -1,0 +1,3 @@
+method,tau_max_MPa,phi_rad,error_pct,notes
+analytic,6.37,0.00159,,材料力学圆轴扭转公式
+calculix,,,,C3D8 三维实体 (to verify)

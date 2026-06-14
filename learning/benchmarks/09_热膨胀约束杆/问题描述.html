@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>09_热膨胀约束杆</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<style>
+  :root { color-scheme: dark; }
+  body {
+    max-width: 960px; margin: 0 auto; padding: 40px 24px;
+    background: #0f1116; color: #c4cad6;
+    font-family: 'Microsoft YaHei', 'Segoe UI', system-ui, sans-serif;
+    font-size: 0.92rem; line-height: 1.85;
+  }
+  h1 { font-size: 1.4rem; color: #edf2fb; border-bottom: 1px solid #2b3240; padding-bottom: 10px; }
+  h2 { font-size: 1.1rem; color: #edf2fb; border-left: 3px solid #8b5cf6; padding-left: 12px; margin-top: 32px; }
+  h3 { font-size: 0.95rem; color: #edf2fb; margin-top: 22px; }
+  strong { color: #edf2fb; }
+  a { color: #a78bfa; }
+  code { background: #11141a; padding: 2px 7px; border-radius: 4px; font-size: 0.88em; color: #38bdf8; }
+  pre { background: #11141a; border: 1px solid #2b3240; border-radius: 8px; padding: 16px 20px; overflow-x: auto; }
+  pre code { background: none; padding: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; border: 1px solid #2b3240; border-radius: 8px; overflow: hidden; }
+  th { background: #151922; color: #9ca6b8; font-weight: 700; padding: 10px 14px; text-align: left; font-size: 0.72rem; text-transform: uppercase; }
+  td { padding: 8px 14px; border-bottom: 1px solid #242936; }
+  tr:nth-child(even) td { background: rgba(255,255,255,0.015); }
+  blockquote { border-left: 3px solid #8b5cf6; margin: 16px 0; padding: 12px 18px; background: rgba(139,92,246,0.12); border-radius: 0 8px 8px 0; }
+  hr { border: none; border-top: 1px solid #242936; margin: 28px 0; }
+  ul, ol { padding-left: 24px; }
+  li { margin: 5px 0; line-height: 1.75; }
+  .katex { color: #c4cad6; }
+  .katex-error { color: #ef4444; font-family: monospace; }
+</style>
+</head>
+<body>
+<h1>Case 9: 热膨胀约束杆 (Thermal Stress in Constrained Bar)</h1>
+<h2>物理问题描述</h2>
+<p>一根两端完全固定的均匀杆，温度升高 <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi mathvariant="normal">Δ</mi><mi>T</mi></mrow><annotation encoding="application/x-tex">\Delta T</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord">Δ</span><span class="mord mathnormal" style="margin-right:0.1389em;">T</span></span></span></span>。由于热膨胀被约束，杆内产生压缩热应力。材料为线弹性。</p>
+<pre><code>  ╔════════════════════════╗
+  ║   E, A, α              ║  ΔT = +50°C
+  ╚════════════════════════╝
+  x=0                    x=L
+  完全固定                 完全固定
+</code></pre>
+<p><strong>参数：</strong></p>
+<table>
+<thead>
+<tr>
+<th>参数</th>
+<th>符号</th>
+<th>值</th>
+<th>单位</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>杆长</td>
+<td>L</td>
+<td>500</td>
+<td>mm</td>
+</tr>
+<tr>
+<td>截面积</td>
+<td>A</td>
+<td>100</td>
+<td>mm²</td>
+</tr>
+<tr>
+<td>弹性模量</td>
+<td>E</td>
+<td>210 000</td>
+<td>MPa</td>
+</tr>
+<tr>
+<td>热膨胀系数</td>
+<td>α</td>
+<td>1.2×10⁻⁵</td>
+<td>/°C</td>
+</tr>
+<tr>
+<td>温升</td>
+<td>ΔT</td>
+<td>50</td>
+<td>°C</td>
+</tr>
+</tbody>
+</table>
+<h2>解析解</h2>
+<h3>完全约束情况</h3>
+<p>热应变被完全约束：<span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>ε</mi><mtext>mech</mtext></msub><mo>+</mo><msub><mi>ε</mi><mtext>therm</mtext></msub><mo>=</mo><mn>0</mn></mrow><annotation encoding="application/x-tex">\varepsilon_{\text{mech}} + \varepsilon_{\text{therm}} = 0</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.7333em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal">ε</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord text mtight"><span class="mord mtight">mech</span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.5806em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal">ε</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord text mtight"><span class="mord mtight">therm</span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">0</span></span></span></span></p>
+<p><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><msub><mi>ε</mi><mtext>mech</mtext></msub><mo>=</mo><mo>−</mo><mi>α</mi><mi mathvariant="normal">Δ</mi><mi>T</mi></mrow><annotation encoding="application/x-tex">\varepsilon_{\text{mech}} = -\alpha \Delta T</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.5806em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal">ε</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord text mtight"><span class="mord mtight">mech</span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.7667em;vertical-align:-0.0833em;"></span><span class="mord">−</span><span class="mord mathnormal" style="margin-right:0.0037em;">α</span><span class="mord">Δ</span><span class="mord mathnormal" style="margin-right:0.1389em;">T</span></span></span></span></span></p>
+<p>热应力：</p>
+<p><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi>σ</mi><mo>=</mo><mi>E</mi><mo>⋅</mo><msub><mi>ε</mi><mtext>mech</mtext></msub><mo>=</mo><mo>−</mo><mi>E</mi><mi>α</mi><mi mathvariant="normal">Δ</mi><mi>T</mi></mrow><annotation encoding="application/x-tex">\sigma = E \cdot \varepsilon_{\text{mech}} = -E \alpha \Delta T</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.4306em;"></span><span class="mord mathnormal" style="margin-right:0.0359em;">σ</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.0576em;">E</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">⋅</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.5806em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal">ε</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord text mtight"><span class="mord mtight">mech</span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.7667em;vertical-align:-0.0833em;"></span><span class="mord">−</span><span class="mord mathnormal" style="margin-right:0.0576em;">E</span><span class="mord mathnormal" style="margin-right:0.0037em;">α</span><span class="mord">Δ</span><span class="mord mathnormal" style="margin-right:0.1389em;">T</span></span></span></span></span></p>
+<p>注意：正值为拉应力，负值为压应力。此处为压缩。</p>
+<h3>一端自由情况（对比）</h3>
+<p>若一端自由，则 <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>σ</mi><mo>=</mo><mn>0</mn></mrow><annotation encoding="application/x-tex">\sigma = 0</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.4306em;"></span><span class="mord mathnormal" style="margin-right:0.0359em;">σ</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">0</span></span></span></span>，伸长量：</p>
+<p><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi mathvariant="normal">Δ</mi><mi>L</mi><mo>=</mo><mi>α</mi><mi>L</mi><mi mathvariant="normal">Δ</mi><mi>T</mi></mrow><annotation encoding="application/x-tex">\Delta L = \alpha L \Delta T</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord">Δ</span><span class="mord mathnormal">L</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.0037em;">α</span><span class="mord mathnormal">L</span><span class="mord">Δ</span><span class="mord mathnormal" style="margin-right:0.1389em;">T</span></span></span></span></span></p>
+<h2>参考值</h2>
+<table>
+<thead>
+<tr>
+<th>物理量</th>
+<th>数值</th>
+<th>单位</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>热应变</td>
+<td>−6×10⁻⁴</td>
+<td>—</td>
+</tr>
+<tr>
+<td>热应力（约束）</td>
+<td>−126</td>
+<td>MPa</td>
+</tr>
+<tr>
+<td>自由伸长量</td>
+<td>0.3</td>
+<td>mm</td>
+</tr>
+</tbody>
+</table>
+<h2>参考文献</h2>
+<ul>
+<li>刘鸿文. (2011). <em>材料力学</em> (第5版). 第二章 温度应力.</li>
+</ul>
+
+</body>
+</html>

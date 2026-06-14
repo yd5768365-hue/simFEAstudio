@@ -1,0 +1,6 @@
+method,u_L_mm,sigma_MPa,error_u_L_mm,notes
+analytic,0.0476190476,100.0,0.0,closed form
+simfea-core,0.047619,100.000000,0.000000e+00,SimFEA-Lab Core C++ 1D bar (verification: PASSED)
+calculix,0.04761905,100.0,2.4e-9,T3D2 rod element
+ansys,0.047619048,100.0,4.0e-10,MAPDL LINK180
+pinn,0.0476395451,,4.30e-04,PyTorch PINN 5000 epochs (2026-06-09)

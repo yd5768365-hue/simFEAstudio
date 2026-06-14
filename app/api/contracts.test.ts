@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { ApiClientError, extractValidationIssues } from './client'
 import {
   connectResponseSchema,
+  getBenchmarkCaseResponseSchema,
+  listBenchmarksResponseSchema,
   listSolverInstallationsResponseSchema,
   probeNodeResponseSchema,
   probeSolversResponseSchema,
@@ -240,6 +242,7 @@ describe('solver contracts', () => {
             executable_candidates: ['FreeCADCmd.exe'],
             common_paths: ['C:/FreeCAD/bin/FreeCADCmd.exe'],
             searched_paths: ['C:/FreeCAD/bin/FreeCADCmd.exe'],
+            // biome-ignore lint/suspicious/noTemplateCurlyInString: command templates use literal placeholders
             verify_command: '"${executable}" --version',
             install_hint: 'Install FreeCAD first.',
             install_guide_url: 'https://www.freecad.org/downloads.php',
@@ -334,6 +337,75 @@ describe('solver contracts', () => {
       },
     })
     expect(result.data.workflow.steps).toHaveLength(2)
+  })
+})
+
+describe('benchmark contracts', () => {
+  it('parses enriched benchmark metadata', () => {
+    const result = listBenchmarksResponseSchema.parse({
+      message: 'Found 1 benchmark case(s).',
+      data: {
+        cases: [
+          {
+            name: '01_rod',
+            has_problem: true,
+            has_results: true,
+            group: '基础案例',
+            title: 'Rod Tension',
+            subtitle: 'Minimal benchmark.',
+            level: 'L1',
+            physics: 'structural',
+            dimension: '1D rod',
+            methods: ['analytic', 'calculix'],
+            status: 'completed',
+            learning_tier: {
+              id: 'L1',
+              label: 'L1 Example',
+              focus: 'result observation',
+            },
+          },
+        ],
+      },
+    })
+
+    expect(result.data.cases[0].level).toBe('L1')
+    expect(result.data.cases[0].methods).toEqual(['analytic', 'calculix'])
+    expect(result.data.cases[0].learning_tier?.label).toBe('L1 Example')
+  })
+
+  it('parses enriched benchmark details', () => {
+    const result = getBenchmarkCaseResponseSchema.parse({
+      message: "Benchmark case '02_beam'",
+      data: {
+        name: '02_beam',
+        group: '扩展案例',
+        title: 'Beam Bending',
+        level: 'L2',
+        physics: 'structural',
+        dimension: '1D beam',
+        methods: ['analytic'],
+        status: 'draft',
+        learning_tier: {
+          id: 'L2',
+          label: 'L2 Benchmark',
+          focus: 'mechanism reconstruction',
+        },
+        problem_html: '',
+        problem_md: '# Beam Bending',
+        results: [
+          {
+            method: 'analytic',
+            u_L_mm: '1',
+            error_u_L_mm: '0',
+            notes: 'baseline',
+          },
+        ],
+      },
+    })
+
+    expect(result.data.level).toBe('L2')
+    expect(result.data.learning_tier?.focus).toBe('mechanism reconstruction')
+    expect(result.data.results[0].method).toBe('analytic')
   })
 })
 

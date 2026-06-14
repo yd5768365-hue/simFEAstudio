@@ -421,6 +421,12 @@ learning/OpenCAEHub-main/
 learning/voicebox-main/
 learning/work/
 
+# Generated benchmark solver outputs; keep source inputs such as .inp tracked.
+learning/benchmarks/**/calculix/*.cvg
+learning/benchmarks/**/calculix/*.dat
+learning/benchmarks/**/calculix/*.frd
+learning/benchmarks/**/calculix/*.sta
+
 # Local command/test artifacts
 /-w
 /test_llm_output.txt

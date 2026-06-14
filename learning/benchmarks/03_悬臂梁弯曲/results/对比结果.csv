@@ -1,0 +1,3 @@
+method,u_L_mm,sigma_MPa,error_u_L_mm,notes
+analytic,11.9048,75.00,0.0,Euler-Bernoulli beam theory
+calculix,11.8738,70.88,0.031,B31 10-element verified (2026-06-09)

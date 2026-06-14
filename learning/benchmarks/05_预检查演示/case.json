@@ -1,0 +1,9 @@
+{
+  "group": "基础案例",
+  "title": "预检查演示",
+  "level": "L3",
+  "physics": "求解器输入质量",
+  "dimension": "工具链演示",
+  "methods": ["错误示例", "修正示例"],
+  "status": "demo"
+}

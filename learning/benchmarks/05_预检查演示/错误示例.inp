@@ -1,0 +1,19 @@
+*HEADING
+Demo broken input file for preflight check
+*NODE
+1, 0., 0., 0.
+2, 100., 0., 0.
+*ELEMENT, TYPE=B31
+1, 1, 2
+*ELSET, ELSET=beam
+1
+*BEAM SECTION, ELSET=beam, MATERIAL=steel, SECTION=RECT
+20., 20.
+0., 0., 1.
+*BOUNDARY
+Nfix, 1, 6
+*STEP
+*STATIC
+*CLOAD
+Nload, 2, -100.
+*END STEP

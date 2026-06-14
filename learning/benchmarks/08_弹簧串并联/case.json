@@ -1,0 +1,9 @@
+{
+  "group": "扩展案例",
+  "title": "弹簧串并联",
+  "level": "L1",
+  "physics": "结构力学",
+  "dimension": "离散弹簧系统",
+  "methods": ["analytic", "calculix"],
+  "status": "completed"
+}

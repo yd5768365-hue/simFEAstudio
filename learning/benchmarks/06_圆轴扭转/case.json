@@ -1,0 +1,9 @@
+{
+  "group": "扩展案例",
+  "title": "圆轴扭转",
+  "level": "L2",
+  "physics": "结构力学",
+  "dimension": "1D 轴",
+  "methods": ["analytic", "calculix"],
+  "status": "completed"
+}
