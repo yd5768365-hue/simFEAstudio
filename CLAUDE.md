@@ -30,9 +30,9 @@ pnpm dev:all                      # Sidecar + frontend concurrently
 pnpm dev:tauri                    # Full Tauri desktop app (auto-starts Vite)
 
 # Testing
-python -m unittest discover -s src/backends/tests -v    # Python unit tests (87)
+python -m unittest discover -s src/backends/tests -v    # Python unit tests
 python -m unittest src/backends/tests/test_learning.py -v  # Single Python test file
-pnpm test                        # Vitest unit tests (23)
+pnpm test                        # Vitest unit tests
 pnpm test:watch                  # Vitest in watch mode
 pnpm vitest run app/api/contracts.test.ts  # Single Vitest file
 
