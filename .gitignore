@@ -419,6 +419,12 @@ sim-main/
 learning/sim-main/
 learning/OpenCAEHub-main/
 learning/voicebox-main/
+learning/work/
+
+# Local command/test artifacts
+/-w
+/test_llm_output.txt
+/package-lock.json
 
 uv.lock
 
