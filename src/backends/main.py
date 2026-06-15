@@ -237,15 +237,6 @@ except ImportError:
     )
 
 
-def docker_cli_executable() -> str:
-    docker = shutil.which("docker")
-    if docker:
-        return docker
-    windows_docker = Path("C:/Program Files/Docker/Docker/resources/bin/docker.exe")
-    if windows_docker.exists():
-        return str(windows_docker)
-    return "docker"
-
 app = FastAPI(
     title="SimFEA Studio API",
     version="0.1.0",
