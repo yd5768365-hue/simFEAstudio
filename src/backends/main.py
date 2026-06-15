@@ -102,6 +102,7 @@ try:
         list_documents as knowledge_list_documents,
     )
     from .simfea_api.knowledge_store import delete_document as knowledge_delete_document
+    from .simfea_api.security import safe_child_dir, safe_upload_path
 except ImportError:
     from simfea_api.cleanup import cleanup_old_runs
     from simfea_api.config import ComputeNode, PROJECT_ROOT, SolverDefinition, settings
@@ -179,6 +180,7 @@ except ImportError:
         list_documents as knowledge_list_documents,
     )
     from simfea_api.knowledge_store import delete_document as knowledge_delete_document
+    from simfea_api.security import safe_child_dir, safe_upload_path
 
 log = create_logger("sidecar")
 
@@ -1446,7 +1448,10 @@ async def upload_knowledge_document(file: UploadFile = File(...)):
 
     tmp_dir = Path(settings().runs_root).parent / "knowledge" / "uploads"
     tmp_dir.mkdir(parents=True, exist_ok=True)
-    tmp_path = tmp_dir / file.filename
+    try:
+        tmp_path = safe_upload_path(tmp_dir, file.filename)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
     try:
         content = await file.read()
@@ -1528,7 +1533,7 @@ def ask_knowledge(payload: dict = Body(...)):
     run_context = ""
     if run_id:
         try:
-            run_dir = Path(settings().runs_root) / run_id
+            run_dir = safe_child_dir(Path(settings().runs_root), run_id)
             note = read_optional_text(run_dir / "note.md", "")
             report = read_optional_text(run_dir / "learning_report.md", "")
             meta = json.loads((run_dir / "meta.json").read_text(encoding="utf-8")) if (run_dir / "meta.json").exists() else {}
