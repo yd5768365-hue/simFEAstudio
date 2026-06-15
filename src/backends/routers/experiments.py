@@ -138,7 +138,7 @@ async def run_experiment_code(payload: dict = Body(...)):
             "data": {
                 "exit_code": -1,
                 "stdout": "",
-                "stderr": "Execution timed out after 30 seconds.",
+                "stderr": "Execution timed out after 60 seconds.",
             },
         }
     finally:
