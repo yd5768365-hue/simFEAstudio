@@ -102,9 +102,9 @@ runs_router = APIRouter(prefix="/v1")
 @runs_router.get("/runs")
 def list_runs():
     try:
-        from ..main import _load_demo_runs
+        from ..execution import _load_demo_runs
     except ImportError:
-        from main import _load_demo_runs
+        from execution import _load_demo_runs
     current = settings()
     archived = load_archived_runs()
     runs = archived if archived else _load_demo_runs()
@@ -123,9 +123,9 @@ def list_runs():
 @runs_router.get("/runs/{run_id}")
 def get_run(run_id: str):
     try:
-        from ..main import _DEMO_RUNS_DIR
+        from ..execution import _DEMO_RUNS_DIR
     except ImportError:
-        from main import _DEMO_RUNS_DIR
+        from execution import _DEMO_RUNS_DIR
     # Demo data fallback
     demo_dir = _DEMO_RUNS_DIR / run_id
     if demo_dir.is_dir():
@@ -291,9 +291,9 @@ def export_run_learning_record(run_id: str, payload: T_LearningExport = Body(def
 @runs_router.post("/runs/{alias}/demo")
 async def start_demo_run(alias: str):
     try:
-        from ..main import build_evidence_demo_script, execute_local_run, execute_remote_run
+        from ..execution import build_evidence_demo_script, execute_local_run, execute_remote_run
     except ImportError:
-        from main import build_evidence_demo_script, execute_local_run, execute_remote_run
+        from execution import build_evidence_demo_script, execute_local_run, execute_remote_run
     node = get_compute_node(alias)
     current = settings()
     run_id = f"run_{uuid.uuid4().hex[:10]}"
@@ -335,9 +335,9 @@ async def start_demo_run(alias: str):
 @runs_router.post("/runs/{alias}/slurm-demo")
 async def start_slurm_demo_run(alias: str):
     try:
-        from ..main import execute_slurm_run
+        from ..execution import execute_slurm_run
     except ImportError:
-        from main import execute_slurm_run
+        from execution import execute_slurm_run
     node = get_compute_node(alias)
     current = settings()
     run_id = f"run_{uuid.uuid4().hex[:10]}"
@@ -385,9 +385,9 @@ async def start_slurm_demo_run(alias: str):
 @runs_router.post("/runs/{alias}/solvers/{solver_alias}")
 async def start_solver_run(alias: str, solver_alias: str):
     try:
-        from ..main import _execute_docker_run, execute_local_run, execute_remote_run
+        from ..execution import _execute_docker_run, execute_local_run, execute_remote_run
     except ImportError:
-        from main import _execute_docker_run, execute_local_run, execute_remote_run
+        from execution import _execute_docker_run, execute_local_run, execute_remote_run
     node = get_compute_node(alias)
     solver = get_solver(solver_alias)
     current = settings()
@@ -473,9 +473,9 @@ async def start_solver_run(alias: str, solver_alias: str):
 @runs_router.post("/runs/{alias}/workflows/freecad-prepomax")
 async def start_freecad_prepomax_workflow(alias: str):
     try:
-        from ..main import execute_local_workflow_run
+        from ..execution import execute_local_workflow_run
     except ImportError:
-        from main import execute_local_workflow_run
+        from execution import execute_local_workflow_run
     node = get_compute_node(alias)
     if not is_local_node(node):
         raise HTTPException(status_code=400, detail="FreeCAD -> PrePoMax workflow currently runs on the local node.")
@@ -521,9 +521,9 @@ async def start_freecad_prepomax_workflow(alias: str):
 @runs_router.post("/runs/{alias}/workflows/custom")
 async def start_custom_workflow(alias: str, payload: T_CustomWorkflow = Body(...)):
     try:
-        from ..main import execute_local_workflow_run
+        from ..execution import execute_local_workflow_run
     except ImportError:
-        from main import execute_local_workflow_run
+        from execution import execute_local_workflow_run
     node = get_compute_node(alias)
     if not is_local_node(node):
         raise HTTPException(status_code=400, detail="Custom workflow currently runs on the local node only.")
@@ -688,9 +688,9 @@ def get_guided_questions(run_id: str):
 @runs_router.post("/runs/{run_id}/cancel")
 async def cancel_run(run_id: str):
     try:
-        from ..main import cancel_slurm_job, emit_remote_event
+        from ..execution import cancel_slurm_job, emit_remote_event
     except ImportError:
-        from main import cancel_slurm_job, emit_remote_event
+        from execution import cancel_slurm_job, emit_remote_event
     run = remote_runs.get(run_id)
     if run is None:
         return {
