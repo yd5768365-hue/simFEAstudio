@@ -67,10 +67,6 @@ const groups = [
     slots: ['post', 'validation'] as WorkflowSlotId[],
   },
 ]
-
-function groupForSlot(slotId: WorkflowSlotId) {
-  return groups.find((g) => g.slots.includes(slotId))!
-}
 </script>
 
 <template>

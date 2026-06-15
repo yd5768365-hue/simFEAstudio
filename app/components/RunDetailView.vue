@@ -30,7 +30,7 @@ const metrics = computed(() => props.run?.summary?.metrics ?? null)
 const hasReport = computed(() => Boolean(props.run?.report || reportText.value))
 const displayReport = computed(() => reportText.value || props.run?.report || '')
 
-function metricRow(label: string, key: string, unit: string) {
+function metricRow(key: string, unit: string) {
   const value = metrics.value?.[key]
   return typeof value === 'number' ? `${value.toFixed(4)} ${unit}` : '暂无'
 }
@@ -136,11 +136,11 @@ watch(
         <dl v-if="metrics" class="detail-metrics">
           <div>
             <dt>最大位移</dt>
-            <dd>{{ metricRow('max_displacement_mm', 'max_displacement_mm', 'mm') }}</dd>
+            <dd>{{ metricRow('max_displacement_mm', 'mm') }}</dd>
           </div>
           <div>
             <dt>等效应力</dt>
-            <dd>{{ metricRow('max_von_mises_mpa', 'max_von_mises_mpa', 'MPa') }}</dd>
+            <dd>{{ metricRow('max_von_mises_mpa', 'MPa') }}</dd>
           </div>
           <div v-if="run?.exit_code != null">
             <dt>退出码</dt>

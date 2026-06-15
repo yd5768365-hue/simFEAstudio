@@ -9,7 +9,7 @@ import {
   methodCategory,
   useBenchmark,
 } from '@/composables/useBenchmark'
-import { renderMarkdown } from '@/utils/markdown'
+import { renderMarkdown, sanitizeHtml } from '@/utils/markdown'
 
 const props = defineProps<{ apiBaseUrl: string }>()
 const emit = defineEmits<{ back: [] }>()
@@ -89,7 +89,7 @@ onActivated(fetchCases)
         </div>
         <template v-else>
           <div class="lab-preview">
-            <div v-if="detail.problem_html" v-html="detail.problem_html" />
+            <div v-if="detail.problem_html" v-html="sanitizeHtml(detail.problem_html)" />
             <div v-else-if="detail.problem_md" v-html="renderMarkdown(detail.problem_md)" />
 
             <div v-if="stats" class="bm-stats">

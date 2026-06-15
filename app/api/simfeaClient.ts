@@ -1,8 +1,11 @@
 import { contract, createClient } from '@/api/client'
 import {
+  askKnowledgeBodySchema,
+  askKnowledgeResponseSchema,
   cancelRunResponseSchema,
   connectResponseSchema,
   customWorkflowBodySchema,
+  deleteKnowledgeResponseSchema,
   exportLearningBodySchema,
   exportLearningResponseSchema,
   generateReportResponseSchema,
@@ -11,6 +14,7 @@ import {
   guidedQuestionsResponseSchema,
   installSolverResponseSchema,
   listBenchmarksResponseSchema,
+  listKnowledgeResponseSchema,
   listRunsResponseSchema,
   listSolverInstallationsResponseSchema,
   listSolversResponseSchema,
@@ -26,6 +30,7 @@ import {
   startSlurmDemoRunResponseSchema,
   startSolverRunResponseSchema,
   startWorkflowRunResponseSchema,
+  uploadKnowledgeResponseSchema,
 } from '@/api/contracts'
 
 const connectContract = contract({
@@ -183,6 +188,26 @@ const installSolverContract = contract({
   response: installSolverResponseSchema,
 })
 
+const listKnowledgeDocumentsContract = contract({
+  method: 'GET',
+  path: '/v1/knowledge/documents',
+  response: listKnowledgeResponseSchema,
+})
+
+const deleteKnowledgeDocumentContract = contract({
+  method: 'DELETE',
+  path: '/v1/knowledge/documents/:docId',
+  params: ['docId'] as const,
+  response: deleteKnowledgeResponseSchema,
+})
+
+const askKnowledgeContract = contract({
+  method: 'POST',
+  path: '/v1/knowledge/ask',
+  body: askKnowledgeBodySchema,
+  response: askKnowledgeResponseSchema,
+})
+
 const listBenchmarksContract = contract({
   method: 'GET',
   path: '/v1/benchmarks',
@@ -233,9 +258,30 @@ export function createSimfeaClient(baseUrl: string, appendLog: (line: string) =>
       request(startSolverRunContract, { params: { alias, solverAlias } }),
     startFreecadPrepomaxWorkflow: (alias: string) =>
       request(startFreecadPrepomaxWorkflowContract, { params: { alias } }),
-    startCustomWorkflow: (alias: string, steps: string[]) =>
-      request(startCustomWorkflowContract, { params: { alias }, body: { steps } }),
+    startCustomWorkflow: (
+      alias: string,
+      steps: (string | { solver: string; params?: Record<string, string> })[]
+    ) => request(startCustomWorkflowContract, { params: { alias }, body: { steps } }),
     cancelRun: (runId: string) => request(cancelRunContract, { params: { runId } }),
+    listKnowledgeDocuments: () => request(listKnowledgeDocumentsContract),
+    deleteKnowledgeDocument: (docId: string) =>
+      request(deleteKnowledgeDocumentContract, { params: { docId } }),
+    askKnowledge: (question: string, runId?: string, docIds?: string[]) =>
+      request(askKnowledgeContract, { body: { question, run_id: runId || '', doc_ids: docIds } }),
+    uploadKnowledgeDocument: async (file: File) => {
+      const formData = new FormData()
+      formData.append('file', file)
+      const resp = await fetch(`${baseUrl}/v1/knowledge/documents`, {
+        method: 'POST',
+        body: formData,
+      })
+      if (!resp.ok) {
+        const detail = await resp.text().catch(() => '')
+        throw new Error(`上传文档失败 (${resp.status}): ${detail}`)
+      }
+      const json = await resp.json()
+      return uploadKnowledgeResponseSchema.parse(json)
+    },
     listBenchmarks: () => request(listBenchmarksContract),
     getBenchmarkCase: (caseName: string) => request(getBenchmarkCaseContract, { params: { caseName } }),
   }

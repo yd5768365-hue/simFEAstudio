@@ -36,7 +36,7 @@ import { formatDate } from '@/utils/date'
 const configuredApiBaseUrl = import.meta.env.VITE_SIMFEA_API_BASE_URL as string | undefined
 const apiBaseUrl = resolveApiBaseUrl(configuredApiBaseUrl, window.location.hostname)
 
-interface ConnectionStatus {
+interface ApiConnectionStatus {
   connected: boolean
   host: string
   pid: string
@@ -84,7 +84,7 @@ interface QueueItem {
   createdAt: string
 }
 
-const status = ref<ConnectionStatus>({
+const status = ref<ApiConnectionStatus>({
   connected: false,
   host: '',
   pid: '',

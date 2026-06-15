@@ -31,6 +31,11 @@ const installProgress = reactive<Record<string, { pct: number; message: string; 
 const installError = reactive<Record<string, string>>({})
 const activeEventSources = new Map<string, EventSource>()
 
+type InstallEvent =
+  | { type: 'install_progress'; progress_pct: number; message: string; step: string }
+  | { type: 'install_complete'; data: SolverInstallation }
+  | { type: 'install_error'; message: string }
+
 onUnmounted(() => {
   for (const es of activeEventSources.values()) {
     es.close()
@@ -149,7 +154,7 @@ async function installSolver(alias: string) {
     const es = new EventSource(url)
     activeEventSources.set(alias, es)
     es.onmessage = (event) => {
-      let data: any
+      let data: InstallEvent
       try {
         data = JSON.parse(event.data)
       } catch {

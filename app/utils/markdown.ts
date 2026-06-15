@@ -1,135 +1,100 @@
-/** Minimal markdown → HTML renderer for learning reports.
+/** Markdown to HTML renderer for SimFEA Studio.
  *
- * Handles the subset used by SimFEA Studio learning reports:
- * headings, code fences, tables, unordered lists, bold, inline code.
- * Deliberately does NOT handle HTML tags, images, or raw links — the
- * report is machine-generated so the input is controlled.
+ * Powered by markdown-it + KaTeX. Supports full CommonMark + tables,
+ * linkify, typographer, and LaTeX math ($$ display / $ inline).
+ * All renderers share the same heading anchor logic for TOC consistency.
  */
 
+import katex from 'katex'
+import MarkdownIt from 'markdown-it'
+
+// ── Shared anchor ──
+
+function anchor(text: string, idx: number): string {
+  const a = text
+    .toLowerCase()
+    .replace(/`/g, '')
+    .replace(/[^a-z0-9一-鿿]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+  return /[a-z0-9]/.test(a) ? a : `section-${idx + 1}`
+}
+
+// ── KaTeX math pre-processor ──
+
+function renderMath(md: string): string {
+  const replacements: string[] = []
+  const stash = (html: string) => {
+    const key = `@@SIMFEA_MATH_${replacements.length}@@`
+    replacements.push(html)
+    return key
+  }
+
+  // Display math $$...$$
+  let result = md.replace(/\$\$([\s\S]*?)\$\$/g, (_match, formula: string) => {
+    try {
+      return stash(katex.renderToString(formula.trim(), { displayMode: true, throwOnError: false }))
+    } catch {
+      return stash(`<pre class="katex-error">$${escapeHtml(formula)}$$</pre>`)
+    }
+  })
+
+  // Inline math $...$ (not $$, not inside code blocks or already rendered)
+  result = result.replace(/(?<!\$)\$(?!\$)([^$\n]+?)\$(?!\$)/g, (_match, formula: string) => {
+    try {
+      return stash(katex.renderToString(formula.trim(), { displayMode: false, throwOnError: false }))
+    } catch {
+      return `$${escapeHtml(formula)}$`
+    }
+  })
+
+  return createMd()
+    .render(result)
+    .replace(/@@SIMFEA_MATH_(\d+)@@/g, (_match, idx: string) => replacements[Number(idx)] ?? '')
+}
+
+// ── MarkdownIt factory ──
+
+function createMd(): MarkdownIt {
+  let headingIdx = 0
+
+  const md = new MarkdownIt({
+    html: false,
+    breaks: false,
+    linkify: true,
+    typographer: true,
+  })
+
+  // Inject heading anchors matching the anchor() algorithm
+  const defaultHeadingOpen =
+    md.renderer.rules.heading_open ||
+    ((tokens, idx, options, _env, self) => self.renderToken(tokens, idx, options))
+
+  md.renderer.rules.heading_open = (tokens, idx, options, env, self) => {
+    const hToken = tokens[idx]
+    const inlineToken = tokens[idx + 1]
+    const text = inlineToken && inlineToken.type === 'inline' ? inlineToken.content : ''
+    hToken.attrSet('id', anchor(text, headingIdx++))
+    return defaultHeadingOpen(tokens, idx, options, env, self)
+  }
+
+  return md
+}
+
+// ── Public API ──
+
 export function renderMarkdown(md: string): string {
-  const lines = md.split('\n')
-  const out: string[] = []
-  let inCodeBlock = false
-  let inTable = false
-  let inList = false
-  let headingIndex = 0
+  return renderMath(md)
+}
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]
-
-    // Fenced code block
-    if (line.startsWith('```')) {
-      if (inCodeBlock) {
-        out.push('</code></pre>')
-        inCodeBlock = false
-        continue
-      }
-      closeTable()
-      closeList()
-      inCodeBlock = true
-      out.push('<pre><code>')
-      continue
-    }
-    if (inCodeBlock) {
-      out.push(escapeHtml(line))
-      continue
-    }
-
-    // Heading
-    if (line.startsWith('# ')) {
-      closeTable()
-      closeList()
-      const text = line.slice(2)
-      out.push(`<h1 id="${headingId(text, headingIndex++)}">${inlineMarkup(text)}</h1>`)
-      continue
-    }
-    if (line.startsWith('## ')) {
-      closeTable()
-      closeList()
-      const text = line.slice(3)
-      out.push(`<h2 id="${headingId(text, headingIndex++)}">${inlineMarkup(text)}</h2>`)
-      continue
-    }
-    if (line.startsWith('### ')) {
-      closeTable()
-      closeList()
-      const text = line.slice(4)
-      out.push(`<h3 id="${headingId(text, headingIndex++)}">${inlineMarkup(text)}</h3>`)
-      continue
-    }
-
-    // Table
-    if (line.startsWith('|') && line.endsWith('|')) {
-      if (!inTable) {
-        closeList()
-        inTable = true
-        out.push('<table>')
-      }
-      const cells = line
-        .slice(1, -1)
-        .split('|')
-        .map((c) => c.trim())
-      const isHeader = cells.every((c) => /^-{2,}$/.test(c))
-      if (isHeader) continue // separator row
-      const tag = inTable && out[out.length - 1] === '<table>' ? 'th' : 'td'
-      // first data row after table open: check if previous output was <table>
-      const rowCells = cells.map((c) => `<${tag}>${inlineMarkup(c)}</${tag}>`).join('')
-      out.push(`<tr>${rowCells}</tr>`)
-      continue
-    } else if (inTable) {
-      closeTable()
-    }
-
-    // Unordered list
-    if (/^[\s]*[-*]\s/.test(line)) {
-      if (!inList) {
-        closeTable()
-        inList = true
-        out.push('<ul>')
-      }
-      const text = line.replace(/^[\s]*[-*]\s/, '')
-      out.push(`<li>${inlineMarkup(text)}</li>`)
-      continue
-    } else if (inList && line.trim() === '') {
-      // blank line in a list — continue the list (common in markdown)
-      continue
-    } else if (inList) {
-      closeList()
-    }
-
-    // Bold text that stands alone (observation lines)
-    if (/^\*\*.*\*\*$/.test(line.trim())) {
-      out.push(`<p><strong>${inlineMarkup(line.trim().slice(2, -2))}</strong></p>`)
-      continue
-    }
-
-    // Empty line
-    if (line.trim() === '') {
-      continue
-    }
-
-    // Regular paragraph
-    out.push(`<p>${inlineMarkup(line)}</p>`)
-  }
-
-  closeTable()
-  closeList()
-  if (inCodeBlock) out.push('</code></pre>')
-
-  return out.join('\n')
-
-  function closeTable() {
-    if (inTable) {
-      out.push('</table>')
-      inTable = false
-    }
-  }
-  function closeList() {
-    if (inList) {
-      out.push('</ul>')
-      inList = false
-    }
-  }
+export function sanitizeHtml(html: string): string {
+  return html
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/\s+on[a-z]+\s*=\s*"[^"]*"/gi, '')
+    .replace(/\s+on[a-z]+\s*=\s*'[^']*'/gi, '')
+    .replace(/\s+on[a-z]+\s*=\s*[^\s>]+/gi, '')
+    .replace(/\s+(href|src)\s*=\s*"javascript:[^"]*"/gi, '')
+    .replace(/\s+(href|src)\s*=\s*'javascript:[^']*'/gi, '')
+    .replace(/\s+(href|src)\s*=\s*javascript:[^\s>]+/gi, '')
 }
 
 export interface MarkdownHeading {
@@ -139,37 +104,20 @@ export interface MarkdownHeading {
 }
 
 export function extractMarkdownHeadings(md: string): MarkdownHeading[] {
-  let headingIndex = 0
-  return md
-    .split('\n')
-    .map((line) => {
-      const match = /^(#{1,3})\s+(.+)$/.exec(line)
-      if (!match) return null
-      const text = match[2].trim()
-      return {
-        id: headingId(text, headingIndex++),
-        level: match[1].length,
-        text,
-      }
-    })
-    .filter((heading): heading is MarkdownHeading => heading !== null)
-}
+  const tokens = new MarkdownIt().parse(md, {})
+  const headings: MarkdownHeading[] = []
+  let idx = 0
 
-function headingId(text: string, index: number): string {
-  const ascii = text
-    .toLowerCase()
-    .replace(/`/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-  return ascii || `section-${index + 1}`
-}
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i]
+    if (token.type !== 'heading_open') continue
+    const level = parseInt(token.tag.charAt(1), 10)
+    const inlineToken = tokens[i + 1]
+    const text = inlineToken && inlineToken.type === 'inline' ? inlineToken.content : ''
+    headings.push({ id: anchor(text, idx++), level, text })
+  }
 
-function inlineMarkup(text: string): string {
-  // Bold
-  text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-  // Inline code
-  text = text.replace(/`([^`]+)`/g, '<code>$1</code>')
-  return text
+  return headings
 }
 
 function escapeHtml(text: string): string {

@@ -7,18 +7,26 @@ export interface Contract<
   B extends z.ZodTypeAny | undefined = undefined,
   R extends z.ZodTypeAny = z.ZodTypeAny,
 > {
-  method: 'GET' | 'POST'
+  method: 'GET' | 'POST' | 'DELETE'
   path: string
   params?: P
   body?: B
   response: R
+  cache?: boolean
 }
 
 export function contract<
   P extends readonly string[],
   B extends z.ZodTypeAny,
   R extends z.ZodTypeAny,
->(config: { method: 'GET' | 'POST'; path: string; params?: P; body?: B; response: R }): Contract<P, B, R> {
+>(config: {
+  method: 'GET' | 'POST' | 'DELETE'
+  path: string
+  params?: P
+  body?: B
+  response: R
+  cache?: boolean
+}): Contract<P, B, R> {
   return config as Contract<P, B, R>
 }
 
@@ -54,10 +62,19 @@ export function extractValidationIssues(err: unknown): string[] {
 
 // ── Client ───────────────────────────────────────────────────
 
+const CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
+
+interface CacheEntry {
+  data: unknown
+  expires: number
+}
+
 export function createClient(baseUrl: string, appendLog: (line: string) => void) {
+  const cache = new Map<string, CacheEntry>()
+
   async function request<C extends Contract>(
     c: C,
-    options?: { params?: Record<string, string>; body?: unknown }
+    options?: { params?: Record<string, string>; body?: unknown; skipCache?: boolean }
   ): Promise<z.output<C['response']>> {
     let url = `${baseUrl.replace(/\/+$/, '')}${c.path}`
 
@@ -65,6 +82,15 @@ export function createClient(baseUrl: string, appendLog: (line: string) => void)
       for (const param of c.params) {
         url = url.replace(`:${param}`, encodeURIComponent(options.params[param]))
       }
+    }
+
+    const cacheKey = `${c.method}:${url}`
+    if (c.method === 'GET' && c.cache && !options?.skipCache) {
+      const cached = cache.get(cacheKey)
+      if (cached && Date.now() < cached.expires) {
+        return cached.data as z.output<C['response']>
+      }
+      if (cached) cache.delete(cacheKey)
     }
 
     let body: string | undefined
@@ -97,7 +123,13 @@ export function createClient(baseUrl: string, appendLog: (line: string) => void)
       appendLog(`[服务响应] ${(json as { message: string }).message}`)
     }
 
-    return c.response.parse(json)
+    const parsed = c.response.parse(json)
+
+    if (c.method === 'GET' && c.cache) {
+      cache.set(cacheKey, { data: parsed, expires: Date.now() + CACHE_TTL_MS })
+    }
+
+    return parsed
   }
 
   async function requestRaw(urlPath: string, options?: RequestInit): Promise<Response> {

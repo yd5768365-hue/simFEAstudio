@@ -1,10 +1,12 @@
 // Re-export types from API contracts (single source of truth)
 export type {
   ArtifactEvent,
+  AskKnowledgeResponse,
   ComputeNodeConfig,
   FinishedEvent,
   GuidedQuestion,
   GuidedQuestionsResponse,
+  KnowledgeDocument,
   LearningExportRecord,
   ResultSummary,
   RunArchive,

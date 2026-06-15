@@ -12,16 +12,64 @@ const container = ref<HTMLDivElement | null>(null)
 const message = ref('选择带有 VTK 物证的运行后，这里会显示三维结果。')
 const loading = ref(false)
 
-let fullScreenRenderer: any = null
-let actor: any = null
-let mapper: any = null
-let reader: any = null
+type VtkDisposable = {
+  delete?: () => void
+}
+
+type VtkScalars = {
+  getRange: () => number[]
+}
+
+type VtkPolyData = {
+  getPointData: () => {
+    getScalars: () => VtkScalars | null
+  }
+}
+
+type VtkReader = VtkDisposable & {
+  parseAsArrayBuffer?: (data: ArrayBuffer) => void
+  parseAsText?: (text: string) => void
+  getOutputData: (index: number) => VtkPolyData
+}
+
+type VtkMapper = VtkDisposable & {
+  setInputData: (data: VtkPolyData) => void
+  setScalarVisibility: (visible: boolean) => void
+  setScalarRange: (range: number[]) => void
+}
+
+type VtkActor = VtkDisposable & {
+  setMapper: (mapper: VtkMapper) => void
+}
+
+type VtkRenderer = {
+  addActor: (actor: VtkActor) => void
+  resetCamera: () => void
+}
+
+type VtkRenderWindow = {
+  render: () => void
+}
+
+type VtkFullScreenRenderer = VtkDisposable & {
+  getRenderer: () => VtkRenderer
+  getRenderWindow: () => VtkRenderWindow
+}
+
+type VtkFactory<T> = {
+  newInstance: (options?: unknown) => T
+}
+
+let fullScreenRenderer: VtkFullScreenRenderer | null = null
+let actor: VtkActor | null = null
+let mapper: VtkMapper | null = null
+let reader: VtkReader | null = null
 let vtkModulesPromise: Promise<{
-  vtkActor: any
-  vtkMapper: any
-  vtkFullScreenRenderWindow: any
-  vtkPolyDataReader: any
-  vtkXMLPolyDataReader: any
+  vtkActor: VtkFactory<VtkActor>
+  vtkMapper: VtkFactory<VtkMapper>
+  vtkFullScreenRenderWindow: VtkFactory<VtkFullScreenRenderer>
+  vtkPolyDataReader: VtkFactory<VtkReader>
+  vtkXMLPolyDataReader: VtkFactory<VtkReader>
 }> | null = null
 
 const loadVtkModules = () => {

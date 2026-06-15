@@ -219,7 +219,29 @@ export function useRemoteRuns(options: UseRemoteRunsOptions) {
     }
   }
 
-  const startRemoteDemoRunAction = async () => {
+  // ── Shared SSE run helper ──
+  // All run actions (demo, slurm, solver, workflow) share the same lifecycle:
+  // check node → close old stream → call API → open new SSE stream → handle finish/error.
+  // Messages and extra event fields are the only variation.
+  interface RunActionConfig {
+    apiCall: () => Promise<RunActionResult>
+    logPrefix: string
+    runningMsg: string
+    createdMsg: (label: string, runId: string, result: RunActionResult) => string
+    successMsg: string
+    cancelMsg: string
+    failMsg: string
+    errorMsg: string
+    streamErrorMsg: string
+    /** Optional extra onEvent hook for run-type-specific payload fields */
+    onEventExtra?: (payload: Record<string, unknown>) => void
+  }
+
+  interface RunActionResult {
+    data: { run_id: string; archive_path: string; remote_workdir: string; [k: string]: unknown }
+  }
+
+  async function runWithSse(config: RunActionConfig) {
     if (!selectedComputeNode.value) {
       remoteStatus.value = {
         ...remoteStatus.value,
@@ -229,7 +251,6 @@ export function useRemoteRuns(options: UseRemoteRunsOptions) {
       }
       return
     }
-
     const label = activeComputeNodeLabel.value
     try {
       closeRunEventStream()
@@ -237,34 +258,29 @@ export function useRemoteRuns(options: UseRemoteRunsOptions) {
         ...remoteStatus.value,
         checked: true,
         running: true,
-        message: '正在启动远程闭环样例...',
+        message: config.runningMsg,
         output: '',
         archivePath: '',
         remoteWorkdir: '',
       }
-
-      const result = await api.startDemoRun(selectedComputeNode.value)
+      const result = await config.apiCall()
       const runId = result.data.run_id
       remoteStatus.value = {
         ...remoteStatus.value,
         runId,
         archivePath: result.data.archive_path,
         remoteWorkdir: result.data.remote_workdir,
-        message: `${label} 上的任务 ${runId} 已创建，正在接收实时日志。`,
+        message: config.createdMsg(label, runId, result),
       }
-
       openRunEventStream(runId, {
         onEvent: async (payload) => {
           if (payload.line) {
             remoteStatus.value.output += `${payload.line}\n`
-            appendLog(`[远程任务] ${payload.line}`)
+            appendLog(`[${config.logPrefix}] ${payload.line}`)
           }
-          if (payload.archive_path) {
-            remoteStatus.value.archivePath = payload.archive_path
-          }
-          if (payload.remote_workdir) {
-            remoteStatus.value.remoteWorkdir = payload.remote_workdir
-          }
+          if (payload.archive_path) remoteStatus.value.archivePath = payload.archive_path
+          if (payload.remote_workdir) remoteStatus.value.remoteWorkdir = payload.remote_workdir
+          config.onEventExtra?.(payload as Record<string, unknown>)
           if (payload.type === 'finished') {
             const finishedNormally = payload.status === 'finished' && payload.exit_code === 0
             const canceled = payload.status === 'canceled'
@@ -272,22 +288,14 @@ export function useRemoteRuns(options: UseRemoteRunsOptions) {
               ...remoteStatus.value,
               connected: canceled ? remoteStatus.value.connected : finishedNormally,
               running: false,
-              message: canceled
-                ? '远程任务已取消，取消记录已进入物证仓库。'
-                : finishedNormally
-                  ? '远程闭环样例完成，日志和结果已进入物证仓库。'
-                  : '远程闭环样例失败，请查看日志。',
+              message: canceled ? config.cancelMsg : finishedNormally ? config.successMsg : config.failMsg,
             }
             closeRunEventStream()
             await onRunFinished(runId)
           }
         },
         onError: () => {
-          remoteStatus.value = {
-            ...remoteStatus.value,
-            running: false,
-            message: '远程实时日志通道中断。',
-          }
+          remoteStatus.value = { ...remoteStatus.value, running: false, message: config.streamErrorMsg }
           closeRunEventStream()
         },
       })
@@ -295,357 +303,109 @@ export function useRemoteRuns(options: UseRemoteRunsOptions) {
       remoteStatus.value = {
         ...remoteStatus.value,
         running: false,
-        message: '远程闭环样例启动失败。',
+        message: config.errorMsg,
         output: String(err),
       }
     }
   }
 
-  const startSlurmDemoRunAction = async () => {
-    if (!selectedComputeNode.value) {
-      remoteStatus.value = {
-        ...remoteStatus.value,
-        running: false,
-        message: '请先在配置文件中添加计算节点。',
-        output: '',
-      }
-      return
-    }
+  // ── Concrete run actions (thin wrappers around runWithSse) ──
 
-    const label = activeComputeNodeLabel.value
-    try {
-      closeRunEventStream()
-      remoteStatus.value = {
-        ...remoteStatus.value,
-        checked: true,
-        running: true,
-        message: '正在提交 Slurm 远程闭环样例...',
-        output: '',
-        archivePath: '',
-        remoteWorkdir: '',
-      }
+  const startRemoteDemoRunAction = () =>
+    runWithSse({
+      apiCall: () => api.startDemoRun(selectedComputeNode.value),
+      logPrefix: '远程任务',
+      runningMsg: '正在启动远程闭环样例...',
+      createdMsg: (label, runId) => `${label} 上的任务 ${runId} 已创建，正在接收实时日志。`,
+      successMsg: '远程闭环样例完成，日志和结果已进入物证仓库。',
+      cancelMsg: '远程任务已取消，取消记录已进入物证仓库。',
+      failMsg: '远程闭环样例失败，请查看日志。',
+      errorMsg: '远程闭环样例启动失败。',
+      streamErrorMsg: '远程实时日志通道中断。',
+    })
 
-      const result = await api.startSlurmDemoRun(selectedComputeNode.value)
-      const runId = result.data.run_id
-      const resourceLines = [
-        `调度器：${result.data.scheduler ?? 'slurm'}`,
-        `分区：${result.data.partition ?? '未知'}`,
-        `申请 CPU：${result.data.requested_cpus ?? '未知'}`,
-        `申请内存：${result.data.requested_memory ?? '未知'}`,
-      ].join('\n')
+  const startSlurmDemoRunAction = () =>
+    runWithSse({
+      apiCall: async () => {
+        const result = await api.startSlurmDemoRun(selectedComputeNode.value)
+        const resourceLines = [
+          `调度器：${result.data.scheduler ?? 'slurm'}`,
+          `分区：${result.data.partition ?? '未知'}`,
+          `申请 CPU：${result.data.requested_cpus ?? '未知'}`,
+          `申请内存：${result.data.requested_memory ?? '未知'}`,
+        ].join('\n')
+        remoteStatus.value.output = `${resourceLines}\n`
+        return result
+      },
+      logPrefix: 'SlurmRunner',
+      runningMsg: '正在提交 Slurm 远程闭环样例...',
+      createdMsg: (label, runId) => `${label} 已创建 Slurm 运行 ${runId}，正在等待 JobID 和实时日志。`,
+      successMsg: 'Slurm 闭环样例完成，真实计算节点日志和结果已归档。',
+      cancelMsg: 'Slurm 任务已取消，取消记录已进入物证仓库。',
+      failMsg: 'Slurm 闭环样例失败，请查看 stderr 和学习报告。',
+      errorMsg: 'Slurm 闭环样例提交失败。',
+      streamErrorMsg: 'Slurm 实时事件流中断。',
+      onEventExtra: (payload) => {
+        if (payload.job_id) remoteStatus.value.output += `JobID：${payload.job_id}\n`
+        if (payload.allocated_node) remoteStatus.value.output += `运行节点：${payload.allocated_node}\n`
+      },
+    })
 
-      remoteStatus.value = {
-        ...remoteStatus.value,
-        runId,
-        archivePath: result.data.archive_path,
-        remoteWorkdir: result.data.remote_workdir,
-        message: `${label} 已创建 Slurm 运行 ${runId}，正在等待 JobID 和实时日志。`,
-        output: `${resourceLines}\n`,
-      }
-
-      openRunEventStream(runId, {
-        onEvent: async (payload) => {
-          if (payload.line) {
-            remoteStatus.value.output += `${payload.line}\n`
-            appendLog(`[SlurmRunner] ${payload.line}`)
-          }
-          if (payload.archive_path) {
-            remoteStatus.value.archivePath = payload.archive_path
-          }
-          if (payload.remote_workdir) {
-            remoteStatus.value.remoteWorkdir = payload.remote_workdir
-          }
-          if (payload.job_id) {
-            remoteStatus.value.output += `JobID：${payload.job_id}\n`
-          }
-          if (payload.allocated_node) {
-            remoteStatus.value.output += `运行节点：${payload.allocated_node}\n`
-          }
-          if (payload.type === 'finished') {
-            const finishedNormally = payload.status === 'finished' && payload.exit_code === 0
-            const canceled = payload.status === 'canceled'
-            remoteStatus.value = {
-              ...remoteStatus.value,
-              connected: canceled ? remoteStatus.value.connected : finishedNormally,
-              running: false,
-              message: canceled
-                ? 'Slurm 任务已取消，取消记录已进入物证仓库。'
-                : finishedNormally
-                  ? 'Slurm 闭环样例完成，真实计算节点日志和结果已归档。'
-                  : 'Slurm 闭环样例失败，请查看 stderr 和学习报告。',
-            }
-            closeRunEventStream()
-            await onRunFinished(runId)
-          }
-        },
-        onError: () => {
-          remoteStatus.value = {
-            ...remoteStatus.value,
-            running: false,
-            message: 'Slurm 实时事件流中断。',
-          }
-          closeRunEventStream()
-        },
-      })
-    } catch (err) {
-      remoteStatus.value = {
-        ...remoteStatus.value,
-        running: false,
-        message: 'Slurm 闭环样例提交失败。',
-        output: String(err),
-      }
-    }
-  }
-
-  const startSolverRunAction = async (solverAlias: string) => {
-    if (!selectedComputeNode.value) {
-      remoteStatus.value = {
-        ...remoteStatus.value,
-        running: false,
-        message: '请先在配置文件中添加计算节点。',
-        output: '',
-      }
-      return
-    }
-
+  const startSolverRunAction = (solverAlias: string) => {
     const solver = solvers.value.find((item) => item.alias === solverAlias)
-    const label = activeComputeNodeLabel.value
-    try {
-      closeRunEventStream()
-      remoteStatus.value = {
-        ...remoteStatus.value,
-        checked: true,
-        running: true,
-        message: `正在启动 ${solver?.label ?? solverAlias} 求解器运行...`,
-        output: '',
-        archivePath: '',
-        remoteWorkdir: '',
-      }
-
-      const result = await api.startSolverRun(selectedComputeNode.value, solverAlias)
-      const runId = result.data.run_id
-      remoteStatus.value = {
-        ...remoteStatus.value,
-        runId,
-        archivePath: result.data.archive_path,
-        remoteWorkdir: result.data.remote_workdir,
-        message: `${label} 上的 ${result.data.solver.label} 运行 ${runId} 已创建，正在接收实时日志。`,
-      }
-
-      openRunEventStream(runId, {
-        onEvent: async (payload) => {
-          if (payload.line) {
-            remoteStatus.value.output += `${payload.line}\n`
-            appendLog(`[SolverRunner] ${payload.line}`)
-          }
-          if (payload.archive_path) {
-            remoteStatus.value.archivePath = payload.archive_path
-          }
-          if (payload.remote_workdir) {
-            remoteStatus.value.remoteWorkdir = payload.remote_workdir
-          }
-          if (payload.type === 'finished') {
-            const finishedNormally = payload.status === 'finished' && payload.exit_code === 0
-            const canceled = payload.status === 'canceled'
-            remoteStatus.value = {
-              ...remoteStatus.value,
-              connected: canceled ? remoteStatus.value.connected : finishedNormally,
-              running: false,
-              message: canceled
-                ? '求解器任务已取消，取消记录已进入物证仓库。'
-                : finishedNormally
-                  ? '求解器运行完成，输入、日志和结果已进入物证仓库。'
-                  : '求解器运行失败，请查看 stderr 和学习报告。',
-            }
-            closeRunEventStream()
-            await onRunFinished(runId)
-          }
-        },
-        onError: () => {
-          remoteStatus.value = {
-            ...remoteStatus.value,
-            running: false,
-            message: '求解器实时事件流中断。',
-          }
-          closeRunEventStream()
-        },
-      })
-    } catch (err) {
-      remoteStatus.value = {
-        ...remoteStatus.value,
-        running: false,
-        message: '求解器运行启动失败。',
-        output: String(err),
-      }
-    }
+    return runWithSse({
+      apiCall: () => api.startSolverRun(selectedComputeNode.value, solverAlias),
+      logPrefix: 'SolverRunner',
+      runningMsg: `正在启动 ${solver?.label ?? solverAlias} 求解器运行...`,
+      createdMsg: (label, runId) =>
+        `${label} 上的 ${solver?.label ?? solverAlias} 运行 ${runId} 已创建，正在接收实时日志。`,
+      successMsg: '求解器运行完成，输入、日志和结果已进入物证仓库。',
+      cancelMsg: '求解器任务已取消，取消记录已进入物证仓库。',
+      failMsg: '求解器运行失败，请查看 stderr 和学习报告。',
+      errorMsg: '求解器运行启动失败。',
+      streamErrorMsg: '求解器实时事件流中断。',
+    })
   }
 
-  const startFreecadPrepomaxWorkflowAction = async () => {
-    if (!selectedComputeNode.value) {
-      remoteStatus.value = {
-        ...remoteStatus.value,
-        running: false,
-        message: '请先选择一个计算节点。',
-        output: '',
-      }
-      return
-    }
+  const startFreecadPrepomaxWorkflowAction = () =>
+    runWithSse({
+      apiCall: () => api.startFreecadPrepomaxWorkflow(selectedComputeNode.value),
+      logPrefix: 'WorkflowRunner',
+      runningMsg: '正在启动 FreeCAD -> PrePoMax 工作流...',
+      createdMsg: (label, runId) =>
+        `${label} 上的 FreeCAD → PrePoMax 工作流 ${runId} 已创建，正在接收实时日志。`,
+      successMsg: 'FreeCAD -> PrePoMax 工作流完成，几何、前处理输出和日志已进入物证仓库。',
+      cancelMsg: 'FreeCAD -> PrePoMax 工作流已取消。',
+      failMsg: 'FreeCAD -> PrePoMax 工作流失败，请查看 stderr 和归档日志。',
+      errorMsg: 'FreeCAD -> PrePoMax 工作流启动失败。',
+      streamErrorMsg: 'FreeCAD -> PrePoMax 工作流事件流中断。',
+    })
 
-    const label = activeComputeNodeLabel.value
-    try {
-      closeRunEventStream()
-      remoteStatus.value = {
-        ...remoteStatus.value,
-        checked: true,
-        running: true,
-        message: '正在启动 FreeCAD -> PrePoMax 工作流...',
-        output: '',
-        archivePath: '',
-        remoteWorkdir: '',
-      }
-
-      const result = await api.startFreecadPrepomaxWorkflow(selectedComputeNode.value)
-      const runId = result.data.run_id
-      remoteStatus.value = {
-        ...remoteStatus.value,
-        runId,
-        archivePath: result.data.archive_path,
-        remoteWorkdir: result.data.remote_workdir,
-        message: `${label} 上的 ${result.data.workflow.label} 工作流 ${runId} 已创建，正在接收实时日志。`,
-      }
-
-      openRunEventStream(runId, {
-        onEvent: async (payload) => {
-          if (payload.line) {
-            remoteStatus.value.output += `${payload.line}\n`
-            appendLog(`[WorkflowRunner] ${payload.line}`)
-          }
-          if (payload.archive_path) {
-            remoteStatus.value.archivePath = payload.archive_path
-          }
-          if (payload.remote_workdir) {
-            remoteStatus.value.remoteWorkdir = payload.remote_workdir
-          }
-          if (payload.type === 'finished') {
-            const finishedNormally = payload.status === 'finished' && payload.exit_code === 0
-            const canceled = payload.status === 'canceled'
-            remoteStatus.value = {
-              ...remoteStatus.value,
-              connected: canceled ? remoteStatus.value.connected : finishedNormally,
-              running: false,
-              message: canceled
-                ? 'FreeCAD -> PrePoMax 工作流已取消。'
-                : finishedNormally
-                  ? 'FreeCAD -> PrePoMax 工作流完成，几何、前处理输出和日志已进入物证仓库。'
-                  : 'FreeCAD -> PrePoMax 工作流失败，请查看 stderr 和归档日志。',
-            }
-            closeRunEventStream()
-            await onRunFinished(runId)
-          }
-        },
-        onError: () => {
-          remoteStatus.value = {
-            ...remoteStatus.value,
-            running: false,
-            message: 'FreeCAD -> PrePoMax 工作流事件流中断。',
-          }
-          closeRunEventStream()
-        },
-      })
-    } catch (err) {
-      remoteStatus.value = {
-        ...remoteStatus.value,
-        running: false,
-        message: 'FreeCAD -> PrePoMax 工作流启动失败。',
-        output: String(err),
-      }
-    }
-  }
-
-  const startCustomWorkflowAction = async (steps: string[]) => {
-    if (!selectedComputeNode.value) {
-      remoteStatus.value = {
-        ...remoteStatus.value,
-        running: false,
-        message: '请先选择一个计算节点。',
-        output: '',
-      }
-      return
-    }
-
-    const label = activeComputeNodeLabel.value
-    try {
-      closeRunEventStream()
-      remoteStatus.value = {
-        ...remoteStatus.value,
-        checked: true,
-        running: true,
-        message: `正在启动自定义工作流 (${steps.length} 步)...`,
-        output: '',
-        archivePath: '',
-        remoteWorkdir: '',
-      }
-
-      const result = await api.startCustomWorkflow(selectedComputeNode.value, steps)
-      const runId = result.data.run_id
-      const skippedInfo = result.data.skipped_steps?.length
-        ? ` (跳过 ${result.data.skipped_steps.length} 个无配置步骤)`
-        : ''
-      remoteStatus.value = {
-        ...remoteStatus.value,
-        runId,
-        archivePath: result.data.archive_path,
-        remoteWorkdir: result.data.remote_workdir,
-        message: `${label} 上的 ${result.data.workflow.label} 工作流 ${runId} 已创建${skippedInfo}，正在接收实时日志。`,
-      }
-
-      openRunEventStream(runId, {
-        onEvent: async (payload) => {
-          if (payload.line) {
-            remoteStatus.value.output += `${payload.line}\n`
-            appendLog(`[WorkflowRunner] ${payload.line}`)
-          }
-          if (payload.archive_path) {
-            remoteStatus.value.archivePath = payload.archive_path
-          }
-          if (payload.remote_workdir) {
-            remoteStatus.value.remoteWorkdir = payload.remote_workdir
-          }
-          if (payload.type === 'finished') {
-            const finishedNormally = payload.status === 'finished' && payload.exit_code === 0
-            const canceled = payload.status === 'canceled'
-            remoteStatus.value = {
-              ...remoteStatus.value,
-              connected: canceled ? remoteStatus.value.connected : finishedNormally,
-              running: false,
-              message: canceled
-                ? '自定义工作流已取消。'
-                : finishedNormally
-                  ? '自定义工作流完成，输入、日志和结果已进入物证仓库。'
-                  : '自定义工作流失败，请查看 stderr 和归档日志。',
-            }
-            closeRunEventStream()
-            await onRunFinished(runId)
-          }
-        },
-        onError: () => {
-          remoteStatus.value = {
-            ...remoteStatus.value,
-            running: false,
-            message: '自定义工作流事件流中断。',
-          }
-          closeRunEventStream()
-        },
-      })
-    } catch (err) {
-      remoteStatus.value = {
-        ...remoteStatus.value,
-        running: false,
-        message: '自定义工作流启动失败。',
-        output: String(err),
-      }
-    }
-  }
+  const startCustomWorkflowAction = (
+    steps: (string | { solver: string; params?: Record<string, string> })[]
+  ) =>
+    runWithSse({
+      apiCall: async () => {
+        return api.startCustomWorkflow(selectedComputeNode.value, steps)
+      },
+      logPrefix: 'WorkflowRunner',
+      runningMsg: `正在启动自定义工作流 (${steps.length} 步)...`,
+      createdMsg: (label, runId, result) => {
+        const data = result.data as {
+          workflow?: { label?: string }
+          skipped_steps?: unknown[]
+        }
+        const skippedInfo = data.skipped_steps?.length
+          ? ` (跳过 ${data.skipped_steps.length} 个无配置步骤)`
+          : ''
+        return `${label} 上的 ${data.workflow?.label ?? '自定义'} 工作流 ${runId} 已创建${skippedInfo}，正在接收实时日志。`
+      },
+      successMsg: '自定义工作流完成，输入、日志和结果已进入物证仓库。',
+      cancelMsg: '自定义工作流已取消。',
+      failMsg: '自定义工作流失败，请查看 stderr 和归档日志。',
+      errorMsg: '自定义工作流启动失败。',
+      streamErrorMsg: '自定义工作流事件流中断。',
+    })
 
   const cancelRemoteRunAction = async () => {
     if (!remoteStatus.value.runId) {
