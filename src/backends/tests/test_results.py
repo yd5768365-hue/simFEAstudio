@@ -80,10 +80,10 @@ class PrimaryVtkArtifactTest(unittest.TestCase):
     def test_finds_vtu(self):
         self.assertEqual(primary_vtk_artifact(["dir/a.vtu", "dir/b.txt"]), "dir/a.vtu")
 
-    def test_prefers_vtk_over_vtu(self):
+    def test_prefers_vtu_over_vtk(self):
         self.assertEqual(
-            primary_vtk_artifact(["artifacts/result.vtu", "artifacts/result.vtk"]),
-            "artifacts/result.vtk",
+            primary_vtk_artifact(["artifacts/result.vtk", "artifacts/result.vtu"]),
+            "artifacts/result.vtu",
         )
 
     def test_returns_empty_for_no_match(self):

@@ -7,31 +7,49 @@ from .run_archive import append_text, read_optional_text
 
 
 def post_process_solver_artifacts(run_dir: Path) -> dict:
-    """Convert solver-native result files to VTK and extract metrics.
+    """Convert solver-native result files to VTK/VTU and extract metrics.
 
-    Finds .frd files in artifacts/, converts first one to VTK via frd_to_vtk,
+    Finds .frd files in artifacts/, converts first one via frd_convert
+    (generates VTU + PVD for multi-step, legacy VTK for compat),
     and appends extracted metrics to result.txt.
+
+    Also processes .dat files if present (integration-point statistics).
     """
     artifacts_dir = run_dir / "artifacts"
     frd_files = sorted(artifacts_dir.glob("*.frd"))
-    if not frd_files:
-        return {}
+    dat_files = sorted(artifacts_dir.glob("*.dat"))
 
-    from .frd_to_vtk import frd_to_vtk
+    metrics: dict = {}
 
-    vtk_path = artifacts_dir / "solver_result.vtk"
-    try:
-        metrics = frd_to_vtk(frd_files[0], vtk_path)
-    except (ValueError, OSError) as exc:
-        return {"error": str(exc)}
+    # ── FRD → VTK/VTU conversion ──
+    if frd_files:
+        from .frd_to_vtk import frd_convert
 
+        try:
+            metrics = frd_convert(frd_files[0], artifacts_dir, "solver_result")
+        except (ValueError, OSError) as exc:
+            return {"error": str(exc)}
+
+    # ── DAT → integration-point summary ──
+    if dat_files:
+        try:
+            from .frd_dat_reader import write_dat_summary
+            dat_metrics = write_dat_summary(dat_files[0], artifacts_dir / "dat_summary.txt")
+            metrics.update(dat_metrics)
+        except Exception:
+            pass  # DAT parsing is best-effort
+
+    # ── Write result.txt ──
     result_path = artifacts_dir / "result.txt"
     lines = []
     if result_path.exists():
         lines.append(result_path.read_text(encoding="utf-8").rstrip())
-    lines.append(f"max_displacement_mm={metrics['max_displacement_mm']:.6f}")
-    lines.append(f"max_von_mises_mpa={metrics['max_von_mises_mpa']:.6f}")
-    result_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    if "max_displacement_mm" in metrics:
+        lines.append(f"max_displacement_mm={metrics['max_displacement_mm']:.6f}")
+    if "max_von_mises_mpa" in metrics:
+        lines.append(f"max_von_mises_mpa={metrics['max_von_mises_mpa']:.6f}")
+    if lines:
+        result_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     return metrics
 
@@ -80,7 +98,7 @@ def run_artifacts(run_dir: Path, *, include_summary: bool = True) -> list[str]:
 
 
 def primary_vtk_artifact(artifacts: list[str]) -> str:
-    for suffix in (".vtk", ".vtu"):
+    for suffix in (".vtu", ".vtk"):
         for artifact in artifacts:
             if artifact.lower().endswith(suffix):
                 return artifact
