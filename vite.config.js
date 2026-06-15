@@ -13,7 +13,7 @@ export default defineConfig({
     },
   },
   server: {
-    port: 3000,
+    port: 1420,
     strictPort: true,
     watch: {
       ignored: ['**/src-tauri/**', '**/dist/**', '**/tmp/**'],
@@ -22,5 +22,14 @@ export default defineConfig({
   build: {
     outDir: '../dist',
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules/@kitware/vtk.js')) return 'vtk'
+          if (id.includes('node_modules/katex')) return 'katex'
+          if (id.includes('node_modules/markdown-it')) return 'markdown'
+        },
+      },
+    },
   },
 });
