@@ -133,6 +133,10 @@ class AppSettings:
     toolchain: list[dict[str, str]]
     run_retention_days: int = 90
     max_runs: int = 100
+    ollama_base_url: str = "http://localhost:11434"
+    llm_model: str = "qwen2.5:7b"
+    embedding_model: str = "nomic-embed-text"
+    llm_timeout: int = 120
 
 
 def deep_merge(base: dict, override: dict) -> dict:
@@ -185,6 +189,12 @@ def default_config() -> dict:
         },
         "paths": {
             "runs_root": os.getenv("SIMFEA_RUNS_ROOT", str(DEFAULT_RUNS_ROOT)),
+        },
+        "inference": {
+            "ollama_base_url": os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
+            "llm_model": os.getenv("SIMFEA_LLM_MODEL", "qwen2.5:7b"),
+            "embedding_model": os.getenv("SIMFEA_EMBEDDING_MODEL", "nomic-embed-text"),
+            "llm_timeout": int(os.getenv("SIMFEA_LLM_TIMEOUT", "120")),
         },
         "cleanup": {
             "run_retention_days": int(os.getenv("SIMFEA_RUN_RETENTION_DAYS", "90")),
@@ -548,6 +558,10 @@ def load_settings() -> AppSettings:
         toolchain=raw_config.get("toolchain", DEFAULT_TOOLCHAIN),
         run_retention_days=int(raw_config.get("cleanup", {}).get("run_retention_days", 90)),
         max_runs=int(raw_config.get("cleanup", {}).get("max_runs", 100)),
+        ollama_base_url=raw_config.get("inference", {}).get("ollama_base_url", "http://localhost:11434"),
+        llm_model=raw_config.get("inference", {}).get("llm_model", "qwen2.5:7b"),
+        embedding_model=raw_config.get("inference", {}).get("embedding_model", "nomic-embed-text"),
+        llm_timeout=int(raw_config.get("inference", {}).get("llm_timeout", 120)),
     )
 
 
