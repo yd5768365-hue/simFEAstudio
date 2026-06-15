@@ -36,10 +36,12 @@ SimFEA Studio 不是新的仿真引擎，不是商业 CAE 的竞品，也不是�
 
 当前版本已支持 `pip install` + 浏览器直接启动（无需 Rust/Tauri），内置 demo 数据开箱可见。本地 CalculiX 悬臂梁算例可以端到端运行，归档 `.frd/.dat/.sta`，转换 FRD 到 VTK，并生成位移、应力摘要。
 
-## 当前状态（2026-06-12）
+## 当前状态（2026-06-15）
 
 - **pip 安装模式**：`pip install -e . && simfea-studio` 一键启动，浏览器自动打开，内置 demo 数据（悬臂梁运行记录）让新用户立刻看到效果。
 - **FastAPI 独立化**：`python main.py` 不再依赖 Tauri sidecar，检测到终端环境时直接启动 uvicorn。
+- **后端路由拆分完成**：主路由拆分为独立 routers（runs、benchmarks、experiments、compute_nodes 等），执行逻辑抽取为 `execution` 模块，`main.py` 仅剩 App 工厂和生命周期管理。
+- **Typed API 客户端收口**：前端 experiment 接口统一走 `simfeaClient`，支持 `path`-style 参数编码（`/` 不再被误编码为 `%2F`），新增 `client.test.ts` + `simfeaClient.test.ts` 回归测试。
 - **Benchmark Lab（基准实验室）**：13 个基准案例（杆/梁/板/壳/桁架/扭转/热应力/压力容器），含解析解和 CalculiX/ANSYS/PINN 对比数据，支持多方法对比表。
 - **Method Lab（方法实验室）**：From 1 to 0 教学框架，连接真实基准案例数据，CAE 入口阶梯、证据矩阵、AI 助手协议、案例路线图。
 - **研究笔记**：Markdown 编辑/预览，支持新建、编辑和 KeepAlive 刷新。
@@ -324,9 +326,9 @@ git diff --check
 
 已知结果：
 
-- 后端：87 个单元测试通过。
-- 前端：23 个 Vitest 测试通过。
-- 模块边界检查：19 个模块，0 个违规。
+- 后端：125 个单元测试通过。
+- 前端：35 个 Vitest 测试通过（6 个测试文件）。
+- 模块边界检查：24 个模块，0 个违规。
 - 生产构建通过，仅保留 VTK XML reader 按需 chunk 偏大的提示。
 
 ## 文档
