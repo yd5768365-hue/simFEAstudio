@@ -55,5 +55,15 @@ class FinishedEvent(RunEvent):
     allocated_node: str | None = None
 
 
+class StaProgressEvent(RunEvent):
+    """Real-time CalculiX .sta progress snapshot."""
+    type: Literal["sta_progress"] = "sta_progress"
+    line: str
+    step: int = 0
+    increment: int = 0
+    iteration: int = 0
+    progress_pct: float | None = None
+
+
 # Discriminated union of all event types sent from backend to frontend via SSE
-SseEvent = StdoutEvent | StderrEvent | StatusEvent | ArtifactEvent | FinishedEvent
+SseEvent = StdoutEvent | StderrEvent | StatusEvent | ArtifactEvent | FinishedEvent | StaProgressEvent
