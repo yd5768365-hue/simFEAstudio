@@ -6,9 +6,12 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 
-from ..simfea_api.config import PROJECT_ROOT
+try:
+    from ..simfea_api.config import PROJECT_ROOT
+except ImportError:
+    from simfea_api.config import PROJECT_ROOT
 
-router = APIRouter(prefix="/v1")
+benchmarks_router = APIRouter(prefix="/v1")
 BENCHMARKS_DIR = PROJECT_ROOT / "learning" / "benchmarks"
 DEFAULT_GROUP = "基础案例"
 LEARNING_TIER_DEFS = {
@@ -63,7 +66,7 @@ def _extract_title_subtitle(md_path: Path) -> tuple[str, str]:
     return title, subtitle
 
 
-@router.get("/benchmarks")
+@benchmarks_router.get("/benchmarks")
 def list_benchmarks():
     if not BENCHMARKS_DIR.exists():
         return {"message": "No benchmarks found.", "data": {"cases": []}}
@@ -100,7 +103,7 @@ def list_benchmarks():
     }
 
 
-@router.get("/benchmarks/{case_name}")
+@benchmarks_router.get("/benchmarks/{case_name}")
 def get_benchmark_case(case_name: str):
     case_dir = BENCHMARKS_DIR / case_name
     if not case_dir.is_dir():

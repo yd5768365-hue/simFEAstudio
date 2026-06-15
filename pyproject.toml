@@ -6,17 +6,16 @@ build-backend = "setuptools.build_meta"
 name = "simfea-studio"
 version = "0.1.0"
 description = "SimFEA Studio FastAPI sidecar for remote simulation evidence workflows."
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 classifiers = [
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
 ]
 
 dependencies = [
-    "fastapi==0.95.2",
+    "fastapi==0.137.0",
     "httpx",
     "requests",
     "uvicorn[standard]",

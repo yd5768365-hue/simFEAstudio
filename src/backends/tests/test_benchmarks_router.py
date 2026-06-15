@@ -26,7 +26,11 @@ class _HTTPExceptionStub(Exception):
 
 fastapi_stub.APIRouter = _RouterStub
 fastapi_stub.HTTPException = _HTTPExceptionStub
-sys.modules.setdefault("fastapi", fastapi_stub)
+
+try:
+    import fastapi  # noqa: F401
+except ImportError:
+    sys.modules["fastapi"] = fastapi_stub
 
 from src.backends.routers import benchmarks
 
