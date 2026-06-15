@@ -61,6 +61,7 @@ class TestMainRouterMounts(unittest.TestCase):
         "toolchain_router": 1,
         "knowledge_router": 1,
         "compute_nodes_router": 1,
+        "runs_router": 1,
     }
 
     # (method, path) that must NOT appear as inline @app.xxx routes
@@ -92,6 +93,21 @@ class TestMainRouterMounts(unittest.TestCase):
         ("get", "/v1/compute-nodes/{alias}/probe"),
         ("get", "/v1/compute-nodes/{alias}/scheduler-probe"),
         ("get", "/v1/compute-nodes/{alias}/solvers/probe"),
+        ("get", "/v1/runs"),
+        ("get", "/v1/runs/{run_id}"),
+        ("get", "/v1/runs/{run_id}/result-summary"),
+        ("get", "/v1/runs/{run_id}/artifacts/{artifact_path:path}"),
+        ("get", "/v1/runs/{run_id}/report"),
+        ("post", "/v1/runs/{run_id}/learning-export"),
+        ("post", "/v1/runs/{alias}/demo"),
+        ("post", "/v1/runs/{alias}/slurm-demo"),
+        ("post", "/v1/runs/{alias}/solvers/{solver_alias}"),
+        ("post", "/v1/runs/{alias}/workflows/freecad-prepomax"),
+        ("post", "/v1/runs/{alias}/workflows/custom"),
+        ("post", "/v1/runs/{run_id}/note"),
+        ("get", "/v1/runs/{run_id}/guided-questions"),
+        ("post", "/v1/runs/{run_id}/cancel"),
+        ("get", "/v1/runs/{run_id}/events"),
     ]
 
     def test_required_routers_mounted(self):
