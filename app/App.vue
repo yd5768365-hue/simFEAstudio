@@ -1295,13 +1295,13 @@ function backToComposer() {
 
     <ExperimentLab
       v-else-if="currentView === 'experiment'"
-      :api-base-url="apiBaseUrl"
+      :api="api"
       @back="backToComposer"
     />
 
     <ResearchView
       v-else-if="currentView === 'research'"
-      :api-base-url="apiBaseUrl"
+      :api="api"
       @back="backToComposer"
     />
 
@@ -1313,7 +1313,7 @@ function backToComposer() {
 
     <SolverDevView
       v-else-if="currentView === 'solver-dev'"
-      :api-base-url="apiBaseUrl"
+      :api="api"
       @back="backToComposer"
     />
 

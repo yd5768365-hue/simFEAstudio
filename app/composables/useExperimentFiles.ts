@@ -1,4 +1,5 @@
 import { computed, ref } from 'vue'
+import type { SimfeaClient } from '@/api/simfeaClient'
 
 export interface ExpFile {
   path: string
@@ -21,8 +22,7 @@ export function fileIcon(name: string): string {
   return '📄'
 }
 
-export function useExperimentFiles(apiBaseUrl: string) {
-  const baseUrl = apiBaseUrl.replace(/\/+$/, '')
+export function useExperimentFiles(client: SimfeaClient) {
   const files = ref<ExpFile[]>([])
   const selectedFile = ref<ExpFile | null>(null)
   const editorContent = ref('')
@@ -57,9 +57,8 @@ export function useExperimentFiles(apiBaseUrl: string) {
   async function fetchFiles() {
     loading.value = true
     try {
-      const r = await fetch(`${baseUrl}/v1/experiment/files`)
-      const j = await r.json()
-      files.value = (j.data?.files || []) as ExpFile[]
+      const r = await client.listExperimentFiles()
+      files.value = r.data.files as ExpFile[]
     } catch {
       /* */
     }
@@ -70,9 +69,8 @@ export function useExperimentFiles(apiBaseUrl: string) {
     if (modified.value && !confirm('当前文件未保存，是否放弃更改？')) return
     loading.value = true
     try {
-      const r = await fetch(`${baseUrl}/v1/experiment/files/${encodeURI(f.path)}`)
-      const j = await r.json()
-      editorContent.value = j.data.content as string
+      const r = await client.readExperimentFile(f.path)
+      editorContent.value = r.data.content
       selectedFile.value = f
       savedPath.value = f.path
       modified.value = false
@@ -86,11 +84,7 @@ export function useExperimentFiles(apiBaseUrl: string) {
   async function saveFile() {
     if (!selectedFile.value) return
     try {
-      await fetch(`${baseUrl}/v1/experiment/files/${encodeURI(savedPath.value)}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: editorContent.value }),
-      })
+      await client.saveExperimentFile(savedPath.value, editorContent.value)
       modified.value = false
       consoleOutput.value = `已保存 — ${new Date().toLocaleTimeString()}\n${consoleOutput.value}`
     } catch {
@@ -116,16 +110,10 @@ export function useExperimentFiles(apiBaseUrl: string) {
     running.value = true
     consoleOutput.value = `$ python ${selectedFile.value.name}\n`
     try {
-      const r = await fetch(`${baseUrl}/v1/experiment/run`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ file_path: savedPath.value }),
-      })
-      const j = await r.json()
-      const d = j.data as Record<string, unknown>
-      consoleOutput.value += (d.stdout as string) || ''
-      if (d.stderr) consoleOutput.value += `\n${d.stderr}`
-      if (!d.stdout && !d.stderr) consoleOutput.value += `(exit ${d.exit_code})\n`
+      const r = await client.runExperimentCode({ file_path: savedPath.value })
+      consoleOutput.value += r.data.stdout || ''
+      if (r.data.stderr) consoleOutput.value += `\n${r.data.stderr}`
+      if (!r.data.stdout && !r.data.stderr) consoleOutput.value += `(exit ${r.data.exit_code})\n`
     } catch (err) {
       consoleOutput.value += `Error: ${err}\n`
     } finally {

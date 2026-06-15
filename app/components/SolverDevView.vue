@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onActivated, onMounted, ref } from 'vue'
+import type { SimfeaClient } from '@/api/simfeaClient'
 import { renderMarkdown } from '@/utils/markdown'
 
 interface DevFile {
@@ -8,10 +9,9 @@ interface DevFile {
   size: number
 }
 
-const props = defineProps<{ apiBaseUrl: string }>()
+const props = defineProps<{ api: SimfeaClient }>()
 const emit = defineEmits<{ back: [] }>()
 
-const baseUrl = props.apiBaseUrl.replace(/\/+$/, '')
 const files = ref<DevFile[]>([])
 const selected = ref<DevFile | null>(null)
 const content = ref('')
@@ -19,12 +19,8 @@ const loading = ref(false)
 
 async function loadFiles() {
   try {
-    const r = await fetch(`${baseUrl}/v1/experiment/files`)
-    const j = await r.json()
-    files.value = ((j.data?.files || []) as DevFile[]).filter((f) =>
-      f.path.startsWith('learning/solver-dev/')
-    )
-    // Auto-select first file
+    const r = await props.api.listExperimentFiles()
+    files.value = (r.data.files as DevFile[]).filter((f) => f.path.startsWith('learning/solver-dev/'))
     if (files.value.length && !selected.value) {
       openFile(files.value[0])
     }
@@ -36,9 +32,8 @@ async function loadFiles() {
 async function openFile(f: DevFile) {
   loading.value = true
   try {
-    const r = await fetch(`${baseUrl}/v1/experiment/files/${encodeURI(f.path)}`)
-    const j = await r.json()
-    content.value = j.data.content as string
+    const r = await props.api.readExperimentFile(f.path)
+    content.value = r.data.content
     selected.value = f
   } catch {
     content.value = '*加载失败*'

@@ -14,6 +14,7 @@ import {
   guidedQuestionsResponseSchema,
   installSolverResponseSchema,
   listBenchmarksResponseSchema,
+  listExperimentFilesResponseSchema,
   listKnowledgeResponseSchema,
   listRunsResponseSchema,
   listSolverInstallationsResponseSchema,
@@ -21,6 +22,11 @@ import {
   probeNodeResponseSchema,
   probeSchedulerResponseSchema,
   probeSolversResponseSchema,
+  readExperimentFileResponseSchema,
+  runExperimentCodeBodySchema,
+  runExperimentCodeResponseSchema,
+  saveExperimentFileBodySchema,
+  saveExperimentFileResponseSchema,
   saveNoteBodySchema,
   saveNoteResponseSchema,
   solverExecutableBodySchema,
@@ -221,6 +227,40 @@ const getBenchmarkCaseContract = contract({
   response: getBenchmarkCaseResponseSchema,
 })
 
+const listExperimentFilesContract = contract({
+  method: 'GET',
+  path: '/v1/experiment/files',
+  response: listExperimentFilesResponseSchema,
+})
+
+const readExperimentFileContract = contract({
+  method: 'GET',
+  path: '/v1/experiment/files/:filePath',
+  params: ['filePath'] as const,
+  pathParams: ['filePath'] as const,
+  response: readExperimentFileResponseSchema,
+})
+
+const saveExperimentFileContract = contract({
+  method: 'POST',
+  path: '/v1/experiment/files/:filePath',
+  params: ['filePath'] as const,
+  pathParams: ['filePath'] as const,
+  body: saveExperimentFileBodySchema,
+  response: saveExperimentFileResponseSchema,
+})
+
+const runExperimentCodeContract = contract({
+  method: 'POST',
+  path: '/v1/experiment/run',
+  body: runExperimentCodeBodySchema,
+  response: runExperimentCodeResponseSchema,
+})
+
+function normalizeExperimentFilePath(path: string): string {
+  return path.startsWith('learning/') ? path : `learning/${path}`
+}
+
 export function createSimfeaClient(baseUrl: string, appendLog: (line: string) => void) {
   const { request } = createClient(baseUrl, appendLog)
 
@@ -284,6 +324,24 @@ export function createSimfeaClient(baseUrl: string, appendLog: (line: string) =>
     },
     listBenchmarks: () => request(listBenchmarksContract),
     getBenchmarkCase: (caseName: string) => request(getBenchmarkCaseContract, { params: { caseName } }),
+    listExperimentFiles: async () => {
+      const response = await request(listExperimentFilesContract)
+      return {
+        ...response,
+        data: {
+          ...response.data,
+          files: response.data.files.map((file) => ({
+            ...file,
+            path: normalizeExperimentFilePath(file.path),
+          })),
+        },
+      }
+    },
+    readExperimentFile: (filePath: string) => request(readExperimentFileContract, { params: { filePath } }),
+    saveExperimentFile: (filePath: string, content: string) =>
+      request(saveExperimentFileContract, { params: { filePath }, body: { content } }),
+    runExperimentCode: (opts: { code?: string; file_path?: string }) =>
+      request(runExperimentCodeContract, { body: opts }),
   }
 }
 

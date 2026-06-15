@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onActivated, onMounted, ref } from 'vue'
+import type { SimfeaClient } from '@/api/simfeaClient'
 import { renderMarkdown } from '@/utils/markdown'
 
 interface ResearchNote {
@@ -8,10 +9,8 @@ interface ResearchNote {
   size: number
 }
 
-const props = defineProps<{ apiBaseUrl: string }>()
+const props = defineProps<{ api: SimfeaClient }>()
 const emit = defineEmits<{ back: [] }>()
-
-const baseUrl = props.apiBaseUrl.replace(/\/+$/, '')
 
 const notes = ref<ResearchNote[]>([])
 const selectedPath = ref('')
@@ -35,11 +34,7 @@ async function confirmNewNote() {
   const path = `learning/research/${name}`
   creatingNote.value = true
   try {
-    await fetch(`${baseUrl}/v1/experiment/files/${encodeURI(path)}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content: '# 新研究笔记\n\n' }),
-    })
+    await props.api.saveExperimentFile(path, '# 新研究笔记\n\n')
     showNewDialog.value = false
     await loadNotes()
     selectedPath.value = path
@@ -59,11 +54,8 @@ function cancelNewDialog() {
 
 async function loadNotes() {
   try {
-    const r = await fetch(`${baseUrl}/v1/experiment/files`)
-    const j = await r.json()
-    notes.value = ((j.data?.files || []) as ResearchNote[]).filter((f) =>
-      f.path.startsWith('learning/research/')
-    )
+    const r = await props.api.listExperimentFiles()
+    notes.value = (r.data.files as ResearchNote[]).filter((f) => f.path.startsWith('learning/research/'))
   } catch {
     notes.value = []
   }
@@ -72,9 +64,8 @@ async function loadNotes() {
 async function openNote(f: ResearchNote) {
   if (editing.value && !confirm('放弃未保存的更改？')) return
   try {
-    const r = await fetch(`${baseUrl}/v1/experiment/files/${encodeURI(f.path)}`)
-    const j = await r.json()
-    content.value = j.data.content as string
+    const r = await props.api.readExperimentFile(f.path)
+    content.value = r.data.content
     selectedPath.value = f.path
     editing.value = false
   } catch {
@@ -89,11 +80,7 @@ function startEdit() {
 
 async function saveEdit() {
   try {
-    await fetch(`${baseUrl}/v1/experiment/files/${encodeURI(selectedPath.value)}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content: editContent.value }),
-    })
+    await props.api.saveExperimentFile(selectedPath.value, editContent.value)
     content.value = editContent.value
     editing.value = false
     savedMsg.value = `已保存 — ${new Date().toLocaleTimeString()}`

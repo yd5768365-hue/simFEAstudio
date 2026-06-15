@@ -10,6 +10,7 @@ export interface Contract<
   method: 'GET' | 'POST' | 'DELETE'
   path: string
   params?: P
+  pathParams?: readonly string[]
   body?: B
   response: R
   cache?: boolean
@@ -23,6 +24,7 @@ export function contract<
   method: 'GET' | 'POST' | 'DELETE'
   path: string
   params?: P
+  pathParams?: readonly string[]
   body?: B
   response: R
   cache?: boolean
@@ -79,8 +81,10 @@ export function createClient(baseUrl: string, appendLog: (line: string) => void)
     let url = `${baseUrl.replace(/\/+$/, '')}${c.path}`
 
     if (c.params && options?.params) {
+      const pathParams = new Set(c.pathParams ?? [])
       for (const param of c.params) {
-        url = url.replace(`:${param}`, encodeURIComponent(options.params[param]))
+        const value = options.params[param]
+        url = url.replace(`:${param}`, pathParams.has(param) ? encodeURI(value) : encodeURIComponent(value))
       }
     }
 

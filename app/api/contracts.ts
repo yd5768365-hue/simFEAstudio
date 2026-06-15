@@ -688,3 +688,60 @@ export const askKnowledgeResponseSchema = z.object({
 })
 
 export type AskKnowledgeResponse = z.output<typeof askKnowledgeResponseSchema>
+
+// ── Experiment Lab ────────────────────────────────────────────
+
+export const expFileSchema = z.object({
+  path: z.string(),
+  name: z.string(),
+  dir: z.string(),
+  size: z.number(),
+})
+
+export type ExpFile = z.output<typeof expFileSchema>
+
+export const listExperimentFilesResponseSchema = z.object({
+  message: z.string(),
+  data: z.object({
+    files: z.array(expFileSchema),
+  }),
+})
+
+export type ListExperimentFilesResponse = z.output<typeof listExperimentFilesResponseSchema>
+
+export const readExperimentFileResponseSchema = z.object({
+  message: z.string(),
+  data: z.object({
+    content: z.string(),
+    path: z.string(),
+  }),
+})
+
+export type ReadExperimentFileResponse = z.output<typeof readExperimentFileResponseSchema>
+
+export const saveExperimentFileBodySchema = z.object({
+  content: z.string(),
+})
+
+export const saveExperimentFileResponseSchema = z.object({
+  message: z.string(),
+  data: z.object({
+    path: z.string(),
+  }),
+})
+
+export const runExperimentCodeBodySchema = z.object({
+  code: z.string().optional(),
+  file_path: z.string().optional(),
+})
+
+export const runExperimentCodeResponseSchema = z.object({
+  message: z.string(),
+  data: z.object({
+    exit_code: z.number(),
+    stdout: z.string(),
+    stderr: z.string(),
+  }),
+})
+
+export type RunExperimentCodeResponse = z.output<typeof runExperimentCodeResponseSchema>

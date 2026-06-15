@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { onActivated, onMounted } from 'vue'
+import type { SimfeaClient } from '@/api/simfeaClient'
 import { fileIcon, useExperimentFiles } from '@/composables/useExperimentFiles'
 import { renderMarkdown } from '@/utils/markdown'
 import { highlightCode } from '@/utils/syntaxHighlight'
 
-const props = defineProps<{ apiBaseUrl: string }>()
+const props = defineProps<{ api: SimfeaClient }>()
 const emit = defineEmits<{ back: [] }>()
 
 const {
@@ -26,7 +27,7 @@ const {
   newFile,
   runFile,
   onEditorKeydown,
-} = useExperimentFiles(props.apiBaseUrl)
+} = useExperimentFiles(props.api)
 
 onMounted(fetchFiles)
 onActivated(fetchFiles)
