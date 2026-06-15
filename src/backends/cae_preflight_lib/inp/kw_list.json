@@ -1,0 +1,3681 @@
+{
+  "*AMPLITUDE": {
+    "arguments": [
+      {
+        "form": "Line",
+        "name": "NAME",
+        "required": true
+      },
+      {
+        "form": "Combo",
+        "name": "TIME",
+        "required": false,
+        "options": "|TOTAL TIME"
+      },
+      {
+        "form": "Bool",
+        "name": "USER",
+        "required": false
+      },
+      {
+        "form": "Float",
+        "name": "SHIFTX",
+        "required": false,
+        "group_form": "HBox"
+      },
+      {
+        "form": "Float",
+        "name": "SHIFTY",
+        "required": false,
+        "group_form": "HBox"
+      }
+    ]
+  },
+  "*BASE MOTION": {
+    "arguments": [
+      {
+        "form": "Combo",
+        "name": "DOF",
+        "required": true,
+        "options": "1|2|3"
+      },
+      {
+        "name": "AMPLITUDE",
+        "required": true,
+        "use": "*AMPLITUDE"
+      },
+      {
+        "form": "Combo",
+        "name": "TYPE",
+        "required": false,
+        "options": "|DISPLACEMENT"
+      }
+    ]
+  },
+  "*BEAM SECTION": {
+    "arguments": [
+      {
+        "name": "ELSET",
+        "required": true,
+        "use": "*ELSET"
+      },
+      {
+        "name": "MATERIAL",
+        "required": true,
+        "use": "*MATERIAL"
+      },
+      {
+        "form": "Combo",
+        "name": "SECTION",
+        "required": true,
+        "options": "RECT|CIRC|PIPE|BOX|GENERAL"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "newline": true,
+        "comment": "Nodal thickness in directions 1, 2:"
+      },
+      {
+        "form": "Line",
+        "required": false,
+        "newline": true,
+        "comment": "Global x, y, z coordinates of a unit vector in 1-direction:",
+        "default": "0., 0., -1."
+      },
+      {
+        "form": "Float",
+        "name": "OFFSET1",
+        "required": false,
+        "group_form": "HBox"
+      },
+      {
+        "form": "Float",
+        "name": "OFFSET2",
+        "required": false,
+        "group_form": "HBox"
+      }
+    ]
+  },
+  "*BOUNDARY": {
+    "arguments": [
+      {
+        "form": "Combo",
+        "name": "OP",
+        "required": false,
+        "options": "|MOD|NEW"
+      },
+      {
+        "form": "Combo",
+        "name": "LOAD CASE",
+        "required": false,
+        "options": "|1|2"
+      },
+      {
+        "name": "AMPLITUDE",
+        "required": false,
+        "use": "*AMPLITUDE"
+      },
+      {
+        "form": "Float",
+        "name": "TIME DELAY",
+        "required": false
+      },
+      {
+        "form": "Float",
+        "name": "MASS FLOW",
+        "required": false
+      },
+      {
+        "form": "Bool",
+        "name": "FIXED",
+        "required": false
+      },
+      {
+        "form": "Bool",
+        "name": "USER",
+        "required": false
+      },
+      {
+        "form": "VGroup",
+        "name": "SUBMODEL",
+        "required": false
+      },
+      {
+        "form": "Int",
+        "required": false,
+        "comment": "NODE or...",
+        "group_form": "OrH"
+      },
+      {
+        "required": false,
+        "use": "*NSET",
+        "comment": "...NSET",
+        "group_form": "OrH"
+      },
+      {
+        "form": "Int",
+        "required": false,
+        "comment": "First DOF",
+        "group_form": "HBox"
+      },
+      {
+        "form": "Int",
+        "required": false,
+        "comment": "Last DOF",
+        "group_form": "HBox"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Value",
+        "group_form": "HBox"
+      }
+    ]
+  },
+  "*BUCKLE": {
+    "arguments": [
+      {
+        "form": "Combo",
+        "name": "SOLVER",
+        "required": true,
+        "options": "SPOOLES|PARDISO|SGI|TAUCS|PaStiX"
+      },
+      {
+        "form": "Int",
+        "required": true,
+        "newline": true,
+        "comment": "Number of buckling factors",
+        "default": "1"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Accuracy"
+      },
+      {
+        "form": "Int",
+        "required": false,
+        "comment": "Lanczos vectors"
+      },
+      {
+        "form": "Int",
+        "required": false,
+        "comment": "Maximum of iterations"
+      }
+    ]
+  },
+  "*CFD": {
+    "arguments": [
+      {
+        "form": "Float",
+        "name": "TOTAL TIME AT START",
+        "required": false
+      },
+      {
+        "form": "Combo",
+        "name": "TURBULENCE MODEL",
+        "required": false,
+        "options": "|K-EPSILON|K-OMEGA|SST"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "newline": true,
+        "comment": "Initial time increment"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Total step time"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Minimum time increment allowed"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Maximum time increment allowed"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Safety factor"
+      },
+      {
+        "form": "Bool",
+        "name": "STEADY STATE",
+        "required": false,
+        "group_form": "HBox"
+      },
+      {
+        "form": "Bool",
+        "name": "TIME RESET",
+        "required": false,
+        "group_form": "HBox"
+      },
+      {
+        "form": "Bool",
+        "name": "COMPRESSIBLE",
+        "required": false,
+        "group_form": "HBox"
+      },
+      {
+        "form": "Bool",
+        "name": "SHALLOW WATER",
+        "required": false,
+        "group_form": "HBox"
+      }
+    ]
+  },
+  "*CFLUX": {
+    "arguments": [
+      {
+        "form": "Combo",
+        "name": "OP",
+        "required": false,
+        "options": "|MOD|NEW"
+      },
+      {
+        "name": "AMPLITUDE",
+        "required": false,
+        "use": "*AMPLITUDE"
+      },
+      {
+        "form": "Float",
+        "name": "TIME DELAY",
+        "required": false
+      },
+      {
+        "form": "Int",
+        "required": false,
+        "comment": "DOF",
+        "default": "11"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Magnitude of the flux"
+      },
+      {
+        "form": "Bool",
+        "name": "USER",
+        "required": false,
+        "group_form": "HBox"
+      },
+      {
+        "form": "Bool",
+        "name": "ADD",
+        "required": false,
+        "group_form": "HBox"
+      },
+      {
+        "form": "Int",
+        "required": false,
+        "comment": "NODE or...",
+        "group_form": "OrH"
+      },
+      {
+        "required": false,
+        "use": "*NSET",
+        "comment": "...NSET",
+        "group_form": "OrH"
+      }
+    ]
+  },
+  "*CHANGE FRICTION": {
+    "arguments": [
+      {
+        "name": "INTERACTION",
+        "required": true,
+        "use": "*SURFACE INTERACTION"
+      }
+    ]
+  },
+  "*CHANGE MATERIAL": {
+    "arguments": [
+      {
+        "name": "NAME",
+        "required": true,
+        "use": "*MATERIAL"
+      }
+    ]
+  },
+  "*CHANGE PLASTIC": {
+    "arguments": [
+      {
+        "form": "Combo",
+        "name": "HARDENING",
+        "required": false,
+        "options": "|ISOTROPIC|KINEMATIC"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Mises stress",
+        "group_form": "Table"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Plastic strain",
+        "group_form": "Table"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Temperature",
+        "group_form": "Table"
+      }
+    ]
+  },
+  "*CHANGE SURFACE BEHAVIOR": {
+    "arguments": [
+      {
+        "name": "INTERACTION",
+        "required": true,
+        "use": "*SURFACE INTERACTION"
+      }
+    ]
+  },
+  "*CHANGE SOLID SECTION": {
+    "arguments": [
+      {
+        "name": "ELSET",
+        "required": true,
+        "use": "*ELSET"
+      },
+      {
+        "name": "MATERIAL",
+        "required": true,
+        "use": "*MATERIAL"
+      },
+      {
+        "name": "ORIENTATION",
+        "required": false,
+        "use": "*ORIENTATION"
+      }
+    ]
+  },
+  "*CLEARANCE": {
+    "arguments": [
+      {
+        "name": "MASTER",
+        "required": true,
+        "use": "*SURFACE"
+      },
+      {
+        "name": "SLAVE",
+        "required": true,
+        "use": "*SURFACE"
+      },
+      {
+        "form": "Float",
+        "name": "VALUE",
+        "required": true
+      }
+    ]
+  },
+  "*CLOAD": {
+    "arguments": [
+      {
+        "form": "Combo",
+        "name": "OP",
+        "required": false,
+        "options": "|MOD|NEW"
+      },
+      {
+        "form": "Combo",
+        "name": "LOAD CASE",
+        "required": false,
+        "options": "|1|2"
+      },
+      {
+        "form": "Float",
+        "name": "TIME DELAY",
+        "required": false
+      },
+      {
+        "form": "Int",
+        "name": "SECTOR",
+        "required": false
+      },
+      {
+        "form": "Line",
+        "name": "OMEGA0",
+        "required": false
+      },
+      {
+        "form": "Bool",
+        "name": "USER",
+        "required": false
+      },
+      {
+        "form": "Int",
+        "required": false,
+        "comment": "DOF"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Magnitude of the load"
+      },
+      {
+        "name": "AMPLITUDE",
+        "required": false,
+        "use": "*AMPLITUDE",
+        "group_form": "OrV"
+      },
+      {
+        "form": "VGroup",
+        "name": "SUBMODEL",
+        "required": false,
+        "group_form": "OrV"
+      },
+      {
+        "form": "Int",
+        "required": false,
+        "comment": "NODE or...",
+        "group_form": "OrH"
+      },
+      {
+        "required": false,
+        "use": "*NSET",
+        "comment": "...NSET",
+        "group_form": "OrH"
+      }
+    ]
+  },
+  "*COMPLEX FREQUENCY": {
+    "arguments": [
+      {
+        "form": "Bool",
+        "name": "CORIOLIS",
+        "required": true
+      },
+      {
+        "form": "Int",
+        "required": false,
+        "newline": true,
+        "comment": "Number of eigenfrequencies desired"
+      }
+    ]
+  },
+  "*CONDUCTIVITY": {
+    "arguments": [
+      {
+        "form": "Combo",
+        "name": "TYPE",
+        "required": false,
+        "options": "|ISO|ORTHO|ANISO"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Conductivity coefficient",
+        "group_form": "Table"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Temperature",
+        "group_form": "Table"
+      }
+    ]
+  },
+  "*CONSTRAINT": {
+    "arguments": [
+      {
+        "required": true,
+        "use": "*DESIGN RESPONSE",
+        "newline": true,
+        "comment": "*DESIGN RESPONSE"
+      },
+      {
+        "form": "Combo",
+        "required": true,
+        "options": "|LE|GE"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Relative value"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Absolute value"
+      }
+    ]
+  },
+  "*CONTACT DAMPING": {
+    "arguments": [
+      {
+        "form": "Float",
+        "name": "TANGENT FRACTION",
+        "required": false
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "newline": true,
+        "comment": "Damping constant"
+      }
+    ]
+  },
+  "*CONTACT FILE": {
+    "arguments": [
+      {
+        "form": "Grid",
+        "required": false,
+        "newline": true,
+        "comment": "Identifying keys",
+        "default": "CDIS,CSTR,CELS,PCON"
+      },
+      {
+        "form": "Int",
+        "name": "FREQUENCY",
+        "required": false,
+        "group_form": "OrV"
+      },
+      {
+        "name": "TIME POINTS",
+        "required": false,
+        "use": "*TIME POINTS",
+        "group_form": "OrV"
+      },
+      {
+        "form": "Bool",
+        "name": "LAST ITERATIONS",
+        "required": false,
+        "group_form": "HBox"
+      },
+      {
+        "form": "Bool",
+        "name": "CONTACT ELEMENTS",
+        "required": false,
+        "group_form": "HBox"
+      }
+    ]
+  },
+  "*CONTACT OUTPUT": {
+    "arguments": [
+      {
+        "form": "Grid",
+        "required": false,
+        "newline": true,
+        "comment": "Identifying keys",
+        "default": "CDIS,CSTR,CELS,PCON"
+      },
+      {
+        "form": "Int",
+        "name": "FREQUENCY",
+        "required": false,
+        "group_form": "OrV"
+      },
+      {
+        "name": "TIME POINTS",
+        "required": false,
+        "use": "*TIME POINTS",
+        "group_form": "OrV"
+      },
+      {
+        "form": "Bool",
+        "name": "LAST ITERATIONS",
+        "required": false,
+        "group_form": "HBox"
+      },
+      {
+        "form": "Bool",
+        "name": "CONTACT ELEMENTS",
+        "required": false,
+        "group_form": "HBox"
+      }
+    ]
+  },
+  "*CONTACT PAIR": {
+    "arguments": [
+      {
+        "name": "INTERACTION",
+        "required": true,
+        "use": "*SURFACE INTERACTION"
+      },
+      {
+        "form": "Combo",
+        "name": "TYPE",
+        "required": true,
+        "options": "NODE TO SURFACE|SURFACE TO SURFACE|MORTAR|LINMORTAR|PGLINMORTAR|MASSLESS"
+      },
+      {
+        "form": "Bool",
+        "name": "SMALL SLIDING",
+        "required": false
+      },
+      {
+        "form": "Float",
+        "name": "ADJUST",
+        "required": false
+      },
+      {
+        "required": false,
+        "use": "*SURFACE",
+        "comment": "Slave",
+        "group_form": "HBox"
+      },
+      {
+        "required": false,
+        "use": "*SURFACE",
+        "comment": "Master",
+        "group_form": "HBox"
+      }
+    ]
+  },
+  "*CONTACT PRINT": {
+    "arguments": [
+      {
+        "form": "Combo",
+        "name": "TOTALS",
+        "required": false,
+        "options": "|NO|YES|ONLY"
+      },
+      {
+        "form": "Grid",
+        "required": false,
+        "newline": true,
+        "comment": "Identifying keys",
+        "default": "CDIS,CSTR,CELS,CNUM,CF,CFN,CFS"
+      },
+      {
+        "form": "Int",
+        "name": "FREQUENCY",
+        "required": false,
+        "group_form": "OrV"
+      },
+      {
+        "name": "TIME POINTS",
+        "required": false,
+        "use": "*TIME POINTS",
+        "group_form": "OrV"
+      },
+      {
+        "required": false,
+        "use": "*SURFACE",
+        "comment": "Slave",
+        "group_form": "HBox"
+      },
+      {
+        "required": false,
+        "use": "*SURFACE",
+        "comment": "Master",
+        "group_form": "HBox"
+      }
+    ]
+  },
+  "*CONTROLS": {
+    "arguments": [
+      {
+        "form": "Line",
+        "required": false,
+        "readonly": true,
+        "group_form": "OrV",
+        "default": "RESET"
+      },
+      {
+        "form": "Text",
+        "required": false,
+        "readonly": true,
+        "group_form": "OrV",
+        "default": "PARAMETERS=TIME INCREMENTATION\\n9, 16, 10, 4, , 5, , , \\n0.25, 0.5, 0.75, 0.85, , , 1.5,"
+      },
+      {
+        "form": "Text",
+        "required": false,
+        "readonly": true,
+        "group_form": "OrV",
+        "default": "PARAMETERS=FIELD\\n0.005, 0.01, 0.01, , 0.02, 1e-5, 1e-3, 1e-5"
+      },
+      {
+        "form": "Text",
+        "required": false,
+        "readonly": true,
+        "group_form": "OrV",
+        "default": "PARAMETERS=LINE SEARCH\\n , 1.01, 0.25, ,"
+      },
+      {
+        "form": "Text",
+        "required": false,
+        "readonly": true,
+        "group_form": "OrV",
+        "default": "PARAMETERS=NETWORK\\n5e-7, 5e-7, 5e-7, 5e-7, 5e-7, 5e-7, 5e-7\\n1e20, 1e20, 1e20, 1e20, 1e20, 1e20, 1e20"
+      },
+      {
+        "form": "Text",
+        "required": false,
+        "readonly": true,
+        "group_form": "OrV",
+        "default": "PARAMETERS=CFD\\n20, 0, 1, 1"
+      },
+      {
+        "form": "Text",
+        "required": false,
+        "readonly": true,
+        "group_form": "OrV",
+        "default": "PARAMETERS=CONTACT\\n0.001, 0.1, 100, 60"
+      }
+    ]
+  },
+  "*CORRELATION LENGTH": {
+    "arguments": [
+      {
+        "form": "Float",
+        "required": false,
+        "newline": true,
+        "comment": "Value"
+      }
+    ]
+  },
+  "*COUPLED TEMPERATURE-DISPLACEMENT": {
+    "arguments": [
+      {
+        "form": "Combo",
+        "name": "SOLVER",
+        "required": false,
+        "options": "|SPOOLES|PARDISO|SGI|TAUCS|PaStiX|ITERATIVE SCALING|ITERATIVE CHOLESKY"
+      },
+      {
+        "form": "Float",
+        "name": "ALPHA",
+        "required": false,
+        "default": "-0.05"
+      },
+      {
+        "form": "Float",
+        "name": "DELTMX",
+        "required": false
+      },
+      {
+        "form": "Float",
+        "name": "TOTAL TIME AT START",
+        "required": false
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "newline": true,
+        "comment": "Initial time increment",
+        "default": "1"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Time period of the step",
+        "default": "1"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Minimum time increment",
+        "default": "1.e-5"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Maximum time increment",
+        "default": "1.e+30"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Initial time increment for CFD",
+        "default": "1.e-2"
+      },
+      {
+        "form": "Bool",
+        "name": "DIRECT",
+        "required": false,
+        "group_form": "HBox"
+      },
+      {
+        "form": "Bool",
+        "name": "STEADY STATE",
+        "required": false,
+        "group_form": "HBox"
+      },
+      {
+        "form": "Bool",
+        "name": "TIME RESET",
+        "required": false,
+        "group_form": "HBox"
+      },
+      {
+        "form": "Bool",
+        "name": "COMPRESSIBLE",
+        "required": false,
+        "group_form": "HBox"
+      }
+    ]
+  },
+  "*COUPLING": {
+    "arguments": [
+      {
+        "form": "Line",
+        "name": "CONSTRAINT NAME",
+        "required": true
+      },
+      {
+        "form": "Int",
+        "name": "REF NODE",
+        "required": true
+      },
+      {
+        "name": "SURFACE",
+        "required": true,
+        "use": "*SURFACE"
+      },
+      {
+        "name": "ORIENTATION",
+        "required": false,
+        "use": "*ORIENTATION"
+      }
+    ]
+  },
+  "*CRACK PROPAGATION": {
+    "arguments": [
+      {
+        "form": "SelectFile",
+        "name": "INPUT",
+        "required": true,
+        "comment": "FRD-file with the uncracked results"
+      },
+      {
+        "name": "MATERIAL",
+        "required": true,
+        "use": "*MATERIAL"
+      },
+      {
+        "form": "Combo",
+        "name": "LENGTH",
+        "required": false,
+        "options": "|CUMULATIVE|INTERSECTION"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "newline": true,
+        "comment": "Maximum crack propagation increment"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Maximum deflection angle per increment"
+      }
+    ]
+  },
+  "*CREEP": {
+    "arguments": [
+      {
+        "form": "Combo",
+        "name": "LAW",
+        "required": false,
+        "options": "|NORTON|USER"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "A",
+        "group_form": "Table"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "n",
+        "group_form": "Table"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "m",
+        "group_form": "Table"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "T",
+        "group_form": "Table"
+      }
+    ]
+  },
+  "*CYCLIC HARDENING": {
+    "arguments": [
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Mises stress",
+        "group_form": "Table"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Plastic strain",
+        "group_form": "Table"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Temperature",
+        "group_form": "Table"
+      }
+    ]
+  },
+  "*CYCLIC SYMMETRY MODEL": {
+    "arguments": []
+  },
+  "*DAMPING": {
+    "arguments": []
+  },
+  "*DASHPOT": {
+    "arguments": [
+      {
+        "name": "ELSET",
+        "required": true,
+        "use": "*ELSET"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Constant",
+        "group_form": "Table"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Frequency",
+        "group_form": "Table"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Temperature",
+        "group_form": "Table"
+      }
+    ]
+  },
+  "*DEFORMATION PLASTICITY": {
+    "arguments": [
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Young",
+        "group_form": "Table"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Poisson",
+        "group_form": "Table"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Yield",
+        "group_form": "Table"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Exponent",
+        "group_form": "Table"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Offset",
+        "group_form": "Table"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Temperature",
+        "group_form": "Table"
+      }
+    ]
+  },
+  "*DENSITY": {
+    "arguments": [
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Density",
+        "group_form": "Table"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Temperature",
+        "group_form": "Table"
+      }
+    ]
+  },
+  "*DEPVAR": {
+    "arguments": [
+      {
+        "form": "Int",
+        "required": false,
+        "newline": true,
+        "comment": "Number of internal state variables"
+      }
+    ]
+  },
+  "*DESIGN RESPONSE": {
+    "arguments": [
+      {
+        "form": "Use2",
+        "required": false,
+        "default": "*NSET|*ELSET"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "ro",
+        "group_form": "HBox"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "sigma",
+        "group_form": "HBox"
+      }
+    ]
+  },
+  "*DESIGN VARIABLES": {
+    "arguments": [
+      {
+        "form": "Combo",
+        "name": "TYPE",
+        "required": true,
+        "options": "COORDINATE|ORIENTATION"
+      },
+      {
+        "required": false,
+        "use": "*NSET",
+        "newline": true,
+        "comment": "NSET"
+      }
+    ]
+  },
+  "*DFLUX": {
+    "arguments": [
+      {
+        "form": "Combo",
+        "name": "OP",
+        "required": false,
+        "options": "|MOD|NEW"
+      },
+      {
+        "name": "AMPLITUDE",
+        "required": false,
+        "use": "*AMPLITUDE"
+      },
+      {
+        "form": "Float",
+        "name": "TIME DELAY",
+        "required": false
+      },
+      {
+        "form": "Int",
+        "required": false,
+        "comment": "Element",
+        "group_form": "Table"
+      },
+      {
+        "form": "Line",
+        "required": false,
+        "comment": "Label",
+        "group_form": "Table"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Magnitude",
+        "group_form": "Table"
+      }
+    ]
+  },
+  "*DISTRIBUTING": {
+    "arguments": [
+      {
+        "form": "Bool",
+        "name": "CYCLIC SYMMETRY",
+        "required": false
+      },
+      {
+        "form": "Int",
+        "required": false,
+        "comment": "First DOF",
+        "group_form": "HBox"
+      },
+      {
+        "form": "Int",
+        "required": false,
+        "comment": "Last DOF",
+        "group_form": "HBox"
+      }
+    ]
+  },
+  "*DISTRIBUTING COUPLING": {
+    "arguments": [
+      {
+        "name": "ELSET",
+        "required": true,
+        "use": "*ELSET"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Weight",
+        "group_form": "HBox"
+      }
+    ]
+  },
+  "*DISTRIBUTION": {
+    "arguments": [
+      {
+        "form": "Line",
+        "name": "NAME",
+        "required": true
+      },
+      {
+        "form": "Empty",
+        "required": false,
+        "newline": true
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Xa",
+        "group_form": "HBox"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Ya",
+        "group_form": "HBox"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Za",
+        "group_form": "HBox"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Xb",
+        "group_form": "HBox"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Yb",
+        "group_form": "HBox"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Zb",
+        "group_form": "HBox"
+      },
+      {
+        "form": "Int",
+        "required": false,
+        "comment": "ELEMENT or...",
+        "group_form": "OrH"
+      },
+      {
+        "required": false,
+        "use": "*ELSET",
+        "comment": "...ELSET",
+        "group_form": "OrH"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Xa",
+        "group_form": "HBox"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Ya",
+        "group_form": "HBox"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Za",
+        "group_form": "HBox"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Xb",
+        "group_form": "HBox"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Yb",
+        "group_form": "HBox"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Zb",
+        "group_form": "HBox"
+      }
+    ]
+  },
+  "*DLOAD": {
+    "arguments": [
+      {
+        "form": "Combo",
+        "name": "OP",
+        "required": false,
+        "options": "|MOD|NEW"
+      },
+      {
+        "name": "AMPLITUDE",
+        "required": false,
+        "use": "*AMPLITUDE"
+      },
+      {
+        "form": "Float",
+        "name": "TIME DELAY",
+        "required": false
+      },
+      {
+        "form": "Combo",
+        "name": "LOAD CASE",
+        "required": false,
+        "options": "|1|2"
+      },
+      {
+        "form": "Int",
+        "name": "SECTOR",
+        "required": false
+      },
+      {
+        "form": "Int",
+        "required": false,
+        "comment": "ELEMENT or...",
+        "group_form": "OrH"
+      },
+      {
+        "required": false,
+        "use": "*ELSET",
+        "comment": "...ELSET",
+        "group_form": "OrH"
+      }
+    ]
+  },
+  "*DSLOAD": {
+    "arguments": []
+  },
+  "*DYNAMIC": {
+    "arguments": [
+      {
+        "form": "Float",
+        "name": "ALPHA",
+        "required": false,
+        "default": "-0.05"
+      },
+      {
+        "form": "Combo",
+        "name": "EXPLICIT",
+        "required": false,
+        "options": "|0|1|2|3"
+      },
+      {
+        "form": "Combo",
+        "name": "SOLVER",
+        "required": false,
+        "options": "|SPOOLES|PARDISO|SGI|TAUCS|PaStiX|ITERATIVE SCALING|ITERATIVE CHOLESKY"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "newline": true,
+        "comment": "Initial time increment",
+        "default": "0.1"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Time period of the step",
+        "default": "1"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Minimum time increment",
+        "default": "1.e-5"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Maximum time increment",
+        "default": "1.e+30"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Initial time increment for CFD",
+        "default": "1.e-2"
+      },
+      {
+        "form": "Bool",
+        "name": "DIRECT",
+        "required": false,
+        "group_form": "HBox"
+      },
+      {
+        "form": "Bool",
+        "name": "RELATIVE TO ABSOLUTE",
+        "required": false,
+        "group_form": "HBox"
+      }
+    ]
+  },
+  "*ELASTIC": {
+    "arguments": []
+  },
+  "*ELECTRICAL CONDUCTIVITY": {
+    "arguments": [
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Sigma",
+        "group_form": "Table"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Temperature",
+        "group_form": "Table"
+      }
+    ]
+  },
+  "*ELECTROMAGNETICS": {
+    "arguments": [
+      {
+        "form": "Combo",
+        "name": "SOLVER",
+        "required": false,
+        "options": "|SPOOLES|PARDISO|SGI|TAUCS|PaStiX|ITERATIVE SCALING|ITERATIVE CHOLESKY"
+      },
+      {
+        "form": "Bool",
+        "name": "DIRECT",
+        "required": false
+      },
+      {
+        "form": "Bool",
+        "name": "MAGNETOSTATICS",
+        "required": false
+      },
+      {
+        "form": "Float",
+        "name": "DELTMX",
+        "required": false
+      },
+      {
+        "form": "Bool",
+        "name": "TIME RESET",
+        "required": false
+      },
+      {
+        "form": "Float",
+        "name": "TOTAL TIME AT START",
+        "required": false
+      },
+      {
+        "form": "Bool",
+        "name": "NO HEAT TRANSFER",
+        "required": false
+      },
+      {
+        "form": "Bool",
+        "name": "FREQUENCY",
+        "required": false
+      },
+      {
+        "form": "Float",
+        "name": "OMEGA",
+        "required": false
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "newline": true,
+        "comment": "Initial time increment",
+        "default": "1"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Time period of the step",
+        "default": "1"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Minimum time increment",
+        "default": "1.e-5"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Maximum time increment",
+        "default": "1.e+30"
+      }
+    ]
+  },
+  "*ELEMENT": {
+    "arguments": [
+      {
+        "form": "Combo",
+        "name": "TYPE",
+        "required": true,
+        "options": "C3D8|F3D8|C3D8R|C3D8I|C3D6|F3D6|C3D4|F3D4|C3D20|C3D20R|C3D15|C3D10|C3D10T|S3|M3D3|CPS3|CPE3|CAX3|S6|M3D6|CPS6|CPE6|CAX6|S4|S4R|M3D4|M3D4R|CPS4|CPS4R|CPE4|CPE4R|CAX4|CAX4R|S8|S8R|M3D8|M3D8R|CPS8|CPS8R|CPE8|CPE8R|CAX8|CAX8R|B21|B31|B31R|T2D2|T3D2|GAPUNI|DASHPOTA|SPRING2|SPRINGA|B32|B32R|T3D3|D|SPRING1|DCOUP3D|MASS"
+      },
+      {
+        "form": "Line",
+        "name": "ELSET",
+        "required": false
+      },
+      {
+        "form": "Int",
+        "required": false,
+        "newline": true,
+        "comment": "Element number"
+      },
+      {
+        "form": "Text",
+        "required": false,
+        "comment": "Node numbers (max. 16 per line)"
+      }
+    ]
+  },
+  "*ELEMENT OUTPUT": {
+    "arguments": [
+      {
+        "form": "Bool",
+        "name": "S",
+        "required": false,
+        "group_form": "HBox"
+      },
+      {
+        "form": "Bool",
+        "name": "PEEQ",
+        "required": false,
+        "group_form": "HBox"
+      }
+    ]
+  },
+  "*EL FILE": {
+    "arguments": [
+      {
+        "form": "Int",
+        "name": "FREQUENCYF",
+        "required": false
+      },
+      {
+        "form": "Combo",
+        "name": "GLOBAL",
+        "required": false,
+        "options": "|YES|NO"
+      },
+      {
+        "form": "Combo",
+        "name": "OUTPUT",
+        "required": false,
+        "options": "|2D|3D"
+      },
+      {
+        "name": "NSET",
+        "required": false,
+        "use": "*NSET"
+      },
+      {
+        "form": "Grid",
+        "name": "Integration point variables",
+        "required": false,
+        "newline": true,
+        "default": "CEEQ,E,ECD,EMFB,EMFE,ENER,ERR,HER,HFL,HFLF,MAXE,MAXS,ME,PEEQ,PHS,S,SF,SMID,SNEG,SPOS,SVF,SDV,THE,ZZS"
+      },
+      {
+        "form": "Int",
+        "name": "FREQUENCY",
+        "required": false,
+        "group_form": "OrH"
+      },
+      {
+        "required": false,
+        "use": "*TIME POINTS",
+        "group_form": "OrH"
+      },
+      {
+        "form": "Bool",
+        "name": "OUTPUT ALL",
+        "required": false,
+        "group_form": "HBox"
+      },
+      {
+        "form": "Bool",
+        "name": "SECTION FORCES",
+        "required": false,
+        "group_form": "HBox"
+      },
+      {
+        "form": "Bool",
+        "name": "LAST ITERATIONS",
+        "required": false,
+        "group_form": "HBox"
+      },
+      {
+        "form": "Bool",
+        "name": "CONTACT ELEMENTS",
+        "required": false,
+        "group_form": "HBox"
+      }
+    ]
+  },
+  "*EL PRINT": {
+    "arguments": [
+      {
+        "name": "ELSET",
+        "required": true,
+        "use": "*ELSET"
+      },
+      {
+        "form": "Int",
+        "name": "FREQUENCYF",
+        "required": false
+      },
+      {
+        "form": "Combo",
+        "name": "TOTALS",
+        "required": false,
+        "options": "|NO|YES|ONLY"
+      },
+      {
+        "form": "Combo",
+        "name": "GLOBAL",
+        "required": false,
+        "options": "|YES|NO"
+      },
+      {
+        "form": "Int",
+        "name": "FREQUENCY",
+        "required": false,
+        "group_form": "OrH"
+      },
+      {
+        "required": false,
+        "use": "*TIME POINTS",
+        "group_form": "OrH"
+      },
+      {
+        "form": "Grid",
+        "name": "Integration point variables",
+        "required": false,
+        "group_form": "Tabs",
+        "default": "S,SVF,E,ME,PEEQ,CEEQ,ENER,SDV,HFL,HFLF,COORD"
+      },
+      {
+        "form": "Grid",
+        "name": "Whole element variables",
+        "required": false,
+        "group_form": "Tabs",
+        "default": "ELSE,ELKE,EVOL,EMAS,EBHE,CENT"
+      }
+    ]
+  },
+  "*ELSET": {
+    "arguments": [
+      {
+        "form": "Line",
+        "name": "ELSET",
+        "required": true
+      },
+      {
+        "form": "HGroup",
+        "name": "GENERATE",
+        "required": true,
+        "group_form": "Tabs2"
+      }
+    ]
+  },
+  "*END STEP": {
+    "arguments": []
+  },
+  "*EQUATION": {
+    "arguments": [
+      {
+        "form": "Bool",
+        "name": "REMOVE ALL",
+        "required": true,
+        "group_form": "Tabs2"
+      }
+    ]
+  },
+  "*EXPANSION": {
+    "arguments": [
+      {
+        "form": "Line",
+        "name": "ZERO",
+        "required": false
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Temperature"
+      }
+    ]
+  },
+  "*FEASIBLE DIRECTION": {
+    "arguments": []
+  },
+  "*FILM": {
+    "arguments": [
+      {
+        "form": "Combo",
+        "name": "OP",
+        "required": false,
+        "options": "|MOD|NEW"
+      },
+      {
+        "name": "AMPLITUDE",
+        "required": false,
+        "use": "*AMPLITUDE"
+      },
+      {
+        "form": "Float",
+        "name": "TIME DELAY",
+        "required": false
+      },
+      {
+        "name": "FILM AMPLITUDE",
+        "required": false,
+        "use": "*AMPLITUDE"
+      },
+      {
+        "form": "Float",
+        "name": "FILM TIME DELAY",
+        "required": false
+      },
+      {
+        "form": "Int",
+        "required": false,
+        "comment": "ELEMENT or...",
+        "group_form": "OrH"
+      },
+      {
+        "required": false,
+        "use": "*ELSET",
+        "comment": "...ELSET",
+        "group_form": "OrH"
+      }
+    ]
+  },
+  "*FILTER": {
+    "arguments": [
+      {
+        "form": "Combo",
+        "name": "TYPE",
+        "required": false,
+        "options": "|LINEAR|QUADRATIC|CUBIC|GAUSS"
+      },
+      {
+        "form": "Bool",
+        "name": "BOUNDARY WEIGHTING=YES",
+        "required": false
+      },
+      {
+        "form": "Bool",
+        "name": "EDGE PRESERVATION=YES",
+        "required": false
+      },
+      {
+        "form": "Bool",
+        "name": "DIRECTION WEIGHTING=YES",
+        "required": false
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "newline": true,
+        "comment": "The filter radius"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "The boundary weighting distance"
+      }
+    ]
+  },
+  "*FLUID CONSTANTS": {
+    "arguments": [
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Specific heat",
+        "group_form": "Table"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Dynamic viscosity",
+        "group_form": "Table"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Temperature",
+        "group_form": "Table"
+      }
+    ]
+  },
+  "*FLUID SECTION": {
+    "arguments": [
+      {
+        "name": "ELSET",
+        "required": true,
+        "use": "*ELSET"
+      },
+      {
+        "name": "MATERIAL",
+        "required": true,
+        "use": "*MATERIAL"
+      },
+      {
+        "form": "Combo",
+        "name": "TYPE",
+        "required": false,
+        "options": "|ABSOLUTE TO RELATIVE\n\t\t\t|BRANCH JOINT GE\n\t\t\t|BRANCH JOINT IDELCHIK1\n\t\t\t|BRANCH JOINT IDELCHIK2\n\t\t\t|BRANCH SPLIT GE\n\t\t\t|BRANCH SPLIT IDELCHIK1\n\t\t\t|BRANCH SPLIT IDELCHIK2\n\t\t\t|CARBONSEAL\n\t\t\t|CHANNEL CONTRACTION\n\t\t\t|CHANNEL ENLARGEMENT\n\t\t\t|CHANNEL INOUT\n\t\t\t|CHANNEL RESERVOIR\n\t\t\t|CHANNEL SLUICE GATE\n\t\t\t|CHANNEL STEP\n\t\t\t|CHANNEL STRAIGHT\n\t\t\t|CHANNEL WEIR\n\t\t\t|CHARACTERISTIC\n\t\t\t|GAS PIPE FANNO ADIABATIC\n\t\t\t|GAS PIPE FANNO ISOTHERMAL\n\t\t\t|GASPIPE FANNO ADIABATIC\n\t\t\t|INOUT\n\t\t\t|LABYRINTHSINGLE\n\t\t\t|LABYRINTHSTEPPED\n\t\t\t|LABYRINTHSTRAIGHT\n\t\t\t|LIQUID PUMP\n\t\t\t|MASSFLOWPERCENT\n\t\t\t|MOEHRING CENTRIPETAL\n\t\t\t|ORIFICE\n\t\t\t|PIPE BEND\n\t\t\t|PIPE CONTRACTION\n\t\t\t|PIPE ENLARGEMENT\n\t\t\t|PIPE ENTRANCE\n\t\t\t|PIPE GATE VALVE\n\t\t\t|PIPE INOUT\n\t\t\t|PIPE MANNING\n\t\t\t|PIPE MANNING FLEXIBLE\n\t\t\t|PIPE WHITE-COLEBROOK\n\t\t\t|PRESWIRLNOZZLE\n\t\t\t|RELATIVE TO ABSOLUTE\n\t\t\t|RESTRICTOR BEND IDEL CIRC\n\t\t\t|RESTRICTOR BEND IDEL RECT\n\t\t\t|RESTRICTOR BEND MILLER\n\t\t\t|RESTRICTOR BEND OWN\n\t\t\t|RESTRICTOR CONTRACTION\n\t\t\t|RESTRICTOR ENLARGEMENT\n\t\t\t|RESTRICTOR LONG ORIFICE IDELCHIK\n\t\t\t|RESTRICTOR LONG ORIFICE LICHTAROWICZ\n\t\t\t|RESTRICTOR USER\n\t\t\t|ROTATING GAS PIPE\n\t\t\t|U1\n\t\t\t|UP1\n\t\t\t|VORTEX FORCED\n\t\t\t|VORTEX FREE"
+      },
+      {
+        "name": "OIL",
+        "required": false,
+        "use": "*MATERIAL"
+      },
+      {
+        "form": "Int",
+        "name": "CONSTANTS",
+        "required": false
+      },
+      {
+        "form": "Bool",
+        "name": "LIQUID",
+        "required": false
+      },
+      {
+        "form": "Bool",
+        "name": "MANNING",
+        "required": false
+      },
+      {
+        "required": false,
+        "comment": "1",
+        "group_form": "Table"
+      },
+      {
+        "required": false,
+        "comment": "2",
+        "group_form": "Table"
+      },
+      {
+        "required": false,
+        "comment": "3",
+        "group_form": "Table"
+      },
+      {
+        "required": false,
+        "comment": "4",
+        "group_form": "Table"
+      },
+      {
+        "required": false,
+        "comment": "5",
+        "group_form": "Table"
+      },
+      {
+        "required": false,
+        "comment": "6",
+        "group_form": "Table"
+      },
+      {
+        "required": false,
+        "comment": "7",
+        "group_form": "Table"
+      },
+      {
+        "required": false,
+        "comment": "8",
+        "group_form": "Table"
+      }
+    ]
+  },
+  "*FREQUENCY": {
+    "arguments": [
+      {
+        "form": "Int",
+        "required": false,
+        "newline": true,
+        "comment": "Number of eigenfrequencies desired"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Lower value of requested eigenfrequency range"
+      }
+    ]
+  },
+  "*FRICTION": {
+    "arguments": [
+      {
+        "form": "Float",
+        "required": false,
+        "newline": true,
+        "comment": "Mu"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Lambda"
+      }
+    ]
+  },
+  "*GAP": {
+    "arguments": [
+      {
+        "name": "ELSET",
+        "required": true,
+        "use": "*ELSET"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Gap clearance"
+      },
+      {
+        "form": "Empty",
+        "required": false
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Spring stiffness"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Tensile force at -INF"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "group_form": "HBox"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "group_form": "HBox"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "group_form": "HBox"
+      }
+    ]
+  },
+  "*GAP CONDUCTANCE": {
+    "arguments": [
+      {
+        "form": "Bool",
+        "name": "USER",
+        "required": true,
+        "group_form": "Tabs2"
+      }
+    ]
+  },
+  "*GAP HEAT GENERATION": {
+    "arguments": [
+      {
+        "form": "Bool",
+        "name": "USER",
+        "required": true,
+        "group_form": "Tabs2"
+      }
+    ]
+  },
+  "*GEOMETRIC CONSTRAINT": {
+    "arguments": [
+      {
+        "form": "Combo",
+        "required": false,
+        "newline": true,
+        "comment": "The type of the geometric constraint",
+        "options": "FIXSHRINKAGE|FIXGROWTH|MAXMEMBERSIZE|MINMEMBERSIZE"
+      },
+      {
+        "required": false,
+        "use": "*NSET",
+        "comment": "A node set"
+      },
+      {
+        "required": false,
+        "use": "*NSET",
+        "comment": "An opposite node set"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "An absolute value"
+      }
+    ]
+  },
+  "*GEOMETRIC TOLERANCES": {
+    "arguments": [
+      {
+        "form": "Line",
+        "name": "TYPE",
+        "required": true,
+        "readonly": true,
+        "default": "NORMAL"
+      },
+      {
+        "form": "Bool",
+        "name": "CONSTRAINED",
+        "required": false
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Mean value of the tolerance"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Standard deviation of the tolerance"
+      },
+      {
+        "form": "Int",
+        "required": false,
+        "comment": "NODE or...",
+        "group_form": "OrH"
+      },
+      {
+        "required": false,
+        "use": "*NSET",
+        "comment": "...NSET",
+        "group_form": "OrH"
+      }
+    ]
+  },
+  "*GREEN": {
+    "arguments": [
+      {
+        "form": "Combo",
+        "name": "SOLVER",
+        "required": false,
+        "options": "|SPOOLES|PARDISO|SGI|TAUCS|PaStiX"
+      },
+      {
+        "form": "Combo",
+        "name": "STORAGE",
+        "required": false,
+        "options": "|NO|YES"
+      }
+    ]
+  },
+  "*HCF": {
+    "arguments": [
+      {
+        "form": "SelectFile",
+        "name": "INPUT",
+        "required": true
+      },
+      {
+        "form": "Int",
+        "name": "MODE",
+        "required": true
+      },
+      {
+        "form": "Int",
+        "name": "MISSION STEP",
+        "required": true
+      },
+      {
+        "form": "Int",
+        "name": "MAX CYCLE",
+        "required": false
+      },
+      {
+        "form": "Float",
+        "name": "SCALING",
+        "required": false
+      }
+    ]
+  },
+  "*HEADING": {
+    "arguments": [
+      {
+        "form": "Line",
+        "required": false,
+        "newline": true,
+        "comment": "Description of the problem"
+      }
+    ]
+  },
+  "*HEAT TRANSFER": {
+    "arguments": [
+      {
+        "form": "Combo",
+        "name": "SOLVER",
+        "required": false,
+        "options": "|SPOOLES|PARDISO|SGI|TAUCS|PaStiX|ITERATIVE SCALING|ITERATIVE CHOLESKY"
+      },
+      {
+        "form": "Combo",
+        "name": "STORAGE",
+        "required": false,
+        "options": "|NO|YES"
+      },
+      {
+        "form": "Float",
+        "name": "DELTMX",
+        "required": false
+      },
+      {
+        "form": "Float",
+        "name": "TOTAL TIME AT START",
+        "required": false
+      },
+      {
+        "form": "Bool",
+        "name": "MATRIXSTORAGE",
+        "required": false,
+        "group_form": "HBox"
+      },
+      {
+        "form": "Bool",
+        "name": "DIRECT",
+        "required": false,
+        "group_form": "HBox"
+      },
+      {
+        "form": "Bool",
+        "name": "STEADY STATE",
+        "required": false,
+        "group_form": "HBox"
+      },
+      {
+        "form": "Bool",
+        "name": "TIME RESET",
+        "required": false,
+        "group_form": "HBox"
+      }
+    ]
+  },
+  "*HYPERELASTIC": {
+    "arguments": []
+  },
+  "*HYPERFOAM": {
+    "arguments": []
+  },
+  "*INCLUDE": {
+    "arguments": [
+      {
+        "form": "SelectFile",
+        "name": "INPUT",
+        "required": true
+      }
+    ]
+  },
+  "*INITIAL CONDITIONS": {
+    "arguments": []
+  },
+  "*INITIAL STRAIN INCREASE": {
+    "arguments": [
+      {
+        "form": "Int",
+        "required": true,
+        "newline": true,
+        "comment": "Element number"
+      },
+      {
+        "form": "Int",
+        "required": true,
+        "comment": "Integration point number"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "xx",
+        "group_form": "HBox"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "yy",
+        "group_form": "HBox"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "zz",
+        "group_form": "HBox"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "xy",
+        "group_form": "HBox"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "xz",
+        "group_form": "HBox"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "yz",
+        "group_form": "HBox"
+      }
+    ]
+  },
+  "*KINEMATIC": {
+    "arguments": [
+      {
+        "form": "Combo",
+        "required": false,
+        "newline": true,
+        "comment": "First DOF",
+        "options": "1|2|3"
+      },
+      {
+        "form": "Combo",
+        "required": false,
+        "comment": "Last DOF",
+        "options": "|1|2|3"
+      }
+    ]
+  },
+  "*MAGNETIC PERMEABILITY": {
+    "arguments": [
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Mu",
+        "group_form": "Table"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Domain number",
+        "group_form": "Table"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Temperature",
+        "group_form": "Table"
+      }
+    ]
+  },
+  "*MASS": {
+    "arguments": [
+      {
+        "name": "ELSET",
+        "required": true,
+        "use": "*ELSET",
+        "comment": "Set with MASS elements"
+      },
+      {
+        "form": "Float",
+        "required": true,
+        "newline": true,
+        "comment": "Mass"
+      }
+    ]
+  },
+  "*MASS FLOW": {
+    "arguments": [
+      {
+        "form": "Repl",
+        "required": true,
+        "comment": "Mass flow type label",
+        "default": "M*"
+      },
+      {
+        "form": "Int",
+        "required": false,
+        "comment": "ELEMENT or...",
+        "group_form": "OrH"
+      },
+      {
+        "required": false,
+        "use": "*ELSET",
+        "comment": "...ELSET",
+        "group_form": "OrH"
+      }
+    ]
+  },
+  "*MATERIAL": {
+    "arguments": [
+      {
+        "form": "Line",
+        "name": "NAME",
+        "required": true
+      }
+    ]
+  },
+  "*MEMBRANE SECTION": {
+    "arguments": [
+      {
+        "name": "ELSET",
+        "required": true,
+        "use": "*ELSET"
+      },
+      {
+        "name": "MATERIAL",
+        "required": true,
+        "use": "*MATERIAL"
+      },
+      {
+        "form": "Float",
+        "name": "OFFSET",
+        "required": false
+      },
+      {
+        "form": "Float",
+        "required": true,
+        "newline": true,
+        "comment": "Thickness"
+      }
+    ]
+  },
+  "*MODAL DAMPING": {
+    "arguments": []
+  },
+  "*MODAL DYNAMIC": {
+    "arguments": [
+      {
+        "form": "Combo",
+        "name": "SOLVER",
+        "required": false,
+        "options": "|SPOOLES|PARDISO|SGI|TAUCS|PaStiX|ITERATIVE SCALING|ITERATIVE CHOLESKY"
+      },
+      {
+        "form": "Combo",
+        "name": "DIRECT",
+        "required": false,
+        "options": "|NO|YES"
+      },
+      {
+        "form": "Float",
+        "name": "DELTMX",
+        "required": false
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Minimum time increment"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Maximum time increment"
+      }
+    ]
+  },
+  "*MODEL CHANGE": {
+    "arguments": []
+  },
+  "*MPC": {
+    "arguments": [
+      {
+        "form": "Text",
+        "required": true,
+        "comment": "List of nodes: max. 16 per line."
+      },
+      {
+        "form": "Combo",
+        "required": false,
+        "comment": "Predefined",
+        "group_form": "OrH",
+        "options": "PLANE|STRAIGHT|BEAM"
+      },
+      {
+        "form": "Line",
+        "required": false,
+        "comment": "User",
+        "group_form": "OrH"
+      }
+    ]
+  },
+  "*NETWORK MPC": {
+    "arguments": [
+      {
+        "form": "Combo",
+        "name": "TYPE",
+        "required": false,
+        "options": "|QUADRATIC"
+      },
+      {
+        "form": "Int",
+        "required": true,
+        "newline": true,
+        "comment": "Number of terms in the constraint"
+      },
+      {
+        "form": "Text",
+        "required": true,
+        "newline": true,
+        "comment": "Node1, DOF1, Coef.1, Node2, DOF2, Coef.2, etc."
+      }
+    ]
+  },
+  "*NO ANALYSIS": {
+    "arguments": []
+  },
+  "*NODAL THICKNESS": {
+    "arguments": [
+      {
+        "form": "Float",
+        "required": true,
+        "comment": "Thickness 1"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Thickness 2"
+      },
+      {
+        "form": "Int",
+        "required": false,
+        "comment": "NODE or...",
+        "group_form": "OrH"
+      },
+      {
+        "required": false,
+        "use": "*NSET",
+        "comment": "...NSET",
+        "group_form": "OrH"
+      }
+    ]
+  },
+  "*NODE": {
+    "arguments": [
+      {
+        "form": "Line",
+        "name": "NSET",
+        "required": false
+      },
+      {
+        "form": "Int",
+        "required": false,
+        "comment": "Node number",
+        "group_form": "Table"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "X",
+        "group_form": "Table"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Y",
+        "group_form": "Table"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Z",
+        "group_form": "Table"
+      }
+    ]
+  },
+  "*NODE FILE": {
+    "arguments": [
+      {
+        "form": "Int",
+        "name": "FREQUENCYF",
+        "required": false
+      },
+      {
+        "form": "Combo",
+        "name": "GLOBAL",
+        "required": false,
+        "options": "|YES|NO"
+      },
+      {
+        "name": "NSET",
+        "required": false,
+        "use": "*NSET"
+      },
+      {
+        "form": "Combo",
+        "name": "OUTPUT",
+        "required": false,
+        "options": "|2D|3D"
+      },
+      {
+        "form": "Grid",
+        "name": "Node variables",
+        "required": false,
+        "newline": true,
+        "default": "CP,DEPF,DEPT,DTF,HCRI,KEQ,MACH,MAXU,MF,NT,PNT,POT,PRF,PS,PSF,PT,PTF,PU,RF,RFL,SEN,TS,TSF,TT,TTF,TURB,U,V,VF"
+      },
+      {
+        "form": "Int",
+        "name": "FREQUENCY",
+        "required": false,
+        "comment": "FREQUENCY or...",
+        "group_form": "OrH"
+      },
+      {
+        "required": false,
+        "use": "*TIME POINTS",
+        "comment": "...TIME POINTS",
+        "group_form": "OrH"
+      },
+      {
+        "form": "Bool",
+        "name": "OUTPUT ALL",
+        "required": false,
+        "group_form": "HBox"
+      },
+      {
+        "form": "Bool",
+        "name": "LAST ITERATIONS",
+        "required": false,
+        "group_form": "HBox"
+      },
+      {
+        "form": "Bool",
+        "name": "CONTACT ELEMENTS",
+        "required": false,
+        "group_form": "HBox"
+      }
+    ]
+  },
+  "*NODE OUTPUT": {
+    "arguments": [
+      {
+        "form": "Int",
+        "name": "FREQUENCYF",
+        "required": false
+      },
+      {
+        "form": "Combo",
+        "name": "GLOBAL",
+        "required": false,
+        "options": "|YES|NO"
+      },
+      {
+        "name": "NSET",
+        "required": false,
+        "use": "*NSET"
+      },
+      {
+        "form": "Combo",
+        "name": "OUTPUT",
+        "required": false,
+        "options": "|2D|3D"
+      },
+      {
+        "form": "Grid",
+        "name": "Node variables",
+        "required": false,
+        "newline": true,
+        "default": "CP,DEPF,DEPT,DTF,HCRI,KEQ,MACH,MAXU,MF,NT,PNT,POT,PRF,PS,PSF,PT,PTF,PU,RF,RFL,SEN,TS,TSF,TT,TTF,TURB,U,V,VF"
+      },
+      {
+        "form": "Int",
+        "name": "FREQUENCY",
+        "required": false,
+        "comment": "FREQUENCY or...",
+        "group_form": "OrH"
+      },
+      {
+        "required": false,
+        "use": "*TIME POINTS",
+        "comment": "...TIME POINTS",
+        "group_form": "OrH"
+      },
+      {
+        "form": "Bool",
+        "name": "OUTPUT ALL",
+        "required": false,
+        "group_form": "HBox"
+      },
+      {
+        "form": "Bool",
+        "name": "LAST ITERATIONS",
+        "required": false,
+        "group_form": "HBox"
+      },
+      {
+        "form": "Bool",
+        "name": "CONTACT ELEMENTS",
+        "required": false,
+        "group_form": "HBox"
+      }
+    ]
+  },
+  "*NODE PRINT": {
+    "arguments": [
+      {
+        "name": "NSET",
+        "required": true,
+        "use": "*NSET"
+      },
+      {
+        "form": "Int",
+        "name": "FREQUENCYF",
+        "required": false
+      },
+      {
+        "form": "Combo",
+        "name": "GLOBAL",
+        "required": false,
+        "options": "|YES|NO"
+      },
+      {
+        "form": "Combo",
+        "name": "TOTALS",
+        "required": false,
+        "options": "|NO|YES|ONLY"
+      },
+      {
+        "form": "Grid",
+        "name": "Node variables",
+        "required": false,
+        "newline": true,
+        "default": "U,NT,TSF,TTF,PN,PSF,PTF,MACH,CP,VF,DEPF,TURB,MF,RF,RFL"
+      },
+      {
+        "form": "Int",
+        "name": "FREQUENCY",
+        "required": false,
+        "comment": "FREQUENCY or...",
+        "group_form": "OrH"
+      },
+      {
+        "required": false,
+        "use": "*TIME POINTS",
+        "comment": "...TIME POINTS",
+        "group_form": "OrH"
+      }
+    ]
+  },
+  "*NORMAL": {
+    "arguments": [
+      {
+        "form": "Int",
+        "required": false,
+        "comment": "Element number",
+        "group_form": "HBox"
+      },
+      {
+        "form": "Int",
+        "required": false,
+        "comment": "Node number",
+        "group_form": "HBox"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "X",
+        "group_form": "HBox"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Y",
+        "group_form": "HBox"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Z",
+        "group_form": "HBox"
+      }
+    ]
+  },
+  "*NSET": {
+    "arguments": [
+      {
+        "form": "Line",
+        "name": "NSET",
+        "required": true
+      },
+      {
+        "form": "HGroup",
+        "name": "GENERATE",
+        "required": true,
+        "group_form": "Tabs2"
+      }
+    ]
+  },
+  "*OBJECTIVE": {
+    "arguments": [
+      {
+        "form": "Combo",
+        "name": "TARGET",
+        "required": false,
+        "options": "|MIN|MAX"
+      },
+      {
+        "required": false,
+        "use": "*DESIGN RESPONSE",
+        "newline": true,
+        "comment": "Name of a design response"
+      }
+    ]
+  },
+  "*ORIENTATION": {
+    "arguments": [
+      {
+        "form": "Line",
+        "name": "NAME",
+        "required": true
+      },
+      {
+        "form": "Combo",
+        "name": "SYSTEM",
+        "required": false,
+        "options": "|RECTANGULAR|CYLINDRICAL"
+      },
+      {
+        "form": "Combo",
+        "required": false,
+        "newline": true,
+        "comment": "Local axis of additional rotation",
+        "options": "|1|2|3"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Angle of rotation in degrees"
+      }
+    ]
+  },
+  "*OUTPUT": {
+    "arguments": [
+      {
+        "form": "Int",
+        "name": "FREQUENCY",
+        "required": false
+      },
+      {
+        "form": "Int",
+        "name": "FREQUENCYF",
+        "required": false
+      }
+    ]
+  },
+  "*PHYSICAL CONSTANTS": {
+    "arguments": [
+      {
+        "form": "Float",
+        "name": "ABSOLUTE ZERO",
+        "required": false
+      },
+      {
+        "form": "Float",
+        "name": "STEFAN BOLTZMANN",
+        "required": false
+      },
+      {
+        "form": "Float",
+        "name": "NEWTON GRAVITY",
+        "required": false
+      }
+    ]
+  },
+  "*PLASTIC": {
+    "arguments": [
+      {
+        "form": "Bool",
+        "name": "USER",
+        "required": true,
+        "group_form": "Tabs2"
+      }
+    ]
+  },
+  "*PRE-TENSION SECTION": {
+    "arguments": [
+      {
+        "form": "Int",
+        "name": "NODE",
+        "required": true
+      },
+      {
+        "name": "SURFACE",
+        "required": false,
+        "use": "*SURFACE",
+        "comment": "Surface or...",
+        "group_form": "OrV"
+      },
+      {
+        "form": "Int",
+        "name": "ELEMENT",
+        "required": false,
+        "comment": "...element",
+        "group_form": "OrV"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "group_form": "HBox"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "group_form": "HBox"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "group_form": "HBox"
+      }
+    ]
+  },
+  "*RADIATE": {
+    "arguments": [
+      {
+        "form": "Combo",
+        "name": "OP",
+        "required": false,
+        "options": "|MOD|NEW"
+      },
+      {
+        "name": "AMPLITUDE",
+        "required": false,
+        "use": "*AMPLITUDE"
+      },
+      {
+        "form": "Float",
+        "name": "TIME DELAY",
+        "required": false
+      },
+      {
+        "name": "RADIATION AMPLITUDE",
+        "required": false,
+        "use": "*AMPLITUDE"
+      },
+      {
+        "form": "Float",
+        "name": "RADIATION TIME DELAY",
+        "required": false
+      },
+      {
+        "form": "Int",
+        "name": "CAVITY",
+        "required": false
+      },
+      {
+        "form": "Bool",
+        "name": "ENVNODE",
+        "required": false
+      },
+      {
+        "form": "Int",
+        "required": false,
+        "comment": "ELEMENT or...",
+        "group_form": "OrH"
+      },
+      {
+        "required": false,
+        "use": "*ELSET",
+        "comment": "...ELSET",
+        "group_form": "OrH"
+      }
+    ]
+  },
+  "*REFINE MESH": {
+    "arguments": [
+      {
+        "form": "Float",
+        "name": "LIMIT",
+        "required": false
+      },
+      {
+        "name": "ELSET",
+        "required": false,
+        "use": "*ELSET"
+      },
+      {
+        "form": "Bool",
+        "name": "USER",
+        "required": false
+      },
+      {
+        "form": "Grid",
+        "required": false,
+        "newline": true,
+        "comment": "The label of the selected criterion",
+        "default": "U,V,S,E,ME,PEEQ,ENER,HFL,ERR"
+      }
+    ]
+  },
+  "*RESTART": {
+    "arguments": []
+  },
+  "*RETAINED NODAL DOFS": {
+    "arguments": [
+      {
+        "form": "Combo",
+        "name": "SORTED",
+        "required": false,
+        "options": "|NO"
+      },
+      {
+        "form": "Int",
+        "required": false,
+        "comment": "First DOF retained"
+      },
+      {
+        "form": "Int",
+        "required": false,
+        "comment": "Last DOF retained"
+      },
+      {
+        "form": "Int",
+        "required": false,
+        "comment": "NODE or...",
+        "group_form": "OrH"
+      },
+      {
+        "required": false,
+        "use": "*NSET",
+        "comment": "...NSET",
+        "group_form": "OrH"
+      }
+    ]
+  },
+  "*RIGID BODY": {
+    "arguments": [
+      {
+        "form": "Int",
+        "name": "REF NODE",
+        "required": false
+      },
+      {
+        "form": "Int",
+        "name": "ROT NODE",
+        "required": false
+      },
+      {
+        "name": "NSET",
+        "required": false,
+        "use": "*NSET",
+        "group_form": "OrV"
+      },
+      {
+        "name": "ELSET",
+        "required": false,
+        "use": "*ELSET",
+        "group_form": "OrV"
+      }
+    ]
+  },
+  "*ROBUST DESIGN": {
+    "arguments": [
+      {
+        "form": "Bool",
+        "name": "RANDOM FIELD ONLY",
+        "required": true
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "newline": true,
+        "comment": "Requested accuracy"
+      }
+    ]
+  },
+  "*SECTION PRINT": {
+    "arguments": [
+      {
+        "name": "SURFACE",
+        "required": true,
+        "use": "*SURFACE"
+      },
+      {
+        "form": "Line",
+        "name": "NAME",
+        "required": true
+      },
+      {
+        "form": "Grid",
+        "required": false,
+        "newline": true,
+        "comment": "Identifying keys for the variables to be printed,",
+        "default": "DRAG,FLUX,SOF,SOM,SOAREA"
+      },
+      {
+        "form": "Int",
+        "name": "FREQUENCY",
+        "required": false,
+        "group_form": "OrV"
+      },
+      {
+        "name": "TIME POINTS",
+        "required": false,
+        "use": "*TIME POINTS",
+        "group_form": "OrV"
+      }
+    ]
+  },
+  "*SELECT CYCLIC SYMMETRY MODES": {
+    "arguments": [
+      {
+        "form": "Int",
+        "name": "NMIN",
+        "required": false
+      },
+      {
+        "form": "Int",
+        "name": "NMAX",
+        "required": false
+      }
+    ]
+  },
+  "*SENSITIVITY": {
+    "arguments": [
+      {
+        "form": "Bool",
+        "name": "NLGEOM",
+        "required": false
+      },
+      {
+        "form": "Bool",
+        "name": "READ|WRITE",
+        "required": false
+      }
+    ]
+  },
+  "*SHELL SECTION": {
+    "arguments": [
+      {
+        "name": "ELSET",
+        "required": true,
+        "use": "*ELSET"
+      },
+      {
+        "form": "Bool",
+        "name": "ORIENTATION",
+        "required": false
+      },
+      {
+        "form": "Bool",
+        "name": "NODAL THICKNESS",
+        "required": false
+      },
+      {
+        "form": "Float",
+        "name": "OFFSET",
+        "required": false
+      }
+    ]
+  },
+  "*SOLID SECTION": {
+    "arguments": [
+      {
+        "name": "ELSET",
+        "required": true,
+        "use": "*ELSET"
+      },
+      {
+        "name": "MATERIAL",
+        "required": true,
+        "use": "*MATERIAL"
+      },
+      {
+        "name": "ORIENTATION",
+        "required": false,
+        "use": "*ORIENTATION"
+      },
+      {
+        "form": "Bool",
+        "name": "NODAL THICKNESS",
+        "required": false
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "newline": true,
+        "comment": "Thickness"
+      }
+    ]
+  },
+  "*SPECIFIC GAS CONSTANT": {
+    "arguments": [
+      {
+        "form": "Float",
+        "required": true,
+        "newline": true,
+        "comment": "Specific gas constant"
+      }
+    ]
+  },
+  "*SPECIFIC HEAT": {
+    "arguments": [
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Specific heat",
+        "group_form": "Table"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Temperature",
+        "group_form": "Table"
+      }
+    ]
+  },
+  "*SPRING": {
+    "arguments": [
+      {
+        "name": "ELSET",
+        "required": true,
+        "use": "*ELSET"
+      },
+      {
+        "name": "ORIENTATION",
+        "required": false,
+        "use": "*ORIENTATION"
+      },
+      {
+        "form": "Bool",
+        "name": "NONLINEAR",
+        "required": false
+      }
+    ]
+  },
+  "*STATIC": {
+    "arguments": [
+      {
+        "form": "Combo",
+        "name": "SOLVER",
+        "required": false,
+        "options": "|SPOOLES|PARDISO|SGI|TAUCS|PaStiX|ITERATIVE SCALING|ITERATIVE CHOLESKY"
+      },
+      {
+        "form": "Float",
+        "name": "TOTAL TIME AT START",
+        "required": false
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "newline": true,
+        "comment": "Initial time increment",
+        "default": "0.1"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Time period of the step",
+        "default": "1"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Minimum time increment",
+        "default": "1.e-5"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Maximum time increment",
+        "default": "1.e+30"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Initial time increment for CFD",
+        "default": "1.e-2"
+      },
+      {
+        "form": "Bool",
+        "name": "DIRECT",
+        "required": false,
+        "group_form": "HBox"
+      },
+      {
+        "form": "Bool",
+        "name": "EXPLICIT",
+        "required": false,
+        "group_form": "HBox"
+      },
+      {
+        "form": "Bool",
+        "name": "TIME RESET",
+        "required": false,
+        "group_form": "HBox"
+      }
+    ]
+  },
+  "*STEADY STATE DYNAMICS": {
+    "arguments": [
+      {
+        "form": "Combo",
+        "name": "SOLVER",
+        "required": false,
+        "options": "|SPOOLES|PARDISO|SGI|TAUCS|PaStiX"
+      }
+    ]
+  },
+  "*STEP": {
+    "arguments": [
+      {
+        "form": "Bool",
+        "name": "PERTURBATION",
+        "required": false
+      },
+      {
+        "form": "Bool",
+        "name": "NLGEOM",
+        "required": false
+      },
+      {
+        "form": "Bool",
+        "name": "THERMAL NETWORK",
+        "required": false
+      },
+      {
+        "form": "Int",
+        "name": "INC",
+        "required": false
+      },
+      {
+        "form": "Int",
+        "name": "INCF",
+        "required": false
+      },
+      {
+        "form": "Combo",
+        "name": "AMPLITUDE",
+        "required": false,
+        "options": "|RAMP|STEP"
+      },
+      {
+        "form": "Float",
+        "name": "SHOCK SMOOTHING",
+        "required": false
+      }
+    ]
+  },
+  "*SUBMODEL": {
+    "arguments": [
+      {
+        "form": "SelectFile",
+        "name": "INPUT",
+        "required": true,
+        "comment": "FRD file:"
+      },
+      {
+        "name": "GLOBAL ELSET",
+        "required": false,
+        "use": "*ELSET"
+      }
+    ]
+  },
+  "*SUBSTRUCTURE GENERATE": {
+    "arguments": [
+      {
+        "form": "Combo",
+        "name": "SOLVER",
+        "required": false,
+        "options": "|SPOOLES|PARDISO"
+      }
+    ]
+  },
+  "*SUBSTRUCTURE MATRIX OUTPUT": {
+    "arguments": [
+      {
+        "form": "SelectFile",
+        "name": "FILE NAME",
+        "required": true,
+        "comment": ".mtx file"
+      },
+      {
+        "form": "Combo",
+        "name": "STIFFNESS",
+        "required": false,
+        "options": "|YES"
+      },
+      {
+        "form": "Combo",
+        "name": "OUTPUT FILE",
+        "required": false,
+        "options": "|USER DEFINED"
+      }
+    ]
+  },
+  "*SURFACE": {
+    "arguments": [
+      {
+        "form": "Line",
+        "name": "NAME",
+        "required": true
+      }
+    ]
+  },
+  "*SURFACE BEHAVIOR": {
+    "arguments": []
+  },
+  "*SURFACE INTERACTION": {
+    "arguments": [
+      {
+        "form": "Line",
+        "name": "NAME",
+        "required": true
+      }
+    ]
+  },
+  "*TEMPERATURE": {
+    "arguments": [
+      {
+        "form": "Combo",
+        "name": "OP",
+        "required": false,
+        "options": "|MOD|NEW"
+      },
+      {
+        "name": "AMPLITUDE",
+        "required": false,
+        "use": "*AMPLITUDE"
+      },
+      {
+        "form": "Float",
+        "name": "TIME DELAY",
+        "required": false
+      },
+      {
+        "form": "VGroup",
+        "name": "SUBMODEL",
+        "required": false
+      }
+    ]
+  },
+  "*TIE": {
+    "arguments": [
+      {
+        "form": "Line",
+        "name": "NAME",
+        "required": true
+      },
+      {
+        "form": "Float",
+        "name": "POSITION TOLERANCE",
+        "required": false
+      },
+      {
+        "form": "Combo",
+        "name": "ADJUST",
+        "required": false,
+        "options": "|YES|NO"
+      },
+      {
+        "form": "Combo",
+        "required": false,
+        "options": "|CYCLIC SYMMETRY|MULTISTAGE|FLUID PERIODIC|FLUID CYCLIC"
+      },
+      {
+        "required": false,
+        "use": "*SURFACE",
+        "comment": "Slave surface",
+        "group_form": "HBox"
+      },
+      {
+        "required": false,
+        "use": "*SURFACE",
+        "comment": "Master surface",
+        "group_form": "HBox"
+      }
+    ]
+  },
+  "*TIME POINTS": {
+    "arguments": [
+      {
+        "form": "Line",
+        "name": "NAME",
+        "required": true
+      },
+      {
+        "form": "Combo",
+        "name": "TIME",
+        "required": false,
+        "options": "|TOTAL TIME"
+      },
+      {
+        "form": "HGroup",
+        "name": "GENERATE",
+        "required": true,
+        "group_form": "Tabs2"
+      }
+    ]
+  },
+  "*TRANSFORM": {
+    "arguments": [
+      {
+        "form": "Line",
+        "name": "NSET",
+        "required": true
+      },
+      {
+        "form": "Combo",
+        "name": "TYPE",
+        "required": false,
+        "options": "R|C"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Xa",
+        "group_form": "HBox"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Ya",
+        "group_form": "HBox"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Za",
+        "group_form": "HBox"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Xb",
+        "group_form": "HBox"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Yb",
+        "group_form": "HBox"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Zb",
+        "group_form": "HBox"
+      }
+    ]
+  },
+  "*UNCOUPLED TEMPERATURE-DISPLACEMENT": {
+    "arguments": [
+      {
+        "form": "Combo",
+        "name": "SOLVER",
+        "required": false,
+        "options": "|SPOOLES|PARDISO|SGI|TAUCS|PaStiX|ITERATIVE SCALING|ITERATIVE CHOLESKY"
+      },
+      {
+        "form": "Float",
+        "name": "ALPHA",
+        "required": false
+      },
+      {
+        "form": "Float",
+        "name": "DELTMX",
+        "required": false
+      },
+      {
+        "form": "Float",
+        "name": "TOTAL TIME AT START",
+        "required": false
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "newline": true,
+        "comment": "Initial time increment"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Total step time"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Minimum time increment allowed"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Maximum time increment allowed"
+      },
+      {
+        "form": "Bool",
+        "name": "STEADY STATE",
+        "required": false,
+        "group_form": "HBox"
+      },
+      {
+        "form": "Bool",
+        "name": "DIRECT",
+        "required": false,
+        "group_form": "HBox"
+      },
+      {
+        "form": "Bool",
+        "name": "EXPLICIT",
+        "required": false,
+        "group_form": "HBox"
+      },
+      {
+        "form": "Bool",
+        "name": "TIME RESET",
+        "required": false,
+        "group_form": "HBox"
+      }
+    ]
+  },
+  "*USER ELEMENT": {
+    "arguments": [
+      {
+        "form": "Repl",
+        "name": "TYPE",
+        "required": true,
+        "default": "U*"
+      },
+      {
+        "form": "Int",
+        "name": "INTEGRATION POINTS",
+        "required": true
+      },
+      {
+        "form": "Int",
+        "name": "MAXDOF",
+        "required": true
+      },
+      {
+        "form": "Int",
+        "name": "NODES",
+        "required": true
+      }
+    ]
+  },
+  "*USER MATERIAL": {
+    "arguments": [
+      {
+        "form": "Line",
+        "name": "NAME",
+        "required": false
+      },
+      {
+        "form": "Int",
+        "name": "CONSTANTS",
+        "required": true
+      },
+      {
+        "form": "Combo",
+        "name": "TYPE",
+        "required": false,
+        "options": "|MECHANICAL|THERMAL"
+      },
+      {
+        "form": "Text",
+        "required": false,
+        "newline": true,
+        "comment": "Material parameters (8 values per line)"
+      }
+    ]
+  },
+  "*USER SECTION": {
+    "arguments": [
+      {
+        "name": "ELSET",
+        "required": true,
+        "use": "*ELSET"
+      },
+      {
+        "name": "MATERIAL",
+        "required": true,
+        "use": "*MATERIAL"
+      },
+      {
+        "form": "Int",
+        "name": "CONSTANTS",
+        "required": true
+      },
+      {
+        "form": "Text",
+        "required": false,
+        "newline": true,
+        "comment": "Section parameters (8 values per line)"
+      }
+    ]
+  },
+  "*VALUES AT INFINITY": {
+    "arguments": [
+      {
+        "form": "Float",
+        "required": true,
+        "newline": true,
+        "comment": "Static temperature at infinity"
+      },
+      {
+        "form": "Float",
+        "required": true,
+        "comment": "Norm of the velocity vector at infinity"
+      },
+      {
+        "form": "Float",
+        "required": true,
+        "comment": "Static pressure at infinity"
+      },
+      {
+        "form": "Float",
+        "required": true,
+        "comment": "Density at infinity"
+      },
+      {
+        "form": "Float",
+        "required": true,
+        "comment": "Length of the computational domain"
+      }
+    ]
+  },
+  "*VIEWFACTOR": {
+    "arguments": []
+  },
+  "*VISCO": {
+    "arguments": [
+      {
+        "form": "Combo",
+        "name": "SOLVER",
+        "required": false,
+        "options": "|SPOOLES|PARDISO|SGI|TAUCS|PaStiX|ITERATIVE SCALING|ITERATIVE CHOLESKY"
+      },
+      {
+        "form": "Float",
+        "name": "TOTAL TIME AT START",
+        "required": false
+      },
+      {
+        "form": "Float",
+        "name": "CETOL",
+        "required": false
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "newline": true,
+        "comment": "Initial time increment",
+        "default": "0.1"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Time period of the step",
+        "default": "1"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Minimum time increment",
+        "default": "1.e-5"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Maximum time increment",
+        "default": "1.e+30"
+      },
+      {
+        "form": "Float",
+        "required": false,
+        "comment": "Initial time increment for CFD",
+        "default": "1.e-2"
+      },
+      {
+        "form": "Bool",
+        "name": "DIRECT",
+        "required": false,
+        "group_form": "HBox"
+      },
+      {
+        "form": "Bool",
+        "name": "EXPLICIT",
+        "required": false,
+        "group_form": "HBox"
+      },
+      {
+        "form": "Bool",
+        "name": "TIME RESET",
+        "required": false,
+        "group_form": "HBox"
+      }
+    ]
+  }
+}

@@ -1,0 +1,175 @@
+{
+  "Collections": {
+    "Attributes": {
+      "keywords": ["*DESIGN VARIABLES", "*HEADING", "*SUBMODEL", "*VALUES AT INFINITY"]
+    },
+    "Mesh": {
+      "keywords": ["*NODE", "*NSET", "*ELEMENT", "*ELSET", "*SURFACE", "*GAP"],
+      "nested": {
+        "*ELEMENT": ["*USER ELEMENT"]
+      }
+    },
+    "Properties": {
+      "keywords": [
+        "*DASHPOT",
+        "*NODAL THICKNESS",
+        "*NORMAL",
+        "*MASS",
+        "*MATERIAL",
+        "*PHYSICAL CONSTANTS",
+        "*SPRING"
+      ],
+      "nested": {
+        "*MATERIAL": [
+          "*CONDUCTIVITY",
+          "*CREEP",
+          "*CYCLIC HARDENING",
+          "*DAMPING",
+          "*DEFORMATION PLASTICITY",
+          "*DENSITY",
+          "*ELASTIC",
+          "*ELECTRICAL CONDUCTIVITY",
+          "*EXPANSION",
+          "*FLUID CONSTANTS",
+          "*HYPERELASTIC",
+          "*HYPERFOAM",
+          "*MAGNETIC PERMEABILITY",
+          "*PLASTIC",
+          "*SPECIFIC GAS CONSTANT",
+          "*SPECIFIC HEAT",
+          "*USER MATERIAL"
+        ],
+        "*USER MATERIAL": ["*DEPVAR"]
+      },
+      "Section": {
+        "keywords": [
+          "*BEAM SECTION",
+          "*FLUID SECTION",
+          "*MEMBRANE SECTION",
+          "*PRE-TENSION SECTION",
+          "*SHELL SECTION",
+          "*SOLID SECTION",
+          "*USER SECTION"
+        ]
+      }
+    },
+    "Loads & BC": {
+      "keywords": [
+        "*AMPLITUDE",
+        "*BOUNDARY",
+        "*DISTRIBUTION",
+        "*INCLUDE",
+        "*INITIAL CONDITIONS",
+        "*ORIENTATION",
+        "*RESTART",
+        "*TIME POINTS",
+        "*TRANSFORM"
+      ]
+    },
+    "Interactions": {
+      "keywords": ["*CLEARANCE", "*CONTACT PAIR", "*SURFACE INTERACTION"],
+      "nested": {
+        "*SURFACE INTERACTION": ["*SURFACE BEHAVIOR"],
+        "*SURFACE BEHAVIOR": ["*CONTACT DAMPING", "*FRICTION", "*GAP CONDUCTANCE", "*GAP HEAT GENERATION"]
+      }
+    },
+    "Constraints": {
+      "keywords": [
+        "*COUPLING",
+        "*CYCLIC SYMMETRY MODEL",
+        "*DISTRIBUTING COUPLING",
+        "*EQUATION",
+        "*MPC",
+        "*NETWORK MPC",
+        "*RIGID BODY",
+        "*TIE"
+      ],
+      "nested": {
+        "*COUPLING": ["*DISTRIBUTING", "*KINEMATIC"]
+      }
+    },
+    "Step": {
+      "keywords": ["*STEP", "*CONTROLS", "*EQUATION", "*INCLUDE", "*REFINE MESH", "*RESTART", "*END STEP"],
+      "Analysis type": {
+        "keywords": [
+          "*BUCKLE",
+          "*CFD",
+          "*COMPLEX FREQUENCY",
+          "*COUPLED TEMPERATURE-DISPLACEMENT",
+          "*CRACK PROPAGATION",
+          "*DYNAMIC",
+          "*ELECTROMAGNETICS",
+          "*FEASIBLE DIRECTION",
+          "*FREQUENCY",
+          "*GREEN",
+          "*HEAT TRANSFER",
+          "*MODAL DYNAMIC",
+          "*NO ANALYSIS",
+          "*ROBUST DESIGN",
+          "*SENSITIVITY",
+          "*STATIC",
+          "*STEADY STATE DYNAMICS",
+          "*SUBSTRUCTURE GENERATE",
+          "*UNCOUPLED TEMPERATURE-DISPLACEMENT",
+          "*VISCO"
+        ],
+        "nested": {
+          "*CRACK PROPAGATION": ["*HCF"],
+          "*FEASIBLE DIRECTION": ["*CONSTRAINT", "*GEOMETRIC CONSTRAINT", "*OBJECTIVE"],
+          "*FREQUENCY": ["*SELECT CYCLIC SYMMETRY MODES"],
+          "*GREEN": ["*SELECT CYCLIC SYMMETRY MODES"],
+          "*HEAT TRANSFER": ["*VIEWFACTOR"],
+          "*MODAL DYNAMIC": ["*BASE MOTION", "*MODAL DAMPING"],
+          "*ROBUST DESIGN": ["*CORRELATION LENGTH", "*GEOMETRIC TOLERANCES"],
+          "*SENSITIVITY": ["*DESIGN RESPONSE", "*FILTER"],
+          "*STATIC": ["*TEMPERATURE"],
+          "*STEADY STATE DYNAMICS": ["*BASE MOTION", "*MODAL DAMPING"],
+          "*SUBSTRUCTURE GENERATE": ["*RETAINED NODAL DOFS", "*SUBSTRUCTURE MATRIX OUTPUT"]
+        }
+      },
+      "Field Output": {
+        "keywords": [
+          "*CONTACT FILE",
+          "*CONTACT OUTPUT",
+          "*CONTACT PRINT",
+          "*EL FILE",
+          "*ELEMENT OUTPUT",
+          "*EL PRINT",
+          "*NODE FILE",
+          "*NODE OUTPUT",
+          "*NODE PRINT",
+          "*OUTPUT",
+          "*SECTION PRINT"
+        ]
+      },
+      "Load & BC": {
+        "keywords": [
+          "*BOUNDARY",
+          "*CLOAD",
+          "*CFLUX",
+          "*DLOAD",
+          "*DFLUX",
+          "*DSLOAD",
+          "*FILM",
+          "*MASS FLOW",
+          "*RADIATE"
+        ]
+      },
+      "Change": {
+        "keywords": [
+          "*CHANGE FRICTION",
+          "*CHANGE MATERIAL",
+          "*CHANGE SURFACE BEHAVIOR",
+          "*CHANGE SOLID SECTION",
+          "*INITIAL STRAIN INCREASE",
+          "*MODEL CHANGE"
+        ],
+        "nested": {
+          "*CHANGE FRICTION": ["*FRICTION"],
+          "*CHANGE MATERIAL": ["*CHANGE PLASTIC"],
+          "*CHANGE SURFACE BEHAVIOR": ["*SURFACE BEHAVIOR"]
+        }
+      }
+    }
+  }
+}
