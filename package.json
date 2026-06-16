@@ -7,7 +7,7 @@
   "scripts": {
     "install-reqs": "pnpm install && python -m pip install -e .",
     "dev:api": "python src/backends/main.py",
-    "dev:frontend": "vite",
+    "dev:frontend": "vite --config config/vite.config.js",
     "dev:tauri": "tauri dev",
     "dev:all": "concurrently \"python src/backends/main.py\" \"pnpm dev:frontend\"",
     "release:windows": "pnpm build:sidecar-winos && pnpm tauri build",
@@ -17,18 +17,18 @@
     "build:sidecar-macos-all": "pnpm build:sidecar-macos-x86_64 && pnpm build:sidecar-macos-aarch64",
     "build:sidecar-linux": "pyinstaller -c -F --clean --name main-x86_64-unknown-linux-gnu --distpath src-tauri/bin/api src/backends/main.py",
     "build:icons": "pnpm tauri icon public/app-icon.png",
-    "build": "vite build",
-    "docker:build": "pnpm build && docker compose build",
-    "docker:up": "pnpm build && docker compose up -d --build",
-    "docker:down": "docker compose down",
-    "preview": "vite preview",
+    "build": "vite build --config config/vite.config.js",
+    "docker:build": "pnpm build && docker compose -f docker/compose.yml build",
+    "docker:up": "pnpm build && docker compose -f docker/compose.yml up -d --build",
+    "docker:down": "docker compose -f docker/compose.yml down",
+    "preview": "vite preview --config config/vite.config.js",
     "tauri": "tauri",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "test": "vitest run --config config/vitest.config.ts",
+    "test:watch": "vitest --config config/vitest.config.ts",
     "check:benchmarks": "python scripts/check_benchmark_contract.py",
     "build:learning-path": "python scripts/build_benchmark_learning_path.py",
-    "lint": "biome check app/",
-    "format": "biome check --write app/",
+    "lint": "biome check --config-path config/biome.json app/",
+    "format": "biome check --config-path config/biome.json --write app/",
     "prepare": "husky"
   },
   "dependencies": {
@@ -44,10 +44,10 @@
   },
   "lint-staged": {
     "app/**/*.{ts,vue,js}": [
-      "biome check --write --no-errors-on-unmatched"
+      "biome check --config-path config/biome.json --write --no-errors-on-unmatched"
     ],
-    "*.{css,json,md}": [
-      "biome check --write --no-errors-on-unmatched"
+    "./*.{css,json,md}": [
+      "biome check --config-path config/biome.json --write --no-errors-on-unmatched"
     ]
   },
   "devDependencies": {
