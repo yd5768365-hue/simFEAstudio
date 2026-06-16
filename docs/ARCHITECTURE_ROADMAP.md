@@ -201,7 +201,7 @@ app/
 - `src/backends/main.py` 已经偏大，应该先拆配置、归档、学习导出。
 - `App.vue` 已经承担连接、运行、日志、可视化、导出多个职责，应该拆 composable 和组件。
 - API 返回结构应该集中建模，避免前后端各自猜字段。
-- `.simfea/config.json` 的学习导出配置需要和 `simfea.config.example.json` 保持同步。
+- `.simfea/config.json` 的学习导出配置需要和 `config/simfea.config.example.json` 保持同步。
 
 ### 可以稍后升级
 

@@ -8,12 +8,12 @@
     "isolatedModules": true,
     "jsx": "preserve",
     "allowJs": true,
-    "baseUrl": ".",
+    "baseUrl": "..",
     "paths": {
-      "@/*": ["./app/*"]
+      "@/*": ["app/*"]
     },
     "skipLibCheck": true
   },
-  "include": ["app/**/*.ts", "app/**/*.vue"],
-  "exclude": ["node_modules", "dist", "src-tauri"]
+  "include": ["../app/**/*.ts", "../app/**/*.vue"],
+  "exclude": ["../node_modules", "../dist", "../src-tauri"]
 }
