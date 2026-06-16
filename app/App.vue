@@ -6,6 +6,7 @@ import AiChatView from '@/components/AiChatView.vue'
 import BenchmarkLab from '@/components/BenchmarkLab.vue'
 import ChatTaskInput from '@/components/ChatTaskInput.vue'
 import ConnectionStatus from '@/components/ConnectionStatus.vue'
+import DashboardView from '@/components/DashboardView.vue'
 import ExperimentLab from '@/components/ExperimentLab.vue'
 import LearningLibrary from '@/components/LearningLibrary.vue'
 import MethodLabView from '@/components/MethodLabView.vue'
@@ -1008,6 +1009,7 @@ onUnmounted(() => {
 })
 
 type AppView =
+  | 'dashboard'
   | 'composer'
   | 'run-detail'
   | 'learning-library'
@@ -1018,7 +1020,7 @@ type AppView =
   | 'toolchain-manager'
   | 'benchmark-lab'
   | 'solver-dev'
-const currentView = ref<AppView>((settings.lastView.value as AppView) || 'composer')
+const currentView = ref<AppView>((settings.lastView.value as AppView) || 'dashboard')
 watch(currentView, (v) => {
   settings.lastView.value = v
 })
@@ -1045,56 +1047,20 @@ function backToComposer() {
       <button
         type="button"
         class="nav-item"
+        :class="{ active: currentView === 'dashboard' }"
+        @click="navigateTo('dashboard')"
+      >
+        <span class="nav-icon" aria-hidden="true">▣</span>
+        <span class="nav-label">Dashboard</span>
+      </button>
+      <button
+        type="button"
+        class="nav-item"
         :class="{ active: currentView === 'composer' }"
         @click="navigateTo('composer')"
       >
-        <span class="nav-icon" aria-hidden="true">⚙</span>
-        <span class="nav-label">作业</span>
-      </button>
-      <button
-        type="button"
-        class="nav-item"
-        :class="{ active: currentView === 'learning-library' }"
-        @click="navigateTo('learning-library')"
-      >
-        <span class="nav-icon" aria-hidden="true">📚</span>
-        <span class="nav-label">学习</span>
-      </button>
-      <button
-        type="button"
-        class="nav-item"
-        :class="{ active: currentView === 'method-lab' }"
-        @click="navigateTo('method-lab')"
-      >
-        <span class="nav-icon" aria-hidden="true">M</span>
-        <span class="nav-label">方法</span>
-      </button>
-      <button
-        type="button"
-        class="nav-item"
-        :class="{ active: currentView === 'ai-chat' }"
-        @click="navigateTo('ai-chat')"
-      >
-        <span class="nav-icon" aria-hidden="true">AI</span>
-        <span class="nav-label">问答</span>
-      </button>
-      <button
-        type="button"
-        class="nav-item"
-        :class="{ active: currentView === 'experiment' }"
-        @click="navigateTo('experiment')"
-      >
-        <span class="nav-icon" aria-hidden="true">⟨⟩</span>
-        <span class="nav-label">实验</span>
-      </button>
-      <button
-        type="button"
-        class="nav-item"
-        :class="{ active: currentView === 'research' }"
-        @click="navigateTo('research')"
-      >
-        <span class="nav-icon" aria-hidden="true">R</span>
-        <span class="nav-label">研究</span>
+        <span class="nav-icon" aria-hidden="true">▶</span>
+        <span class="nav-label">Run</span>
       </button>
       <button
         type="button"
@@ -1103,16 +1069,43 @@ function backToComposer() {
         @click="navigateTo('benchmark-lab')"
       >
         <span class="nav-icon" aria-hidden="true">⊞</span>
-        <span class="nav-label">基准</span>
+        <span class="nav-label">Benchmarks</span>
       </button>
       <button
         type="button"
         class="nav-item"
-        :class="{ active: currentView === 'solver-dev' }"
-        @click="navigateTo('solver-dev')"
+        :class="{ active: currentView === 'learning-library' }"
+        @click="navigateTo('learning-library')"
       >
-        <span class="nav-icon" aria-hidden="true">∫</span>
-        <span class="nav-label">求解器</span>
+        <span class="nav-icon" aria-hidden="true">📁</span>
+        <span class="nav-label">Results</span>
+      </button>
+      <button
+        type="button"
+        class="nav-item"
+        :class="{ active: currentView === 'run-detail' }"
+        @click="navigateTo('run-detail')"
+      >
+        <span class="nav-icon" aria-hidden="true">◈</span>
+        <span class="nav-label">Visualization</span>
+      </button>
+      <button
+        type="button"
+        class="nav-item"
+        :class="{ active: currentView === 'method-lab' }"
+        @click="navigateTo('method-lab')"
+      >
+        <span class="nav-icon" aria-hidden="true">M</span>
+        <span class="nav-label">Learning</span>
+      </button>
+      <button
+        type="button"
+        class="nav-item"
+        :class="{ active: currentView === 'ai-chat' }"
+        @click="navigateTo('ai-chat')"
+      >
+        <span class="nav-icon" aria-hidden="true">AI</span>
+        <span class="nav-label">Reports</span>
       </button>
       <button
         type="button"
@@ -1120,13 +1113,32 @@ function backToComposer() {
         :class="{ active: currentView === 'toolchain-manager' }"
         @click="navigateTo('toolchain-manager')"
       >
+        <span class="nav-icon" aria-hidden="true">⚙</span>
+        <span class="nav-label">Tools</span>
+      </button>
+      <button
+        type="button"
+        class="nav-item"
+        :class="{ active: currentView === 'solver-dev' }"
+        @click="navigateTo('solver-dev')"
+      >
         <span class="nav-icon" aria-hidden="true">⚡</span>
-        <span class="nav-label">工具</span>
+        <span class="nav-label">Settings</span>
       </button>
     </nav>
 
     <KeepAlive>
-      <div v-if="currentView === 'composer'" class="view-container workbench-view">
+      <DashboardView
+        v-if="currentView === 'dashboard'"
+        :api="api"
+        :api-base-url="apiBaseUrl"
+        :runs="archivedRuns"
+        :selected-run="selectedRun"
+        @select-run="openRunDetail"
+        @navigate="navigateTo"
+      />
+
+      <div v-else-if="currentView === 'composer'" class="view-container workbench-view">
       <header class="workbench-topbar">
         <div class="workbench-titlebar">
           <div class="app-mark" aria-hidden="true">SF</div>
