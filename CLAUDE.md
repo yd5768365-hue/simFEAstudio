@@ -141,7 +141,7 @@ When adding or changing an endpoint, update the Zod schema, the contract definit
 
 ### Frontend import conventions
 
-- `@/` absolute imports (maps to `app/` via `tsconfig.json` paths + `vite.config.js` alias)
+- `@/` absolute imports (maps to `app/` via `tsconfig.json` paths + `config/vite.config.js` alias)
 - Barrel exports at `app/api/index.ts` and `app/composables/index.ts`
 - Type-only imports use `import type { X }` from `@/types` — `app/types.ts` re-exports all public types from `api/contracts.ts` so components don't need to know the source module
 

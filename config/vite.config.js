@@ -5,11 +5,11 @@ import { fileURLToPath, URL } from 'node:url';
 export default defineConfig({
   plugins: [vue()],
   clearScreen: false,
-  root: './app',
-  publicDir: '../public',
+  root: fileURLToPath(new URL('../app', import.meta.url)),
+  publicDir: fileURLToPath(new URL('../public', import.meta.url)),
   resolve: {
     alias: {
-      '@': fileURLToPath(new URL('./app', import.meta.url)),
+      '@': fileURLToPath(new URL('../app', import.meta.url)),
     },
   },
   server: {

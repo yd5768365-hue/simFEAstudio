@@ -1,7 +1,7 @@
 services:
   simfea:
     build:
-      context: .
+      context: ..
       dockerfile: docker/Dockerfile
     image: simfea/studio:latest
     container_name: simfea-studio
