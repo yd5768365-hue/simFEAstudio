@@ -1,7 +1,7 @@
 <div align="center">
   <h1>SimFEA Studio</h1>
-  <p><strong>仿真学习桌面工作台</strong></p>
-  <p>为开源求解器、远程算力和学习记录提供统一的图形化执行环境。</p>
+  <p><strong>面向开源FEA学习者的仿真工作台</strong></p>
+  <p>把每一次亲手跑通的仿真，变成可回放、可对比、可积累的学习证据。</p>
 
   ![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688?logo=fastapi)
   ![Vue.js](https://img.shields.io/badge/Frontend-Vue_3-4FC08D?logo=vuedotjs)
@@ -15,250 +15,114 @@
 ## 界面预览
 
 <div align="center">
-  <img src="docs/assets/screenshots/项目桌面版本主界面.png" alt="SimFEA Studio 桌面主界面" width="960">
+  <img src="docs/screenshot-main.png" alt="SimFEA Studio 桌面主界面" width="960">
   <p><em>桌面主界面：作业配置、运行状态、实时日志和证据入口集中在同一工作台。</em></p>
 </div>
 
 | 学习库 | 工具链管理 |
 | --- | --- |
-| <img src="docs/assets/screenshots/项目桌面版本知识库界面.png" alt="SimFEA Studio 学习库界面" width="460"> | <img src="docs/assets/screenshots/项目工具配置区域.png" alt="SimFEA Studio 工具链管理界面" width="460"> |
+| <img src="docs/screenshot-learning.png" alt="SimFEA Studio 学习库界面" width="460"> | <img src="docs/screenshot-toolchain.png" alt="SimFEA Studio 工具链管理界面" width="460"> |
 | 运行归档、学习笔记、结果摘要和导出入口。 | FreeCAD、PrePoMax、CalculiX 等外部工具的发现、配置和验证入口。 |
 
 ---
 
-## 项目定位
+## 这是什么
 
-SimFEA Studio 不是新的仿真引擎，不是商业 CAE 的竞品，也不是把物理问题黑盒化的“一键仿真”工具。
+SimFEA Studio 是一个运行在本地的仿真学习工作台。
 
-它是一个面向机械仿真学习与工程复盘的个人工作台：把已有命令行求解器、远程算力、本地算力、运行日志、结果文件、VTK 可视化和学习笔记收进同一个可回放的物证仓库。
+它不造求解器，而是把 CalculiX、FreeCAD、PrePoMax、OpenFOAM 等开源求解器串联起来，统一管理执行环境、运行日志、结果文件和学习笔记——让每一次仿真都产生可追溯的学习物证，而不是跑完就忘的终端输出。
 
-> 不造求解器，只管理求解器、算力、运行环境和学习记录。
-
-当前版本已支持 `pip install` + 浏览器直接启动（无需 Rust/Tauri），内置 demo 数据开箱可见。本地 CalculiX 悬臂梁算例可以端到端运行，归档 `.frd/.dat/.sta`，转换 FRD 到 VTK，并生成位移、应力摘要。
-
-## 当前状态（2026-06-15）
-
-- **pip 安装模式**：`pip install -e . && simfea-studio` 一键启动，浏览器自动打开，内置 demo 数据（悬臂梁运行记录）让新用户立刻看到效果。
-- **FastAPI 独立化**：`python main.py` 不再依赖 Tauri sidecar，检测到终端环境时直接启动 uvicorn。
-- **后端路由拆分完成**：主路由拆分为独立 routers（runs、benchmarks、experiments、compute_nodes 等），执行逻辑抽取为 `execution` 模块，`main.py` 仅剩 App 工厂和生命周期管理。
-- **Typed API 客户端收口**：前端 experiment 接口统一走 `simfeaClient`，支持 `path`-style 参数编码（`/` 不再被误编码为 `%2F`），新增 `client.test.ts` + `simfeaClient.test.ts` 回归测试。
-- **Benchmark Lab（基准实验室）**：13 个基准案例（杆/梁/板/壳/桁架/扭转/热应力/压力容器），含解析解和 CalculiX/ANSYS/PINN 对比数据，支持多方法对比表。
-- **Method Lab（方法实验室）**：From 1 to 0 教学框架，连接真实基准案例数据，CAE 入口阶梯、证据矩阵、AI 助手协议、案例路线图。
-- **研究笔记**：Markdown 编辑/预览，支持新建、编辑和 KeepAlive 刷新。
-- **学习库**：运行归档按状态检索，支持详情、导出 Markdown / JSON，demo 数据降级（无用户数据时自动展示）。
-- **工具链管理**：FreeCAD、PrePoMax、CalculiX 路径发现、测试运行和安装引导。
-- **桌面版本（可选）**：Tauri 桌面壳作为可选路径，供需要原生窗口的场景使用。
-
-## 模板来源
-
-本项目最初基于 [AlanSynn/vue-tauri-fastapi-sidecar-template](https://github.com/AlanSynn/vue-tauri-fastapi-sidecar-template) 搭建 `Tauri + Vue + FastAPI sidecar` 技术骨架。
-
-当前仓库已经改造为 SimFEA Studio 的独立项目：原模板主要提供桌面壳、前端和 Python sidecar 的启动链路；本地/远程执行、Slurm 闭环、求解器声明式配置、FRD 到 VTK、物证归档和学习记录沉淀是围绕机械仿真学习目标扩展出来的功能。
-
-## 当前架构
-
-```text
-                    ┌─ 浏览器 ──┐     ┌─ Tauri 桌面壳（可选）──┐
-                    │  pip 安装路径 │     │  pnpm dev:tauri        │
-                    └──────┬───────┘     └──────────┬─────────────┘
-                           └──────────┬─────────────┘
-                                      │
-                        FastAPI (独立 uvicorn 或 sidecar)
-                                      │
-              ┌───────────────────────┼───────────────────────┐
-              │                       │                       │
-         Vue SPA 静态文件       /v1/* REST API          SSE 事件流
-         (dist/ → index.html)   (runs/solvers/...)     (实时日志推送)
-                                      │
-              ┌───────────────────────┼───────────────────────┐
-              │                       │                       │
-         LocalRunner            SSHRunner              SlurmRunner
-         SolverRunner           WorkflowRunner
-              │
-    CalculiX / FreeCAD / PrePoMax / OpenFOAM / Elmer
-              │
-    .simfea/runs/<run_id> 物证仓库
+```
+pip install -e . && simfea-studio
 ```
 
-SimFEA Studio 的目标不是“替你理解物理”，而是把每一次亲手拆解过的物理概念留下证据：
+启动后浏览器自动打开，内置悬臂梁 demo 数据，无需配置求解器即可看到完整界面。
 
-- 输入：算例脚本、求解器参数、输入文件、工作目录。
-- 过程：stdout/stderr 实时日志、调度器状态、JobID、SSE 事件流。
-- 结果：求解器原始产物、`result_summary.json`、`solver_result.vtk`。
-- 复盘：结构化的 `note.md`（引导式问答）、`learning_report.md`、可导出的学习记录。
+---
 
-## 核心特性
+## 适合谁用
 
-### 桌面外壳，而非求解器
+- **正在学有限元的学生**：想用开源工具（CalculiX）做真实仿真，但环境配置、日志管理、结果归档全靠手动
+- **做 AI+FEA 研究的开发者**：需要批量跑仿真、积累对比数据、记录实验过程，不想每次都重新整理文件
+- **想系统记录 FEA 学习过程的人**：不只是跑通算例，而是能回答"当时为什么这么设置、结果和解析解差了多少、下次该怎么改"
 
-SimFEA Studio 本身不求解任何物理方程。它的职责是在图形界面中管理那些真正会求解的工具。
+---
 
-| 繁琐的事 | SimFEA Studio 替你管理 |
-| --- | --- |
-| SSH 连接参数、密钥、主机别名 | 统一节点配置，一键探测 |
-| 命令在本地还是远程执行 | Runner 抽象，前端无感切换 |
-| 手动复制粘贴运行日志 | SSE 流式回传，界面实时显示 |
-| 运行记录散落在各处终端 | 每一次运行都归档为学习物证 |
-| 求解器输出格式不统一 | artifact glob 收集 + 后处理摘要 |
-| 每次跑完不知道记什么 | 引导式问题列表，自动生成结构化笔记 |
+## 三个核心功能
 
-### 三层学习沉淀
+### 1. 物证归档：每次仿真都留下完整记录
 
-SimFEA Studio 的学习系统按照"日志 → 笔记 → 报告"的顺序逐层沉淀：
+每次运行自动归档到 `.simfea/runs/<run_id>/`：
 
-1. **日志流式回传**：运行期间 stdout/stderr 实时 SSE 推送，记录完整的求解过程。
-2. **结构化引导笔记**：运行结束后，前端根据求解器类型和运行状态动态生成引导问题（目的、预期对比、疑问、下次改进），用户按问题填写，不再面对空白文本框无从下手。
-3. **学习报告自动生成**：笔记保存后，后台将日志摘要、结果指标、用户回答合成为 `learning_report.md`。
-
-三层之间不是并列关系，而是时序依赖：日志跑完才有结果，结果出来才能写笔记，笔记写完才生成报告。
-
-### 声明式求解器接入
-
-求解器定义采用 JSON 声明式配置，借鉴 OpenCAEHub `PluginConfig.xml` 的工程化思路：
-
-- `pre_commands`：求解前命令链，例如环境加载或文件准备。
-- `command_template`：求解器命令模板。
-- `post_commands`：求解后命令链，例如指标提取。
-- `artifact_patterns`：结果文件通配符收集，例如 `*.frd`, `*.dat`, `*.sta`。
-- `input_files`：自动写入算例输入文件。
-
-### 统一执行通道
-
-| Runner | 适用场景 | 实现 |
-| --- | --- | --- |
-| LocalRunner | 本地 Windows / Linux | `subprocess.run`（线程池，避免 Windows 孙进程死锁） |
-| SSHRunner | SSH 远程节点 | `ssh` + `scp` 文件操作 |
-| SlurmRunner | HPC 集群 | `sbatch` 提交 + `squeue` 轮询 |
-| SolverRunner | 求解器编排 | 写输入、跑 solver、收集 artifacts、触发后处理 |
-| WorkflowRunner | 多步求解器链 | 链式执行多步 solver，同一工作目录，统一归档 |
-
-### 结果可视化
-
-- VTK.js 结果视图支持 `.vtk` 和 `.vtu`。
-- VTK 模块按需加载，避免拖慢主界面首屏。
-- CalculiX FRD 输出可转换为 ASCII VTK unstructured grid。
-- 结果摘要会提取 `max_displacement_mm` 和 `max_von_mises_mpa` 等关键指标。
-
-### SSE 实时日志流
-
-- 求解器 stdout/stderr **逐行实时推送**：后端 Popen + 文件轮询，通过 `asyncio.run_coroutine_threadsafe` 将每一行作为 SSE 事件推送到前端，不再等求解器跑完才批量吐出日志。
-- Sidecar 终端同步显示 `[solver]` 前缀的实时输出。
-- 后端事件包含单调递增 `seq`，支持断线重连 `?from_seq=N` 回放。
-
-### 作业编写器
-
-- **模式切换**：单求解器/启动链、本地/远程两种维度独立切换，选中项实色填充，未选中描边。
-- **动态字段显隐**：选"本地"时计算节点下拉隐藏，选"远程"时才显示 SSH/HPC 节点；启动链模式下显示多步骤配置，工作器下拉隐藏。
-- **文件预检提示**：文件上传后自动匹配求解器期望格式，绿色提示"已检测到 X，可直接提交"或警告"缺少需要文件"。
-
-### 工具链管理
-
-工具链页把“装没装、在哪里、能不能跑”从配置文件里拉到界面上：
-
-- 商业软件只做环境探测和路径记录，不进入安装包管理。
-- FreeCAD / PrePoMax 提供路径选择、自动搜索和测试运行。
-- CalculiX 支持已有安装接入，也支持后续接入独立 Solver Pack。
-- Solver Pack 安装流程通过后台任务执行，前端用 SSE 展示下载、解压、扫描和校验进度。
-
-## 求解器支持
-
-| 求解器 | 状态 | 说明 |
-| --- | --- | --- |
-| **CalculiX** | 已端到端验证 / Solver Pack 接入中 | 本地悬臂梁算例，FRD → VTK，指标摘要，物证归档；工具链页支持路径发现、测试运行和安装任务。 |
-| FreeCAD | 适配器骨架就绪 | 通过 `FreeCADCmd` 执行无头 Python 宏，默认 smoke case 生成 `.FCStd/.step`。 |
-| PrePoMax | regeneration 已验证 | `prepomax-regenerate`：STEP 导入 → Gmsh 网格 → CalculiX 求解 → 结果回读，VTK 热力图可用。 |
-| **freecad-prepomax** (workflow) | 已端到端验证 | FreeCAD 几何 → PrePoMax 再生求解，两步链式执行，统一归档 20 个产物。 |
-| OpenFOAM | 适配器骨架就绪 | 需要接入真实 case 文件。 |
-| Elmer | 适配器骨架就绪 | 需要接入真实 case 文件。 |
-
-### 实测结果（2026-05-19）
-
-| Solver/Workflow | Status | Wall | VTK | Artifacts | Metrics |
-| --- | --- | --- | --- | --- | --- |
-| calculix | finished | 0.1s | yes | 5 | D=8.93mm S=37.50MPa |
-| freecad | finished | 0.8s | no | 5 | — |
-| prepomax-regenerate | finished | 10.0s | yes | 16 | D=0.061mm S=0.0001MPa |
-| freecad-prepomax (workflow) | finished | 10.4s | yes | 20 | D=0.061mm S=0.0001MPa |
-
-> PrePoMax.com 在 Windows 上始终返回 exit code `0xFFFFFFFF`（-1），成功/失败无法通过退出码区分。SimFEA Studio 通过**实质性产物检查**（排除 `result.txt` 和 `result_summary.json` 两个框架自产文件）正确判定状态。
-
-## 物证仓库
-
-```text
+```
 .simfea/runs/<run_id>/
-├── meta.json                  # 运行元数据（求解器、节点、状态、时间）
-├── run.command                # 实际执行的命令
-├── stdout.log                 # 标准输出日志
-├── stderr.log                 # 标准错误日志
-├── events.jsonl               # SSE 事件流回放
-├── note.md                    # 结构化引导笔记（Q&A 格式）
-├── learning_report.md         # AI 合成的学习报告
-├── inputs/                    # 输入文件（.inp 等）
-└── artifacts/                 # 求解器输出产物
+├── meta.json              # 求解器、节点、状态、时间
+├── run.command            # 实际执行的命令
+├── stdout.log             # 完整求解日志
+├── stderr.log             # 标准错误日志
+├── events.jsonl           # SSE 事件流回放
+├── note.md                # 结构化引导笔记
+├── learning_report.md     # AI 合成学习报告
+└── artifacts/
     ├── cantilever.frd
-    ├── cantilever.dat
-    ├── cantilever.sta
-    ├── result.txt
-    ├── result_summary.json
+    ├── result_summary.json    # max_displacement_mm / max_von_mises_mpa
     └── solver_result.vtk
 ```
 
-`.simfea/` 是本地私有目录，已经被 `.gitignore` 忽略。不要把真实服务器账号、密钥、本地求解器路径或运行归档提交到仓库。
+不再有"跑完不知道结果放哪了"的问题。
+
+### 2. 三层学习沉淀：从日志到报告
+
+运行结束后不是直接归档了事，而是引导你把这次仿真变成可复用的知识：
+
+1. **实时日志**：stdout/stderr 逐行 SSE 推送，求解过程全程可见
+2. **结构化笔记**：自动生成引导问题（目的是什么、预期结果、实际差异、下次改进），按问题填写而不是面对空白文本框
+3. **学习报告**：笔记保存后自动合成 `learning_report.md`，日志摘要 + 结果指标 + 你的回答整合在一起
+
+**研究笔记**：独立的 Markdown 编辑视图，支持新建、编辑和实时预览，用于记录与单次运行无关的长期学习笔记。
+
+### 3. Benchmark Lab：13 个基准案例，含解析解对比
+
+覆盖杆/梁/板/壳/桁架/扭转/热应力/压力容器，每个案例提供 CalculiX、ANSYS、PINN 的对比数据和解析解。不是玩具算例，是可以用来验证求解器配置和学习进度的参照系。
+
+---
 
 ## 快速开始
 
-根据你的需求选择一条路径。
-
-### 路径一：pip 安装（推荐 — 仅需 Python）
+### 路径一：pip 安装（推荐 — 仅需 Python 3.11+）
 
 ```powershell
-# 1. 克隆仓库
 git clone https://github.com/yd5768365-hue/simFEA-studio.git
 cd simFEA-studio
-
-# 2. 安装 Python 依赖
 pip install -e .
-
-# 3. 启动（自动打开浏览器）
 simfea-studio
-# 或：python src/backends/main.py
 ```
 
-浏览器打开 `http://localhost:8008`，内置 demo 数据让你立刻看到效果。
+浏览器打开 `http://localhost:8008`，内置 demo 数据开箱可见。
 
-> **需要**: Python 3.11+
-
-### 路径二：前端开发（需要改 UI 时用）
+### 路径二：前端开发模式
 
 ```powershell
-# 终端 1：Python API
+# 终端 1
 python src/backends/main.py
 
-# 终端 2：Vite 前端（支持 HMR 热更新）
+# 终端 2
 pnpm install
 pnpm dev:frontend
 ```
 
-浏览器打开 `http://localhost:1420/`（Vite 开发端口），修改 `app/` 下的代码秒级热更新。
-
-> **需要**: Python 3.11+ + Node.js + pnpm
-
-### 路径三：桌面版（需要原生窗口时用）
+### 路径三：桌面版（Tauri 原生窗口）
 
 ```powershell
 pnpm install
 pnpm dev:tauri
 ```
 
-Tauri 自动编译 Rust 壳、启动 sidecar、打开原生桌面窗口。首次编译需 5-15 分钟。
+首次编译需 5–15 分钟，需要 Rust + VS Build Tools。
 
-> **需要**: Python 3.11+ + Node.js + pnpm + Rust + VS Build Tools
+### 配置真实求解器（可选）
 
----
-
-### 配置求解器（可选）
-
-安装 [CalculiX](http://www.calculix.de/) 后，在 `.simfea/config.json` 中配置路径即可运行真实求解：
+安装 [CalculiX](http://www.calculix.de/) 后在 `.simfea/config.json` 中填写路径：
 
 ```json
 {
@@ -278,101 +142,86 @@ Tauri 自动编译 Rust 壳、启动 sidecar、打开原生桌面窗口。首次
 }
 ```
 
-## API 概览
+---
 
-| 接口 | 方法 | 作用 |
+## 求解器支持
+
+| 求解器 | 状态 | 说明 |
 | --- | --- | --- |
-| `/v1/connect` | GET | sidecar 连接和配置摘要 |
-| `/v1/config` | GET | API、节点、求解器、学习导出配置 |
-| `/v1/compute-nodes` | GET | 计算节点列表 |
-| `/v1/compute-nodes/{alias}/probe` | GET | 探测节点连接和环境 |
-| `/v1/compute-nodes/{alias}/scheduler-probe` | GET | 探测 Slurm / PBS / LSF 工具 |
-| `/v1/compute-nodes/{alias}/solvers/probe` | GET | 探测求解器可执行文件 |
-| `/v1/solvers` | GET | 求解器公开定义 |
-| `/v1/runs` | GET | 运行归档列表 |
-| `/v1/runs/{run_id}` | GET | 单次运行归档详情 |
-| `/v1/runs/{alias}/demo` | POST | 启动 SSH demo 运行 |
-| `/v1/runs/{alias}/slurm-demo` | POST | 启动 Slurm demo 运行 |
-| `/v1/runs/{alias}/solvers/{solver_alias}` | POST | 启动声明式求解器运行 |
-| `/v1/runs/{alias}/workflows/freecad-prepomax` | POST | 启动 FreeCAD → PrePoMax 工作流 |
-| `/v1/runs/{run_id}/events` | GET | SSE 运行事件，支持 `?from_seq=N` |
-| `/v1/runs/{run_id}/artifacts/{artifact_path}` | GET | 读取归档产物 |
-| `/v1/runs/{run_id}/result-summary` | GET | 读取结果摘要 |
-| `/v1/runs/{run_id}/report` | GET | 生成或读取学习报告 |
-| `/v1/runs/{run_id}/learning-export` | POST | 导出 md/json/txt 学习记录 |
-| `/v1/runs/{run_id}/guided-questions` | GET | 返回该运行的引导问题列表 |
-| `/v1/runs/{run_id}/note` | POST | 保存结构化笔记（支持 `answers` 和旧版 `note`） |
-| `/v1/runs/{run_id}/cancel` | POST | 请求取消运行 |
-| `/v1/toolchain/solvers/{alias}/install` | POST | 启动 Solver Pack 安装任务 |
-| `/v1/toolchain/solvers/{alias}/install/{id}/events` | GET | 读取安装任务 SSE 进度 |
+| **CalculiX** | ✅ 已端到端验证 | FRD → VTK，指标摘要，物证归档，Solver Pack 安装 |
+| FreeCAD | 骨架就绪 | 无头 Python 宏执行 |
+| PrePoMax | ✅ regeneration 已验证 | STEP → Gmsh → CalculiX → VTK 热力图 |
+| **freecad-prepomax** | ✅ 已端到端验证 | 两步链式工作流，统一归档 20 个产物 |
+| OpenFOAM | 骨架就绪 | 待接入真实 case |
+| Elmer | 骨架就绪 | 待接入真实 case |
+
+**实测数据（2026-05-19）**
+
+| Workflow | 耗时 | VTK | 关键指标 |
+| --- | --- | --- | --- |
+| calculix | 0.1s | ✅ | D=8.93mm S=37.50MPa |
+| prepomax-regenerate | 10.0s | ✅ | D=0.061mm S=0.0001MPa |
+| freecad-prepomax | 10.4s | ✅ | D=0.061mm S=0.0001MPa |
+
+---
+
+## 当前架构
+
+```text
+浏览器 / Tauri 桌面壳
+        │
+FastAPI (独立 uvicorn 或 sidecar)
+        │
+   Vue SPA · REST API · SSE 事件流
+        │
+LocalRunner · SSHRunner · SlurmRunner
+SolverRunner · WorkflowRunner
+        │
+CalculiX / FreeCAD / PrePoMax / OpenFOAM / Elmer
+        │
+.simfea/runs/<run_id>  物证仓库
+```
+
+---
 
 ## 验证
 
 ```powershell
-# Python
 python -m unittest discover -s src/backends/tests -v
-python -m py_compile src/backends/main.py src/backends/simfea_api/*.py src/backends/simfea_api/runners/*.py src/backends/inference/*.py
-python scripts/check_benchmark_contract.py
-python scripts/build_benchmark_learning_path.py
-
-# 前端
+python scripts/check_backend_boundaries.py
 pnpm test
 pnpm build
-
-# 边界检查
-python scripts/check_backend_boundaries.py
-git diff --check
 ```
 
-已知结果：
+- 后端：125 个单元测试通过
+- 前端：35 个 Vitest 测试通过（6 个测试文件）
+- 模块边界：24 个模块，0 违规
 
-- 后端：125 个单元测试通过。
-- 前端：35 个 Vitest 测试通过（6 个测试文件）。
-- 模块边界检查：24 个模块，0 个违规。
-- 生产构建通过，仅保留 VTK XML reader 按需 chunk 偏大的提示。
-
-## 文档
-
-- `docs/DEV_LOG_2026-05-23.md`：CalculiX Solver Pack、首页信息架构重构和工具链页面更新。
-- `docs/superpowers/plans/2026-05-23-calculix-solver-pack.md`：Solver Pack 实施计划。
-- `docs/DEV_LOG_2026-05-13.md`：结构化引导笔记、学习报告修复、asyncio 死锁修复。
-- `docs/DEV_LOG_2026-05-12.md`：开发日志和验证记录。
-- `docs/ARCHITECTURE_ROADMAP.md`：架构路线图，以及 sim-main / OpenCAEHub 借鉴分析。
-- `docs/OPEN_SOURCE_BORROWING_MATRIX.md`：FreeCAD、SALOME、Gmsh、OpenFOAM、FEniCSx、MFEM 的可借鉴边界和第一轮落地。
-- `learning/benchmarks/LEARNING_PATH.md`：借鉴 MFEM / FEniCSx 的 Benchmark Lab 学习路径索引。
-- `docs/RUNNER_DESIGN.md`：Runner 边界和执行模型。
-- `docs/API_CONTRACTS.md`：API 契约和示例响应。
-- `docs/AI_FEA_EXPLORATION_NOTE_2030.md`：AI + 有限元探索笔记和项目介绍。
+---
 
 ## 路线图
 
-- [x] Vue / Tauri / FastAPI sidecar 闭环。
-- [x] SSH 远程运行和物证归档。
-- [x] Slurm 提交、轮询和取消。
-- [x] LocalRunner 本地运行。
-- [x] 声明式 SolverRunner。
-- [x] SSE 断线重连和 `from_seq` 回放。
-- [x] VTK.js 结果视图。
-- [x] CalculiX 本地端到端链路。
-- [x] CalculiX FRD → VTK 转换。
-- [x] 结构化引导笔记 + 学习报告自动生成。
-- [x] 工具链管理页面（FreeCAD / PrePoMax / CalculiX 路径发现和验证）。
-- [x] CalculiX Solver Pack 安装任务和 SSE 进度流。
-- [x] FreeCAD 无头宏入口。
-- [x] PrePoMax 官方 CLI / regeneration 本机样例接入。
-- [x] WorkflowRunner 多步求解器链（freecad-prepomax）。
-- [x] FastAPI 独立启动（`python main.py` 不依赖 Tauri）。
-- [x] pip 安装模式 + demo 数据降级（新用户开箱可见）。
-- [x] Benchmark Lab — 13 个基准案例，多方法对比。
-- [x] Method Lab — From 1 to 0 教学框架。
-- [x] 研究笔记 — Markdown 编辑/预览/管理。
-- [ ] OpenFOAM 真实 case 接入。
-- [ ] Elmer 真实 case 接入。
-- [ ] Salome 前处理入口。
-- [ ] AI 辅助工程证据评分和复盘建议。
+- [x] CalculiX 本地端到端链路 + FRD → VTK
+- [x] SSH 远程运行 + Slurm HPC 提交
+- [x] 物证归档 + 三层学习沉淀
+- [x] Benchmark Lab — 13 个基准案例，含解析解对比
+- [x] Method Lab — From 1 to 0 教学框架
+- [x] pip 安装模式 + demo 数据降级
+- [x] 工具链管理页面（FreeCAD / PrePoMax / CalculiX）
+- [x] 研究笔记 — Markdown 编辑/预览/管理
+- [ ] GP/神经网络 surrogate 接入真实 CalculiX 数据
+- [ ] OpenFOAM / Elmer 真实 case 接入
+- [ ] AI 辅助证据评分和复盘建议
+- [ ] 桌面安装包（Windows .msi / macOS .dmg）
+
+---
+
+## 模板来源
+
+本项目最初基于 [AlanSynn/vue-tauri-fastapi-sidecar-template](https://github.com/AlanSynn/vue-tauri-fastapi-sidecar-template) 搭建骨架。本地/远程执行、Slurm 闭环、求解器声明式配置、FRD → VTK、物证归档和学习记录沉淀是围绕机械仿真学习目标扩展出来的功能。
+
+---
 
 ## License
 
-Apache-2.0。
-
-本项目代码以仓库根目录的 `LICENSE` 为准。项目最初使用的 Tauri + Vue + FastAPI sidecar 模板，以及 Vue、Tauri、FastAPI、VTK.js、CalculiX 等第三方工具或依赖，分别遵循其各自的许可证；在使用、分发或集成这些第三方组件时，请同时遵守对应项目的许可条款。
+Apache-2.0。本项目代码以仓库根目录的 `LICENSE` 为准。Vue、Tauri、FastAPI、VTK.js、CalculiX 等第三方依赖分别遵循其各自许可证。
